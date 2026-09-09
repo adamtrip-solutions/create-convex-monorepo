@@ -88,3 +88,9 @@ Registry checks ran outside the source checkout:
 - `npx --yes create-convex-monorepo@0.2.0 npx-smoke --apps next,vite,tanstack-start,expo --auth none --no-install --no-git` generated all four apps successfully.
 
 An initial npx invocation from inside this package's own checkout failed to find the executable. The same registry command succeeded from the temporary directory. These post-publication smoke checks skipped generated dependency installation; the release workflow had already tested the generated builds. The bootstrap token authenticated the first publish. Token-free OIDC publishing still needs npm trusted-publisher configuration and verification.
+
+## Trusted publishing verification
+
+GitHub Actions [run 34417938658](https://github.com/adamtrip-solutions/create-convex-monorepo/actions/runs/34417938658) published `create-convex-monorepo@0.2.1` from release commit `72527d37eca8f7bd6ced87440e005253bbaa87bc`. This release removed the bootstrap-token reference from the workflow before publishing, so there was no npm token fallback. All Windows, Linux, and generated-project checks passed, and the registry lists 0.2.1 as latest with provenance.
+
+The repository's `NPM_BOOTSTRAP_TOKEN` secret was deleted after publication succeeded. Repository and npm-environment secret listings then contained no npm secret. Revoking the original token in the npm account remains an account-owner action; check whether another repository still uses it first.
