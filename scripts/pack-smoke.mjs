@@ -32,6 +32,17 @@ try {
     ],
     directory,
   );
+  // Exercise npm's launcher with the packed artifact, before it exists on npm.
+  run(
+    'npx',
+    ['--yes', '--package', tarball, 'create-convex-monorepo', '--version'],
+    directory,
+  );
+  run(
+    'pnpm',
+    ['--package', tarball, 'dlx', 'create-convex-monorepo', '--help'],
+    directory,
+  );
   const bin = join(directory, 'node_modules', '.bin', 'create-convex-monorepo');
   run(
     bin,

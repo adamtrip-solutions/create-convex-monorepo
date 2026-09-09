@@ -11,11 +11,20 @@ pnpm build
 pnpm format:check
 ```
 
-`pnpm dev` runs the source CLI. Run the built binary from a temporary directory to inspect output without nesting generated projects in the checkout:
+`pnpm dev` runs the source CLI from this checkout:
 
 ```sh
-node /absolute/path/to/create-convex-monorepo/dist/cli/index.js fixture --apps web:next,mobile:expo --no-install --no-git
+pnpm dev fixture --apps web:next,mobile:expo --no-install --no-git
 ```
+
+To check the package exactly as users receive it:
+
+```sh
+pnpm pack
+pnpm test:package
+```
+
+The package smoke test installs the tarball in a temporary directory and exercises its binary, exports, starter assets and URL linker. Registry commands such as `pnpm create convex-monorepo` use the published package, not your checkout.
 
 Install and check the generated project when changing templates. `pnpm test:e2e` runs the repository's generated-project checks; inspect its script and CI configuration for the current matrix. `pnpm test:backend` runs backend behavior tests. These commands can need network access and more time than unit tests. A template snapshot does not prove that its framework builds.
 
@@ -37,7 +46,7 @@ Use Conventional Commits for commits and PR titles. For example, `feat(cli): ini
 
 Use `fix:` for a patch, `feat:` for a minor, and `!` for a breaking change, such as `feat(cli)!: change application selection flags`. Explain breaking changes and migration steps in the PR body. These rules also apply before v1.0, so a breaking change from 0.1.0 proposes 1.0.0. `perf:` also triggers a patch; other ordinary maintenance commits do not trigger a release alone.
 
-Release-please maintains a PR with the next version and changelog. Do not add changeset files or manually bump versions for normal changes. Maintainers review and merge the release PR to create a GitHub release, then publish to npm separately after package checks. See [release setup and publishing](docs/releases.md).
+Release-please maintains a PR with the next version and changelog. Do not add changeset files or manually bump versions for normal changes. Maintainers review and merge the release PR to create a GitHub release, which starts the npm publishing workflow. It verifies the release commit and publishes the tested tarball once trusted publishing is enabled. See [release setup and publishing](docs/releases.md).
 
 ## Reporting problems
 

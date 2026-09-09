@@ -1,0 +1,91 @@
+name: Publish npm package
+on:
+  # Release-please dispatches this at the release tag, never at a moving branch.
+  # Retry in Actions by selecting the same tag, or gh workflow run --ref vX.Y.Z.
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - id: release
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            if (!/^refs\/tags\/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(context.ref)) {
+              throw new Error('Run this workflow at a stable release tag, such as v0.2.0.');
+            }
+            const tag = context.ref.slice('refs/tags/'.length);
+            const { data: release } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag });
+            if (release.draft || release.prerelease) throw new Error('Only published stable releases can be published to latest.');
+            const { data: commit } = await github.rest.repos.getCommit({ ...context.repo, ref: context.ref });
+            if (commit.sha !== context.sha) throw new Error('Release tag moved after this workflow started.');
+            core.setOutput('sha', commit.sha);
+            core.setOutput('tag', tag);
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require release history on main
+        run: git merge-base --is-ancestor HEAD origin/main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Validate release metadata before bootstrap or publishing
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFile } from 'node:fs/promises';
+          import { validateReleaseManifest } from './scripts/release-package.mjs';
+          validateReleaseManifest(JSON.parse(await readFile('package.json', 'utf8')), process.env.RELEASE_TAG, process.env.GITHUB_REPOSITORY);
+          JS
+  verify:
+    needs: release
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.release.outputs.sha }}
+  publish:
+    needs: [release, verify]
+    # First publish creates the npm package; enable this after configuring trust.
+    if: vars.NPM_PUBLISHING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: npm
+    concurrency:
+      group: npm-registry-publication
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@11.13.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: npm-package
+      - name: Validate tested package and check publication status
+        id: package
+        env:
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: node scripts/release-package.mjs
+      - name: Publish tested tarball with provenance
+        if: steps.package.outputs.published != 'true'
+        env:
+          TARBALL: ${{ steps.package.outputs.tarball }}
+        run: npm publish "$TARBALL" --access public --provenance --ignore-scripts

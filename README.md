@@ -8,33 +8,23 @@ The generator composes framework templates and auth adapters. It does not copy a
 
 Convex already generates an API from your backend functions. Sharing that API between independently bundled web and native apps should preserve its types without duplicating backend code. This project supplies the workspace wiring, framework-specific environment handling, and checks needed to keep that boundary intact.
 
-## Try the local checkout
+## Usage
 
-Requires Node.js 22.12 or newer and pnpm. This repository pins pnpm in `package.json`.
-
-```sh
-pnpm install
-pnpm test
-pnpm build
-node dist/cli/index.js --help
-```
-
-Run the built CLI from the directory where you want the project created:
+Requires Node.js 22.12 or newer and pnpm for the generated workspace.
 
 ```sh
-node /absolute/path/to/create-convex-monorepo/dist/cli/index.js
+pnpm create convex-monorepo@latest
 ```
 
-During development, `pnpm dev` runs the TypeScript CLI. For example, `pnpm dev my-app --apps next,expo --no-install --no-git` creates `my-app` in the checkout's current directory.
-
-Once the package is published to npm, these commands resolve its matching binary:
+Or use npx:
 
 ```sh
-pnpm create convex-monorepo
-npx create-convex-monorepo
+npx create-convex-monorepo@latest
 ```
 
-A local build does not publish the package or make these registry commands use your checkout.
+Both commands run the same CLI. You can also install it globally with `npm install --global create-convex-monorepo` and run `create-convex-monorepo` directly. Running through npx does not change the generated workspace's package manager, which is pnpm.
+
+The first npm publication is being prepared. These registry commands become available after that release is published. Contributors can run the checkout with `pnpm dev`; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Interactive usage
 
@@ -60,10 +50,10 @@ Selecting Convex initialization installs dependencies first, then opens Convex's
 ## Non-interactive usage
 
 ```sh
-node dist/cli/index.js my-app --apps next,expo --example none --init-convex --yes
-node dist/cli/index.js my-app --apps next,expo --auth clerk --yes
-node dist/cli/index.js my-app --apps web:next,admin:vite --no-install --no-git
-node dist/cli/index.js my-app --apps app:tanstack-start,dashboard:next --auth none --package-manager pnpm --yes
+pnpm create convex-monorepo@latest my-app --apps next,expo --example none --init-convex --yes
+npx create-convex-monorepo@latest my-app --apps next,expo --auth clerk --yes
+pnpm create convex-monorepo@latest my-app --apps web:next,admin:vite --no-install --no-git
+pnpm create convex-monorepo@latest my-app --apps app:tanstack-start,dashboard:next --auth none --package-manager pnpm --yes
 ```
 
 | Option                              | Meaning                                                     |
@@ -85,7 +75,7 @@ Without a terminal, prompts are disabled and install/git default to off unless e
 Choose **Blank project** in the starter-content prompt, or pass `--example none`:
 
 ```sh
-node dist/cli/index.js my-app --apps next,expo --example none --yes
+pnpm create convex-monorepo@latest my-app --apps next,expo --example none --yes
 ```
 
 Every selected app starts with a minimal page or screen showing its name. Convex providers, workspace dependencies, environment setup, and the selected auth integration remain configured. The backend has an empty schema and official generated types. There are no example tables, messages functions, access helpers, query/mutation screens, or demo-specific type-test files to remove.
@@ -135,7 +125,7 @@ my-app/
 Use explicit names to choose folders and repeat a framework:
 
 ```sh
-node dist/cli/index.js acme --apps web:next,admin:next,mobile:expo --yes
+pnpm create convex-monorepo@latest acme --apps web:next,admin:next,mobile:expo --yes
 ```
 
 Apps become `@acme/web`, `@acme/admin`, and `@acme/mobile`. All depend on `@acme/backend` through `workspace:*`. The generator assigns distinct web development ports. v0.1 creates a new workspace; adding an app to an existing workspace is not implemented.

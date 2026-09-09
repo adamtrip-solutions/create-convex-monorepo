@@ -10,7 +10,7 @@ Executed on 2026-09-09 on macOS with Node 24.17.0 and pnpm 10.34.5. Results refe
 | `pnpm lint`                      | Passed                                                                                                                                                    |
 | `pnpm format:check`              | Passed                                                                                                                                                    |
 | `pnpm typecheck`                 | Passed                                                                                                                                                    |
-| `pnpm test`                      | 84 passed: 41 core, 13 generator/golden, 14 setup, 11 blank, 5 backend                                                                                    |
+| `pnpm test`                      | 98 passed: 41 core, 13 generator/golden, 14 setup, 11 blank, 14 release, 5 backend                                                                        |
 | `pnpm build`                     | Passed                                                                                                                                                    |
 | `pnpm pack`                      | Passed                                                                                                                                                    |
 | `node scripts/pack-smoke.mjs`    | Installed the tarball outside the checkout and generated Next + Expo + Clerk through its bin; official generated assets and standalone URL linking passed |
@@ -64,3 +64,9 @@ The blank starter follow-up passed lint, formatting, typecheck, all 84 tests, bu
 The empty schema and unmodified generated assets came from a successful official `convex dev --once` run. A generated blank workspace then completed its own `pnpm convex:setup` against an anonymous local deployment and linked all four frontend URLs. The interactive starter-content prompt also created a blank Next + Expo project in a PTY.
 
 Fresh technical review independently compiled the empty API/data-model assertions and found a Windows path-separator error in the new file assertions. That error was fixed before the final test run. Windows execution and hosted CI remain untested locally.
+
+## npm publishing preparation
+
+On 2026-09-10, the publishing follow-up passed frozen installation, lint, formatting, typecheck, all 98 tests, build, package smoke tests and `actionlint`. The packed CLI ran through npx and pnpm dlx using the local tarball. The release package validator checked its real manifest and registry status, and `npm publish --dry-run --ignore-scripts --access public` accepted the archive without publishing.
+
+Fresh review checked the release dispatch, provenance commit identity, bootstrap flow, artifact transfer and publishing permissions. It identified a cross-version publishing race; the publish job now serializes npm updates across releases. The repository was created at `adamtrip-solutions/create-convex-monorepo`, with the npm environment restricted to release tags and automated npm publishing disabled pending account/trust setup. Hosted verification results are recorded separately below once available.
