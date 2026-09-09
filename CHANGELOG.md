@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.2.0...v0.2.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **release:** publish exclusively through npm trusted publishing ([29ae9cd](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/29ae9cdb7193e976a7360595e4dce31f41211277))
+
 ## [0.2.0](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.1.0...v0.2.0) (2026-09-09)
 
 
