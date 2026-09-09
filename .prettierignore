@@ -5,3 +5,5 @@ assets/backend-blank/convex/_generated
 .e2e
 pnpm-lock.yaml
 tests/.generated
+# Managed by release-please.
+CHANGELOG.md
