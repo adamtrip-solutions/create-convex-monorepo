@@ -24,7 +24,7 @@ npx create-convex-monorepo@latest
 
 Both commands run the same CLI. You can also install it globally with `npm install --global create-convex-monorepo` and run `create-convex-monorepo` directly. Running through npx does not change the generated workspace's package manager, which is pnpm.
 
-The first npm publication is being prepared. These registry commands become available after that release is published. Contributors can run the checkout with `pnpm dev`; see [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributors can run the checkout with `pnpm dev`; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Interactive usage
 

@@ -75,4 +75,16 @@ Fresh review checked the release dispatch, provenance commit identity, bootstrap
 
 Compared both the local checkout and GitHub workflow of `adamtrip-solutions/convex-cloudflare-email`, whose first npm release workflow succeeded. Its publish step supports `NPM_BOOTSTRAP_TOKEN` for initial package creation. This repository now supports the same token-to-OIDC transition and no longer gates publishing behind `NPM_PUBLISHING_ENABLED`. The token is passed only to the final npm publish step. No secret values were read or transferred from the reference repository, and this package has not been published.
 
-A later Windows run exposed an intermittent cancellation failure: setup rejected on the child's abort error before the process closed, leaving the backend directory locked during cleanup. The regression test reproduced the early return locally. Setup now waits for the child close event before settling, preserving the original error. The corrected test and all 98 repository tests passed, together with typecheck, lint, formatting, build, and package smoke checks. Hosted Windows confirmation of this fix is pending.
+A later Windows run exposed an intermittent cancellation failure: setup rejected on the child's abort error before the process closed, leaving the backend directory locked during cleanup. The regression test reproduced the early return locally. Setup now waits for the child close event before settling, preserving the original error. The corrected test and all 98 repository tests passed, together with typecheck, lint, formatting, build, and package smoke checks. Hosted [CI run 34416758903](https://github.com/adamtrip-solutions/create-convex-monorepo/actions/runs/34416758903) confirmed the fix on Windows and passed every generated-project build.
+
+## First npm publication
+
+GitHub Actions [run 34417030866](https://github.com/adamtrip-solutions/create-convex-monorepo/actions/runs/34417030866) published `create-convex-monorepo@0.2.0` from release commit `406b6dec137ba521a23ebc6d78965f0373e1ba98`. The release ran all 98 tests on Windows and Linux, package smoke checks, and the complete generated-project build matrix before publishing the tested tarball. The registry reports `latest` as `0.2.0` and includes a provenance attestation.
+
+Registry checks ran outside the source checkout:
+
+- `pnpm create convex-monorepo@0.2.0 smoke --apps next,expo --auth clerk --example none --no-install --no-git` generated the blank workspace successfully.
+- `npx --yes create-convex-monorepo@0.2.0 --version` returned `0.2.0`, using both the default npm cache and a fresh cache.
+- `npx --yes create-convex-monorepo@0.2.0 npx-smoke --apps next,vite,tanstack-start,expo --auth none --no-install --no-git` generated all four apps successfully.
+
+An initial npx invocation from inside this package's own checkout failed to find the executable. The same registry command succeeded from the temporary directory. These post-publication smoke checks skipped generated dependency installation; the release workflow had already tested the generated builds. The bootstrap token authenticated the first publish. Token-free OIDC publishing still needs npm trusted-publisher configuration and verification.
