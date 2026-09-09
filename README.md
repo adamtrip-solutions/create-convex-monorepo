@@ -1,0 +1,203 @@
+# create-convex-monorepo
+
+A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, or a combination, with optional Clerk authentication.
+
+The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Each generated app includes a small message query and mutation, plus compile-time assertions that check the shared API's argument and return types.
+
+## Why this exists
+
+Convex already generates an API from your backend functions. Sharing that API between independently bundled web and native apps should preserve its types without duplicating backend code. This project supplies the workspace wiring, framework-specific environment handling, and checks needed to keep that boundary intact.
+
+## Try the local checkout
+
+Requires Node.js 22.12 or newer and pnpm. This repository pins pnpm in `package.json`.
+
+```sh
+pnpm install
+pnpm test
+pnpm build
+node dist/cli/index.js --help
+```
+
+Run the built CLI from the directory where you want the project created:
+
+```sh
+node /absolute/path/to/create-convex-monorepo/dist/cli/index.js
+```
+
+During development, `pnpm dev` runs the TypeScript CLI. For example, `pnpm dev my-app --apps next,expo --no-install --no-git` creates `my-app` in the checkout's current directory.
+
+Once the package is published to npm, these commands resolve its matching binary:
+
+```sh
+pnpm create convex-monorepo
+npx create-convex-monorepo
+```
+
+A local build does not publish the package or make these registry commands use your checkout.
+
+## Interactive usage
+
+With a terminal attached, the CLI asks for missing choices:
+
+```text
+Project name?           my-app
+Package manager?        pnpm
+Application framework?  Next.js
+Application name?       web
+Add another frontend?   Yes
+Application framework?  Expo / React Native
+Application name?       mobile
+Add another frontend?   No
+Authentication?         Clerk
+Initialize git?         Yes
+Install dependencies?   Yes
+```
+
+Turborepo and the backend, TypeScript config, and ESLint config packages are included in every v0.1 project.
+
+## Non-interactive usage
+
+```sh
+node dist/cli/index.js my-app --apps next,expo --auth clerk --yes
+node dist/cli/index.js my-app --apps web:next,admin:vite --no-install --no-git
+node dist/cli/index.js my-app --apps app:tanstack-start,dashboard:next --auth none --package-manager pnpm --yes
+```
+
+| Option                      | Meaning                                                     |
+| --------------------------- | ----------------------------------------------------------- |
+| `--apps`                    | Comma-separated framework IDs or `name:framework` entries   |
+| `--auth`                    | `none`, the default, or `clerk`                             |
+| `--package-manager`         | `pnpm`; other managers are rejected in v0.1                 |
+| `--install`, `--no-install` | Enable or skip dependency installation                      |
+| `--git`, `--no-git`         | Enable or skip `git init`; no commit is created             |
+| `--yes`, `-y`               | Skip prompts and accept defaults, including install and git |
+| `--help`, `--version`       | Show usage or the generator version                         |
+
+Without a terminal, prompts are disabled and install/git default to off unless explicitly enabled or `--yes` is passed. Explicit negative flags override `--yes`. The default app is Next.js. Project and app names must be lowercase letters, digits, and hyphens, at most 100 characters, with no path separators or reserved device names.
+
+## Supported frameworks
+
+| ID               | Application              | Public Convex variable   |
+| ---------------- | ------------------------ | ------------------------ |
+| `next`           | Next.js App Router       | `NEXT_PUBLIC_CONVEX_URL` |
+| `vite`           | Vite + React             | `VITE_CONVEX_URL`        |
+| `tanstack-start` | TanStack Start with Vite | `VITE_CONVEX_URL`        |
+| `expo`           | Expo / React Native      | `EXPO_PUBLIC_CONVEX_URL` |
+
+Versions are pinned in the templates. Start uses ordinary Convex React hooks; server-side Convex prefetching is not configured. Expo's build command exports JavaScript, not native application binaries. See [research and upstream caveats](docs/research.md).
+
+## Generated architecture
+
+```text
+my-app/
+├── apps/
+│   ├── web/
+│   ├── admin/                         # if selected
+│   └── mobile/                        # if selected
+├── packages/
+│   ├── backend/
+│   │   ├── convex/_generated/
+│   │   ├── convex/schema.ts
+│   │   ├── convex/messages.ts
+│   │   ├── convex.json
+│   │   └── package.json
+│   ├── typescript-config/
+│   └── eslint-config/
+├── convex-monorepo.json
+├── pnpm-workspace.yaml
+├── turbo.json
+└── package.json
+```
+
+`convex-monorepo.json` records the selected applications and auth provider. It is metadata for later tooling; it does not implement upgrade or add commands.
+
+## Multiple frontends
+
+Use explicit names to choose folders and repeat a framework:
+
+```sh
+node dist/cli/index.js acme --apps web:next,admin:next,mobile:expo --yes
+```
+
+Apps become `@acme/web`, `@acme/admin`, and `@acme/mobile`. All depend on `@acme/backend` through `workspace:*`. The generator assigns distinct web development ports. v0.1 creates a new workspace; adding an app to an existing workspace is not implemented.
+
+## First run and development
+
+Inside the generated project:
+
+```sh
+pnpm install             # if installation was skipped
+pnpm convex:setup
+```
+
+Setup runs Convex in `packages/backend` and selects or creates a deployment. Copy each app's `.env.example` to its own `.env.local`. Copy only the public deployment URL from the backend configuration into the variable listed above. For Clerk, also follow the next section before completing the backend push.
+
+```sh
+pnpm dev                 # one backend watcher and all selected apps
+pnpm dev:web             # only the named app
+pnpm convex:dev          # only the backend watcher
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+Complete setup in a normal terminal before starting Turbo. Stop a separately running backend watcher before `pnpm dev`, which starts its own. Public environment values are embedded at build time; rebuild frontends when they change. Backend build checks types and does not deploy.
+
+## Convex backend sharing
+
+```ts
+import { api } from '@my-app/backend/api';
+import type { Doc, Id } from '@my-app/backend/dataModel';
+```
+
+`/api` points directly to Convex's original runtime JavaScript and paired declaration file. `/dataModel` is a type-only export. There is no bundled declaration file or root barrel. Keep the backend sources and `convex/_generated` in version control, and run `pnpm convex:dev` after changing backend modules.
+
+Dynamic Convex declarations refer to backend source modules. Client TypeScript programs therefore inspect those sources, even though client runtime bundles should not include the backend implementations. Do not introduce incompatible backend-only path aliases or a frontend `rootDir` that excludes those sources. Each app includes `src/convex-api.type-test.ts` to detect lost inference. The [architecture](docs/architecture.md) explains the export contract.
+
+## Authentication
+
+`--auth none` generates a public message board. `--auth clerk` adds SDK-specific bindings, a Convex auth configuration, provider wiring, and backend identity checks. Clerk messages belong to the signed-in identity and are queried through an owner index. UI visibility alone is not authorization.
+
+Use one Clerk application across the frontends. Configure Clerk's Convex integration and a JWT template named `convex`. Set `CLERK_JWT_ISSUER_DOMAIN` on the Convex deployment:
+
+```sh
+pnpm --filter @my-app/backend exec convex env set CLERK_JWT_ISSUER_DOMAIN https://your-instance.clerk.accounts.dev
+```
+
+On a fresh deployment, first run `pnpm convex:setup` to select it. If the push reports a missing issuer, set that value and rerun setup. Repeat the configuration for production.
+
+Append the variables from each app's `.env.clerk.example` to its `.env.local`, alongside the Convex URL. Publishable keys belong in the appropriate public variables. Next.js and Start use a server-only `CLERK_SECRET_KEY`; Vite and Expo must never receive that secret. See [Convex's Clerk guide](https://docs.convex.dev/auth/clerk).
+
+## Expo notes
+
+Expo uses the SDK's React and React Native versions, the default `expo/metro-config`, and a shared workspace backend dependency. Do not add old manual symlink resolver overrides or upgrade React independently in one app.
+
+Use a cloud development deployment for physical devices; `localhost` on a phone refers to the phone itself. The Clerk example uses Google OAuth and SecureStore token caching. Enable Google's connection and the Native API in your Clerk application, allow the generated scheme redirect listed in `.env.clerk.example`, and use a native development build for that scheme. Additional MFA and session-task flows are not implemented.
+
+Typechecking and Metro export checks do not establish that real OAuth, device permissions, or native binaries work. Those require your Clerk configuration and device testing. See [Expo monorepos](https://docs.expo.dev/guides/monorepos/) and [Clerk Expo setup](https://clerk.com/docs/expo/getting-started/quickstart).
+
+## Troubleshooting
+
+- **Destination already exists:** choose a new or empty directory. The CLI refuses non-empty directories and symlinks. Template failures remove staging output; install/git failures preserve the completed project and print a retry command.
+- **Missing URL screen:** configure that app's `.env.local` with the framework-specific public variable, then restart development.
+- **Authentication never connects:** check the `convex` JWT template and deployment issuer. Use the same Clerk application across frontends.
+- **Missing API types:** keep both generated JavaScript and declarations, run the backend watcher, and verify matching Convex versions. Do not fix this by casting the API.
+- **Missing Start route tree:** run that app's `routes:generate` script. Its typecheck script runs route generation automatically.
+- **Metro resolution after dependency changes:** run `pnpm --filter @my-app/mobile exec expo start --clear`. Check SDK-compatible dependency versions before changing resolver settings.
+
+[Research](docs/research.md) records upstream reports about declaration bundling, large backend type graphs, hoisted Node external packages, and Windows component symlinks. An open report is not proof that its failure reproduces on the pinned versions.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [adding a framework](docs/adding-a-framework.md), and [adding an auth provider](docs/adding-an-auth-provider.md). Run generated-project checks when changing templates; generator unit tests alone cannot verify a framework bundler.
+
+## Roadmap
+
+The next release should add `doctor` to check deployment URLs, generated types, version alignment, and auth setup in an existing workspace. Later candidates are `add app`, another auth provider, and additional package-manager adapters. These commands are not available in v0.1.
+
+MIT licensed. See [LICENSE](LICENSE).
+
+## Verification record
+
+See [the v0.1 verification record](docs/verification.md) for executed installs, typechecks, framework builds, Metro exports, backend tests and remaining runtime limits.

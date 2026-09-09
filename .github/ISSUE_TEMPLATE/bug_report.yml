@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible generator or generated-project failure.
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the command, framework/auth choices, and steps. Remove secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Generator version, operating system, Node, pnpm, and relevant framework versions.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Include the first useful error and checks already tried. Redact credentials.
+      render: text

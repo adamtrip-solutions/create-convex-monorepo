@@ -1,0 +1,43 @@
+# Architecture
+
+Generation has one normalized input, a filesystem context, a framework registry, and an auth registry. It creates a new workspace; it does not mutate existing projects or load arbitrary third-party plugins.
+
+## Execution
+
+`src/commands/create.ts` parses flags and collects missing interactive answers. `src/generator/options.ts` validates names, resolves app names, rejects unsupported choices, and sets install/git defaults. Both the CLI and exported `generateProject` API use this normalization.
+
+`src/generator/index.ts` checks the destination and creates a sibling staging directory. It generates root files, copies the backend source and official generated assets, runs each selected app template, then applies one auth adapter. Only after template composition succeeds does it copy files exclusively into the destination and run optional installation and `git init`. The commit is not an atomic rename. A failure rolls back only files and directories created by that invocation, preserving an existing empty directory and concurrent user files.
+
+Template errors clean up staging. Installation and git failures preserve completed project files so users can retry setup. Existing non-empty directories and symlinks are rejected. No git commit or registry publication occurs during generation.
+
+## Contracts and ownership
+
+`src/generator/types.ts` defines `AppSpec`, `ProjectOptions`, `AppTemplate`, `AuthAdapter`, and `GeneratorContext`.
+
+An app template implements `generate(context, app)`. It owns its framework entry points, application manifest, bundler configuration, environment example, and demo. Shared helpers in `src/templates/apps/shared.ts` generate manifests, environment files, type contracts, and web message components.
+
+An auth adapter implements `apply(context)`. It owns backend `access.ts`, optional auth configuration, and app `providers.tsx` and `auth-controls.tsx`. Framework templates import those stable module names without importing Clerk. Clerk's binding map selects the framework SDK, middleware and native dependencies in `src/integrations/auth/clerk/index.ts`. Adding a provider requires platform-specific integration, but does not require embedding provider branches throughout framework templates.
+
+`context.write` and `context.json` create files once and reject unsafe paths and collisions. `context.mergePackage` can update only manifests created by that context. Dependency maps merge by key and reject conflicting versions; script patches replace matching script keys. Other top-level manifest fields replace their previous values. This is intentionally not a generic deep-merge engine.
+
+The package-manager contract lives in `src/package-manager/index.ts`. pnpm owns installation; subprocesses receive argument arrays and inherited terminal output. The root template owns Turborepo and workspace configuration. There is no Nx adapter or speculative migration engine.
+
+## Shared Convex API
+
+The backend is a source workspace package. Its `/api` export has a `types` condition for `convex/_generated/api.d.ts` and a runtime condition for `api.js`. `/dataModel` exposes only declarations. Consumers keep backend modules available because Convex's dynamic declarations derive types from their exports.
+
+Do not bundle those declarations, export backend implementation modules to clients, replace the generated API with a generic proxy, or add TypeScript project-reference boundaries that prevent source resolution. The official runtime uses a proxy, while the original declarations preserve function signatures. Every frontend's `src/convex-api.type-test.ts` checks argument types, return types, document IDs, and invalid API keys.
+
+`assets/backend/convex` contains the example and official generated output. Refresh generated output with a supported Convex development workflow after changing backend modules. Do not edit generated internals. New projects can typecheck the committed example before selecting their own deployment. Subsequent code generation requires normal Convex setup.
+
+## Environment and process boundaries
+
+The backend owns deployment configuration. Each app owns its public URL and publishable auth key with the prefix required by its bundler. Server secrets never receive public prefixes. Auth adapters add `.env.clerk.example` alongside the framework's `.env.example`; users combine their values in `.env.local`.
+
+Setup runs outside Turbo so Convex account and deployment prompts have a terminal. Development runs one persistent backend watcher and the selected apps with streamed logs. Build and typecheck tasks do not deploy or start watchers. Public environment variables participate in build inputs.
+
+## Extension and compatibility policy
+
+Registries and TypeScript unions make supported choices explicit. Dependencies are pinned in `src/templates/versions.ts` and in framework bindings where necessary. New adapters should add concrete capabilities, with install, type, and bundler evidence for each supported combination. Reject an unsupported combination clearly rather than emitting code known to fail.
+
+`convex-monorepo.json` records a versioned description of the output for future commands. It is not currently consumed by an upgrade or migration command. The exported API supports programmatic generation; custom runtime registry injection is not implemented.

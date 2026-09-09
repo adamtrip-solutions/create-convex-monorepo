@@ -1,0 +1,44 @@
+# v0.1 verification
+
+Executed on 2026-09-09 on macOS with Node 24.17.0 and pnpm 10.34.5. Results refer to the implementation in this repository, not every future upstream release.
+
+## Repository checks
+
+| Command                          | Result                                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | Passed                                                                                                                          |
+| `pnpm lint`                      | Passed                                                                                                                          |
+| `pnpm format:check`              | Passed                                                                                                                          |
+| `pnpm typecheck`                 | Passed                                                                                                                          |
+| `pnpm test`                      | 59 passed: 41 core, 13 generator/golden, 5 backend                                                                              |
+| `pnpm build`                     | Passed                                                                                                                          |
+| `pnpm pack`                      | Passed                                                                                                                          |
+| `node scripts/pack-smoke.mjs`    | Installed the tarball outside the checkout and generated Next + Expo + Clerk through its bin; official generated assets present |
+
+The twelve golden combinations cover every requested fixture plus Vite + Clerk and Start + Clerk. An additional regression test covers numeric-leading names, matching native auth redirects, ten applications, dev concurrency and tracked environment examples. Filesystem tests cover traversal, symlinks, existing content, cancellation, collisions, and failed install/git recovery.
+
+Backend tests execute generated functions with `convex-test`. They check persistence, trimming, input length, the fifty-message bound, unauthenticated rejection and isolation between identities.
+
+## Generated-project checks
+
+`pnpm test:e2e` generates into a fresh OS temporary directory, installs dependencies, and runs root `pnpm typecheck`, `pnpm lint` and `pnpm build`. It supplies syntactically valid public test configuration so bundlers compile the actual providers. Test Clerk keys are synthetic and cannot authenticate. Set `CCM_APPS` and `CCM_AUTH` to choose the case. A failed fixture is retained and its path printed; successful fixtures are removed unless `CCM_KEEP_FIXTURE` is set.
+
+Completed all-four-framework workspaces with both `none` and `clerk`. Next builds used Turbopack; Vite produced client bundles; Start produced client and server bundles. Expo exported iOS and Android Metro/Hermes bundles using isolated pnpm workspace links and the default Metro resolver. Client output scans also reject the backend index name, backend validation text and synthetic server-secret marker in shipped JavaScript or Hermes bundles. Each frontend's standalone TypeScript program checked the concrete shared API argument, document and return types, plus negative API-key assertions.
+
+The six definition-of-done combinations are also checked individually: Next, Vite, Start, Expo, Next + Expo, and Next + Expo + Clerk. The GitHub Actions matrix repeats these combinations and adds Vite + Start + Clerk. CI has been authored but has not run on a hosted GitHub runner in this session.
+
+## Live checks
+
+`CONVEX_AGENT_MODE=anonymous convex dev --once` compiled and pushed the example to a local deployment using Convex 1.45.0. The unmodified official generated files were captured from that workflow. The generated workspace's `pnpm convex:setup` also pushed successfully from packages/backend.
+
+The generated all-four workspace's `pnpm dev` started Convex, Next, Vite, Start and Metro together with streamed logs. A `ConvexHttpClient` sent and queried a message; a separate `ConvexClient` subscription observed that mutation. The Next, Vite and Start development servers each returned HTTP 200. Creating environment files during a Start server restart caused one transient request failure; a subsequent request succeeded.
+
+The interactive CLI was exercised in a PTY and created a Next + Expo project. The noninteractive CLI and installed tarball bin were also exercised.
+
+## Limits
+
+No browser was available through the browser-control tool, so page interaction and visual review were not performed. Fable was unavailable; no independent UI/UX review is claimed. Fresh technical review found scheme and task-concurrency defects, which were fixed and checked again.
+
+Real Clerk sessions, Google OAuth, MFA/session tasks, native Xcode/Gradle builds and physical devices were not tested. Metro exports prove JavaScript module resolution and bundling, not native binary execution. Start's Convex data is client-driven; authenticated server prefetching is not configured. Optional upstream peer warnings are recorded in research.md.
+
+Windows and Node 22 checks are configured in CI but were not executed locally. No npm publication, remote repository creation or production deployment occurred.

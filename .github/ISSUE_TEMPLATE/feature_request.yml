@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a concrete generator capability.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the workflow and who needs it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include a command or generated-project example if useful.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Compatibility and alternatives
+      description: Link current upstream documentation and describe alternatives considered.
