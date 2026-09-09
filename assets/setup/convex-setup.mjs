@@ -199,15 +199,22 @@ export async function initializeConvex(root, signal) {
       stdio: 'inherit',
       ...(signal ? { signal } : {}),
     });
-    child.once('error', reject);
-    child.once('exit', (code, interrupted) =>
-      code === 0
-        ? resolve(undefined)
-        : reject(
-            new Error(
-              `Convex setup stopped (${interrupted ?? `exit ${code}`}). Project files are preserved; frontend URLs were not changed. Resolve the error above and run pnpm convex:setup again. For Clerk, configure CLERK_JWT_ISSUER_DOMAIN on the deployment as described in README.md.`,
+    /** @type {Error | undefined} */
+    let processError;
+    child.once('error', (error) => {
+      processError = error;
+    });
+    // Abort errors arrive before shutdown. Wait until the child releases its files.
+    child.once('close', (code, interrupted) =>
+      processError
+        ? reject(processError)
+        : code === 0
+          ? resolve(undefined)
+          : reject(
+              new Error(
+                `Convex setup stopped (${interrupted ?? `exit ${code}`}). Project files are preserved; frontend URLs were not changed. Resolve the error above and run pnpm convex:setup again. For Clerk, configure CLERK_JWT_ISSUER_DOMAIN on the deployment as described in README.md.`,
+              ),
             ),
-          ),
     );
   });
   signal?.throwIfAborted();

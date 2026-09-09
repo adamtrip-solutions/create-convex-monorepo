@@ -244,16 +244,40 @@ it('does not link a stale URL if the Convex child fails', async () => {
   );
   await expect(readFile(join(root, 'apps/web/.env.local'))).rejects.toThrow();
 });
-it('preserves the backend after cancelling an in-flight Convex child', async () => {
+it('waits for the cancelled Convex child to close and preserves the backend', async () => {
   const { root } = await fixture('next');
-  await fakeConvex(root, 'setInterval(() => {}, 1000)');
+  await fakeConvex(
+    root,
+    `
+    process.on('SIGTERM', () => setTimeout(() => process.exit(0), 150));
+    require('node:fs').writeFileSync('ready.pid', String(process.pid));
+    setInterval(() => {}, 1000);
+  `,
+  );
   const controller = new AbortController();
   const result = initializeConvex(root, controller.signal);
-  const timer = setTimeout(() => controller.abort(), 100);
+  // Observe rejection immediately so startup failures cannot go unhandled.
+  const outcome = result.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
   try {
-    await expect(result).rejects.toThrow();
+    let pid = 0;
+    await vi.waitFor(
+      async () => {
+        pid = Number(
+          await readFile(join(root, 'packages/backend/ready.pid'), 'utf8'),
+        );
+        expect(Number.isSafeInteger(pid) && pid > 0).toBe(true);
+      },
+      { timeout: 5000, interval: 10 },
+    );
+    controller.abort();
+    expect(await outcome).toBeInstanceOf(Error);
+    expect(() => process.kill(pid, 0)).toThrow();
   } finally {
-    clearTimeout(timer);
+    controller.abort();
+    await outcome;
   }
   expect(
     await readFile(join(root, 'packages/backend/package.json'), 'utf8'),

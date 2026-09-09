@@ -74,3 +74,5 @@ Fresh review checked the release dispatch, provenance commit identity, bootstrap
 ## CI bootstrap publishing
 
 Compared both the local checkout and GitHub workflow of `adamtrip-solutions/convex-cloudflare-email`, whose first npm release workflow succeeded. Its publish step supports `NPM_BOOTSTRAP_TOKEN` for initial package creation. This repository now supports the same token-to-OIDC transition and no longer gates publishing behind `NPM_PUBLISHING_ENABLED`. The token is passed only to the final npm publish step. No secret values were read or transferred from the reference repository, and this package has not been published.
+
+A later Windows run exposed an intermittent cancellation failure: setup rejected on the child's abort error before the process closed, leaving the backend directory locked during cleanup. The regression test reproduced the early return locally. Setup now waits for the child close event before settling, preserving the original error. The corrected test and all 98 repository tests passed, together with typecheck, lint, formatting, build, and package smoke checks. Hosted Windows confirmation of this fix is pending.
