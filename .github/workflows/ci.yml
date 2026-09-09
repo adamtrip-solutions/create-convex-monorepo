@@ -52,7 +52,14 @@ jobs:
             auth: clerk
           - apps: vite,tanstack-start
             auth: clerk
+          - apps: next,vite,tanstack-start,expo
+            auth: none
+            example: none
+          - apps: next,vite,tanstack-start,expo
+            auth: clerk
+            example: none
     env:
+      CCM_EXAMPLE: ${{ matrix.example || 'messages' }}
       CCM_APPS: ${{ matrix.apps }}
       CCM_AUTH: ${{ matrix.auth }}
     steps:

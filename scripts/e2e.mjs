@@ -7,9 +7,10 @@ import { generateProject } from '../dist/index.js';
 const apps =
   process.env.CCM_APPS ?? 'next,admin:vite,portal:tanstack-start,expo';
 const auth = process.env.CCM_AUTH ?? 'none';
+const example = process.env.CCM_EXAMPLE ?? 'messages';
 const directory = await mkdtemp(join(tmpdir(), 'ccm-e2e-'));
 const project = await generateProject(
-  { name: 'fixture', apps, auth },
+  { name: 'fixture', apps, auth, example },
   { cwd: directory },
 );
 function run(args) {
@@ -34,6 +35,26 @@ try {
     await readFile(join(project, 'convex-monorepo.json'), 'utf8'),
   );
   for (const app of config.apps) {
+    if (example === 'none') {
+      // Test-only contract: keep empty-API assertions out of the user's starter
+      // so adding their first function does not break a generated test.
+      await writeFile(
+        join(project, 'apps', app.name, 'src/blank.type-test.ts'),
+        `
+import type { api } from '@fixture/backend/api';
+import type { DataModel, TableNames } from '@fixture/backend/dataModel';
+type Assert<T extends true> = T;
+type IsAny<T> = 0 extends (1 & T) ? true : false;
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+export type ApiIsTyped = Assert<Equal<IsAny<typeof api>, false>>;
+export type ApiIsEmpty = Assert<Equal<keyof typeof api, never>>;
+export type TablesAreEmpty = Assert<Equal<TableNames, never>>;
+export type ModelIsTyped = Assert<Equal<IsAny<DataModel>, false>>;
+// @ts-expect-error No functions have been defined.
+export type MissingModule = typeof api.notAModule;
+`,
+      );
+    }
     const prefix =
       app.framework === 'next'
         ? 'NEXT_PUBLIC'
@@ -84,7 +105,7 @@ try {
       }
     }
   }
-  console.log(`PASS generated ${apps} / ${auth}`);
+  console.log(`PASS generated ${apps} / ${auth} / ${example}`);
 } catch (error) {
   console.error(`Fixture retained at ${project}`);
   process.exitCode = 1;

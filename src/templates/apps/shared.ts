@@ -44,6 +44,7 @@ export async function common(
     `${dir}/.env.example`,
     `# Copy to .env.local, then copy only the public deployment URL from packages/backend/.env.local.\n${env}=\n`,
   );
+  if (context.options.example === 'none') return;
   await context.write(
     `${dir}/src/convex-api.type-test.ts`,
     `import { api } from '@${context.scope}/backend/api';
@@ -71,6 +72,7 @@ export async function webMessages(
   context: GeneratorContext,
   app: AppSpec,
 ): Promise<void> {
+  if (context.options.example === 'none') return;
   await context.write(
     `apps/${app.name}/src/messages.tsx`,
     `'use client';
@@ -135,4 +137,24 @@ export function port(context: GeneratorContext, app: AppSpec): number {
   return (
     3000 + context.options.apps.findIndex((entry) => entry.name === app.name)
   );
+}
+
+/** Entry content varies independently of framework and auth setup. */
+export function entryContent(
+  context: GeneratorContext,
+  app: AppSpec,
+  from: string,
+) {
+  if (context.options.example === 'messages') {
+    return {
+      imports: `import { Messages } from '${from}/messages';`,
+      content: '<Messages />',
+    };
+  }
+  return app.framework === 'expo'
+    ? {
+        imports: "import { Text } from 'react-native';",
+        content: `<Text>${app.name}</Text>`,
+      }
+    : { imports: '', content: `<h1>${app.name}</h1>` };
 }

@@ -2,7 +2,7 @@
 
 A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, or a combination, with optional Clerk authentication.
 
-The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Each generated app includes a small message query and mutation, plus compile-time assertions that check the shared API's argument and return types.
+The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Choose blank apps or a messages example. The example includes a query and mutation, plus compile-time assertions for the shared API's argument and return types.
 
 ## Why this exists
 
@@ -50,6 +50,7 @@ Application framework?  Expo / React Native
 Application name?       mobile
 Add another frontend?   No
 Authentication?         Clerk
+Starter content?        Blank project
 Initialize git?         Yes
 Initialize Convex and link frontend URLs?   Yes
 ```
@@ -59,7 +60,7 @@ Selecting Convex initialization installs dependencies first, then opens Convex's
 ## Non-interactive usage
 
 ```sh
-node dist/cli/index.js my-app --apps next,expo --init-convex --yes
+node dist/cli/index.js my-app --apps next,expo --example none --init-convex --yes
 node dist/cli/index.js my-app --apps next,expo --auth clerk --yes
 node dist/cli/index.js my-app --apps web:next,admin:vite --no-install --no-git
 node dist/cli/index.js my-app --apps app:tanstack-start,dashboard:next --auth none --package-manager pnpm --yes
@@ -69,6 +70,7 @@ node dist/cli/index.js my-app --apps app:tanstack-start,dashboard:next --auth no
 | ----------------------------------- | ----------------------------------------------------------- |
 | `--apps`                            | Comma-separated framework IDs or `name:framework` entries   |
 | `--auth`                            | `none`, the default, or `clerk`                             |
+| `--example`                         | `messages`, the default, or `none` for blank projects       |
 | `--package-manager`                 | `pnpm`; other managers are rejected in v0.1                 |
 | `--install`, `--no-install`         | Enable or skip dependency installation                      |
 | `--init-convex`, `--no-init-convex` | Initialize Convex and link URLs; enables installation       |
@@ -77,6 +79,20 @@ node dist/cli/index.js my-app --apps app:tanstack-start,dashboard:next --auth no
 | `--help`, `--version`               | Show usage or the generator version                         |
 
 Without a terminal, prompts are disabled and install/git default to off unless explicitly enabled or `--yes` is passed. Explicit negative flags override `--yes`. Convex initialization defaults to off when prompts are skipped, including with `--yes`; request it explicitly with `--init-convex`. That flag still lets Convex prompt for an account or deployment, and conflicts with `--no-install`. The default app is Next.js. Project and app names must be lowercase letters, digits, and hyphens, at most 100 characters, with no path separators or reserved device names.
+
+## Blank projects
+
+Choose **Blank project** in the starter-content prompt, or pass `--example none`:
+
+```sh
+node dist/cli/index.js my-app --apps next,expo --example none --yes
+```
+
+Every selected app starts with a minimal page or screen showing its name. Convex providers, workspace dependencies, environment setup, and the selected auth integration remain configured. The backend has an empty schema and official generated types. There are no example tables, messages functions, access helpers, query/mutation screens, or demo-specific type-test files to remove.
+
+Add your tables to `packages/backend/convex/schema.ts` and your functions beside it. Run `pnpm convex:dev` to generate their shared API references. With Clerk, add server-side identity and authorization checks to your protected functions. The blank starter retains sign-in controls and the existing authenticated provider behavior.
+
+The choice applies to the whole workspace. `--example messages` keeps the existing query/mutation demo and remains the default, including with `--yes`.
 
 ## Supported frameworks
 
@@ -101,7 +117,7 @@ my-app/
 │   ├── backend/
 │   │   ├── convex/_generated/
 │   │   ├── convex/schema.ts
-│   │   ├── convex/messages.ts
+│   │   ├── convex/messages.ts  # messages example only
 │   │   ├── convex.json
 │   │   └── package.json
 │   ├── typescript-config/
@@ -157,11 +173,11 @@ import type { Doc, Id } from '@my-app/backend/dataModel';
 
 `/api` points directly to Convex's original runtime JavaScript and paired declaration file. `/dataModel` is a type-only export. There is no bundled declaration file or root barrel. Keep the backend sources and `convex/_generated` in version control, and run `pnpm convex:dev` after changing backend modules.
 
-Dynamic Convex declarations refer to backend source modules. Client TypeScript programs therefore inspect those sources, even though client runtime bundles should not include the backend implementations. Do not introduce incompatible backend-only path aliases or a frontend `rootDir` that excludes those sources. Each app includes `src/convex-api.type-test.ts` to detect lost inference. The [architecture](docs/architecture.md) explains the export contract.
+Dynamic Convex declarations refer to backend source modules. Client TypeScript programs therefore inspect those sources, even though client runtime bundles should not include the backend implementations. Do not introduce incompatible backend-only path aliases or a frontend `rootDir` that excludes those sources. Apps using the messages example include `src/convex-api.type-test.ts` to detect lost inference. Blank API types are checked in disposable test fixtures. The [architecture](docs/architecture.md) explains the export contract.
 
 ## Authentication
 
-`--auth none` generates a public message board. `--auth clerk` adds SDK-specific bindings, a Convex auth configuration, provider wiring, and backend identity checks. Clerk messages belong to the signed-in identity and are queried through an owner index. UI visibility alone is not authorization.
+`--auth clerk` adds SDK-specific bindings, a Convex auth configuration, and provider wiring. The messages example also includes backend identity checks and an owner index that keeps messages private. With `--auth none`, that example is a public message board. Blank projects have no data or functions; add authorization checks when writing protected functions. UI visibility alone is not authorization.
 
 Use one Clerk application across the frontends. Configure Clerk's Convex integration and a JWT template named `convex`. Set `CLERK_JWT_ISSUER_DOMAIN` on the Convex deployment:
 

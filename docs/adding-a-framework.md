@@ -22,6 +22,6 @@ Do not add a declaration bundler, a generic API cast, or copied backend code. Ch
 
 ## Verify before registration is considered supported
 
-Generate the framework alone, with another frontend, and with every advertised auth provider. Install from a clean directory, typecheck, lint, and run a production build. For a native framework, run its actual JavaScript bundler for supported platforms. Exercise the query and mutation against a development backend when credentials or local deployment tooling are available; report separately when that check was skipped.
+Generate the framework alone, with another frontend, and with every advertised auth provider. Cover both `--example messages` and `--example none`; use the shared entry-content helper so blank apps do not import demo files. Install from a clean directory, typecheck, lint, and run a production build. For a native framework, run its actual JavaScript bundler for supported platforms. Exercise the query and mutation against a development backend when credentials or local deployment tooling are available; report separately when that check was skipped.
 
 Add focused output assertions, option-selection coverage, and representative generated-project CI coverage. Tests must catch missing generated declarations and widened argument/return types. Update README support notes and this guide if the framework introduces a new integration contract.

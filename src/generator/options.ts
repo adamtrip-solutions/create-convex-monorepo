@@ -4,6 +4,7 @@ export interface RawOptions {
   name?: string;
   apps?: string | AppSpec[];
   auth?: string;
+  example?: string;
   packageManager?: string;
   install?: boolean;
   initConvex?: boolean;
@@ -38,6 +39,9 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     throw new Error(
       '--init-convex requires dependencies. Omit --no-install or use --no-init-convex.',
     );
+  const example = raw.example ?? 'messages';
+  if (example !== 'none' && example !== 'messages')
+    throw new Error(`Unknown example "${example}". Choose none or messages.`);
   const auth = raw.auth ?? 'none';
   if (auth !== 'none' && auth !== 'clerk')
     throw new Error(`Unknown auth provider "${auth}". Choose none or clerk.`);
@@ -94,6 +98,7 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     name,
     apps,
     auth: auth as Auth,
+    example,
     packageManager: 'pnpm',
     install: raw.install ?? (initConvex || raw.yes || false),
     initConvex,

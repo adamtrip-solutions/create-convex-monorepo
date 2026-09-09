@@ -75,6 +75,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     monorepo: 'turbo',
     apps: options.apps,
     auth: options.auth,
+    example: options.example,
   });
   await ctx.json('packages/typescript-config/package.json', {
     name: `@${scope}/typescript-config`,
@@ -160,9 +161,11 @@ On a new deployment, run pnpm convex:setup to select it. If the first push asks 
 
 Expo uses Google OAuth. Enable Google's connection and the Native API in Clerk. Register each mobile scheme redirect listed in that app's .env.clerk.example in Clerk Native applications. Use a development build for a stable app scheme. SecureStore persists the token. Additional MFA or session tasks need a custom flow before production rollout.
 
-The backend checks identity and uses an owner index to keep messages private. All frontends share the same identity and messages when signed into the same account.
+${options.example === 'messages' ? 'The backend checks identity and uses an owner index to keep messages private. All frontends share the same identity and messages when signed into the same account.' : 'Clerk is configured, but there are no backend functions yet. Check ctx.auth.getUserIdentity() and enforce authorization in each protected function you add.'}
 `
-    : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
+    : options.example === 'none'
+      ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run pnpm convex:dev to regenerate the shared API.\n`
+      : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
 `
 }
 ## Development
@@ -185,7 +188,7 @@ import { api } from '@${scope}/backend/api';
 import type { Doc, Id } from '@${scope}/backend/dataModel';
 \`\`\`
 
-These package exports point directly to official Convex generated files. Keep convex/_generated committed. Run convex:dev after adding backend modules. Do not bundle declarations or copy backend code into apps. Each app includes convex-api.type-test.ts with positive and negative compile-time assertions. Backend build checks types, it does not deploy functions.
+These package exports point directly to official Convex generated files. Keep convex/_generated committed. Run convex:dev after adding backend modules. Do not bundle declarations or copy backend code into apps. ${options.example === 'messages' ? 'Each app includes convex-api.type-test.ts with positive and negative compile-time assertions.' : 'The API starts empty and gains typed references when you add functions and run Convex code generation.'} Backend build checks types, it does not deploy functions.
 
 TanStack Start uses client Convex hooks. Server-side data preloading is not configured. Next uses the App Router. Expo uses the default Metro workspace resolver and the SDK's React/React Native versions. Avoid independently upgrading React in one app.
 

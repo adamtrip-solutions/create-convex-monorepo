@@ -49,13 +49,24 @@ export async function generateBackend(ctx: GeneratorContext): Promise<void> {
     "# Run pnpm convex:setup from the workspace root.\n# Convex writes deployment selection and public URLs to this package's .env.local.\n# Never copy this file wholesale into an application.\n",
   );
   const assetDir = new URL('../../../assets/backend/convex/', import.meta.url);
-  for (const file of ['schema.ts', 'messages.ts', 'tsconfig.json']) {
+  const selectedAssets =
+    ctx.options.example === 'none'
+      ? new URL('../../../assets/backend-blank/convex/', import.meta.url)
+      : assetDir;
+  const files =
+    ctx.options.example === 'none'
+      ? ['schema.ts', 'tsconfig.json']
+      : ['schema.ts', 'messages.ts', 'tsconfig.json'];
+  for (const file of files) {
     await ctx.write(
       `${base}/convex/${file}`,
-      await readFile(new URL(file, assetDir), 'utf8'),
+      await readFile(
+        new URL(file, file === 'tsconfig.json' ? assetDir : selectedAssets),
+        'utf8',
+      ),
     );
   }
-  const generated = new URL('_generated/', assetDir);
+  const generated = new URL('_generated/', selectedAssets);
   for (const file of await readdir(generated)) {
     await ctx.write(
       `${base}/convex/_generated/${file}`,

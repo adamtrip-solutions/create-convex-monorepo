@@ -10,7 +10,7 @@ Executed on 2026-09-09 on macOS with Node 24.17.0 and pnpm 10.34.5. Results refe
 | `pnpm lint`                      | Passed                                                                                                                                                    |
 | `pnpm format:check`              | Passed                                                                                                                                                    |
 | `pnpm typecheck`                 | Passed                                                                                                                                                    |
-| `pnpm test`                      | 73 passed: 41 core, 13 generator/golden, 14 setup, 5 backend                                                                                              |
+| `pnpm test`                      | 84 passed: 41 core, 13 generator/golden, 14 setup, 11 blank, 5 backend                                                                                    |
 | `pnpm build`                     | Passed                                                                                                                                                    |
 | `pnpm pack`                      | Passed                                                                                                                                                    |
 | `node scripts/pack-smoke.mjs`    | Installed the tarball outside the checkout and generated Next + Expo + Clerk through its bin; official generated assets and standalone URL linking passed |
@@ -54,3 +54,13 @@ A separate PTY run accepted the new initialization prompt for Next + Expo. Depen
 Fresh technical review reproduced a cancellation race during URL linking. The fix passes the abort signal through the linking stage and checks it before each write and before reporting completion. A focused reviewer follow-up reran the reproduction and confirmed rejection after cancellation, with the remaining app untouched. Partial completed writes stay available and linking can be rerun.
 
 The release-please configuration passed validation against its upstream schema, and the PR-title rule accepted five valid titles and rejected five invalid titles. CLI and generated metadata versions now come from package.json. GitHub Actions, repository permissions and release creation have not been exercised on a remote repository.
+
+## Blank starter checks
+
+The blank starter follow-up passed lint, formatting, typecheck, all 84 tests, build, pack, and the installed-tarball smoke test for both starter choices. Eleven new tests cover selection/defaults, invalid values, all four frameworks individually, and combined workspaces with no auth and Clerk. They check for absent demo files and stale imports while retaining providers and auth configuration.
+
+`CCM_EXAMPLE=none CCM_AUTH=none pnpm test:e2e` and `CCM_EXAMPLE=none CCM_AUTH=clerk pnpm test:e2e` both passed installation, typecheck, lint and build for all four frameworks. Builds included Next, Vite, Start client/server, and Expo iOS/Android Metro exports. The test runner injected exact empty API/table-name assertions, non-any assertions and negative unknown-module assertions into each disposable frontend. Those test files are not included in normal blank generation. Clerk build configuration was synthetic; real sign-in remains untested.
+
+The empty schema and unmodified generated assets came from a successful official `convex dev --once` run. A generated blank workspace then completed its own `pnpm convex:setup` against an anonymous local deployment and linked all four frontend URLs. The interactive starter-content prompt also created a blank Next + Expo project in a PTY.
+
+Fresh technical review independently compiled the empty API/data-model assertions and found a Windows path-separator error in the new file assertions. That error was fixed before the final test run. Windows execution and hosted CI remain untested locally.

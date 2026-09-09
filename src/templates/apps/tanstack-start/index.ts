@@ -1,12 +1,20 @@
 import type { AppTemplate } from '../../../generator/types.js';
 import { versions } from '../../versions.js';
-import { common, manifest, port, webMessages, webTsconfig } from '../shared.js';
+import {
+  common,
+  entryContent,
+  manifest,
+  port,
+  webMessages,
+  webTsconfig,
+} from '../shared.js';
 
 export const tanstackStartTemplate: AppTemplate = {
   id: 'tanstack-start',
   label: 'TanStack Start',
   async generate(context, app) {
     const dir = `apps/${app.name}`;
+    const entry = entryContent(context, app, '..');
     const pkg = manifest(context, app);
     pkg.scripts = {
       ...pkg.scripts,
@@ -84,10 +92,10 @@ function Root() {
       `import { createFileRoute } from '@tanstack/react-router';
 import { Providers } from '../providers';
 import { AuthControls } from '../auth-controls';
-import { Messages } from '../messages';
+${entry.imports}
 export const Route = createFileRoute('/')({ component: Home });
 function Home() {
-  return <main><Providers><AuthControls /><Messages /></Providers></main>;
+  return <main><Providers><AuthControls />${entry.content}</Providers></main>;
 }
 `,
     );

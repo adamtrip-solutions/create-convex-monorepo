@@ -26,7 +26,7 @@ The package-manager contract lives in `src/package-manager/index.ts`. pnpm owns 
 
 The backend is a source workspace package. Its `/api` export has a `types` condition for `convex/_generated/api.d.ts` and a runtime condition for `api.js`. `/dataModel` exposes only declarations. Consumers keep backend modules available because Convex's dynamic declarations derive types from their exports.
 
-Do not bundle those declarations, export backend implementation modules to clients, replace the generated API with a generic proxy, or add TypeScript project-reference boundaries that prevent source resolution. The official runtime uses a proxy, while the original declarations preserve function signatures. Every frontend's `src/convex-api.type-test.ts` checks argument types, return types, document IDs, and invalid API keys.
+Do not bundle those declarations, export backend implementation modules to clients, replace the generated API with a generic proxy, or add TypeScript project-reference boundaries that prevent source resolution. The official runtime uses a proxy, while the original declarations preserve function signatures. Each messages-example frontend's `src/convex-api.type-test.ts` checks argument types, return types, document IDs, and invalid API keys.
 
 `assets/backend/convex` contains the example and official generated output. Refresh generated output with a supported Convex development workflow after changing backend modules. Do not edit generated internals. New projects can typecheck the committed example before selecting their own deployment. Subsequent code generation requires normal Convex setup.
 
@@ -41,3 +41,9 @@ The generated `scripts/convex-setup.mjs` is a standalone Node script copied from
 Registries and TypeScript unions make supported choices explicit. Dependencies are pinned in `src/templates/versions.ts` and in framework bindings where necessary. New adapters should add concrete capabilities, with install, type, and bundler evidence for each supported combination. Reject an unsupported combination clearly rather than emitting code known to fail.
 
 `convex-monorepo.json` records a versioned description of the output for future commands. It is not currently consumed by an upgrade or migration command. The exported API supports programmatic generation; custom runtime registry injection is not implemented.
+
+## Starter content
+
+`example` is independent of framework and auth selection. `messages` keeps the existing example; `none` selects blank apps and the empty backend assets. The backend template chooses the matching official generated declarations. App entry content comes from a shared helper, while framework setup and auth adapters keep their existing responsibilities. Auth adapters omit the demo's access helper in blank mode but still configure the selected provider.
+
+Blank apps do not include tests that assume an empty API forever. The generated-project test runner injects temporary compile-time assertions for an exactly empty API and table list, rejects unknown modules, and checks for widened types. Those files belong only to the disposable test fixture.

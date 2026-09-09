@@ -1,12 +1,13 @@
 import type { AppTemplate } from '../../../generator/types.js';
 import { versions } from '../../versions.js';
-import { common, manifest } from '../shared.js';
+import { common, entryContent, manifest } from '../shared.js';
 
 export const expoTemplate: AppTemplate = {
   id: 'expo',
   label: 'Expo / React Native',
   async generate(context, app) {
     const dir = `apps/${app.name}`;
+    const entry = entryContent(context, app, './src');
     const pkg = manifest(context, app);
     pkg.main = 'index.ts';
     const devPort =
@@ -53,15 +54,16 @@ export const expoTemplate: AppTemplate = {
       `${dir}/App.tsx`,
       `import { Providers } from './src/providers';
 import { AuthControls } from './src/auth-controls';
-import { Messages } from './src/messages';
+${entry.imports}
 export default function App() {
-  return <Providers><AuthControls /><Messages /></Providers>;
+  return <Providers><AuthControls />${entry.content}</Providers>;
 }
 `,
     );
-    await context.write(
-      `${dir}/src/messages.tsx`,
-      `import { useState } from 'react';
+    if (context.options.example === 'messages')
+      await context.write(
+        `${dir}/src/messages.tsx`,
+        `import { useState } from 'react';
 import { Button, ScrollView, Text, TextInput, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@${context.scope}/backend/api';
@@ -97,7 +99,7 @@ export function Messages() {
   </ScrollView>;
 }
 `,
-    );
+      );
     await common(context, app, 'EXPO_PUBLIC_CONVEX_URL');
   },
 };

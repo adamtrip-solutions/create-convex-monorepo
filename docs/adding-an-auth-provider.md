@@ -27,3 +27,5 @@ For native apps, use supported secure token storage and a real redirect flow. St
 Test unauthenticated rejection and cross-user isolation on the backend. Generate each supported framework with the provider and run clean installation, typechecks, lint, and representative builds. Keep negative compile-time API assertions enabled. Check generated environment files for secret-prefix mistakes and ensure example files can be committed while `.env.local` remains ignored.
 
 Use test credentials only for integration checks that need a provider account, and report those checks separately from static tests. Add provider-specific setup and troubleshooting to the generated README, repository README, and research notes. An unsupported framework combination must fail validation before generation rather than silently omitting auth.
+
+Cover both starter-content choices in adapter tests. Blank projects retain authentication configuration and providers but omit example-specific access helpers and functions.

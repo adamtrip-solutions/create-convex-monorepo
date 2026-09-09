@@ -14,6 +14,7 @@ export const help = `create-convex-monorepo [project-name] [options]
 Generate a pnpm + Turborepo workspace sharing one Convex backend.
 
   --apps <list>             next,vite,tanstack-start,expo or web:next,admin:vite
+  --example <name>         messages (default) or none for blank apps
   --auth <provider>         none (default) or clerk
   --package-manager <name>  pnpm (v0.1)
   --install / --no-install  Install generated dependencies
@@ -39,6 +40,7 @@ export function parseCommand(args: string[]): {
     options: {
       apps: { type: 'string' },
       auth: { type: 'string' },
+      example: { type: 'string' },
       'package-manager': { type: 'string' },
       'init-convex': { type: 'boolean' },
       'no-init-convex': { type: 'boolean' },
@@ -70,6 +72,7 @@ export function parseCommand(args: string[]): {
   if (positionals[0] !== undefined) raw.name = positionals[0];
   if (values.apps !== undefined) raw.apps = values.apps;
   if (values.auth !== undefined) raw.auth = values.auth;
+  if (values.example !== undefined) raw.example = values.example;
   if (values['package-manager'] !== undefined)
     raw.packageManager = values['package-manager'];
   if (values.yes !== undefined) raw.yes = values.yes;
@@ -169,6 +172,17 @@ export async function runCreate(
           options: [
             { value: 'none', label: 'None' },
             { value: 'clerk', label: 'Clerk' },
+          ],
+        }),
+      );
+    if (raw.example === undefined)
+      raw.example = answer(
+        await prompts.select({
+          message: 'Starter content?',
+          initialValue: 'messages',
+          options: [
+            { value: 'messages', label: 'Messages example' },
+            { value: 'none', label: 'Blank project' },
           ],
         }),
       );

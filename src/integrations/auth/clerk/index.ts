@@ -13,16 +13,17 @@ export const clerkAdapter: AuthAdapter = {
   id: 'clerk',
   label: 'Clerk',
   async apply(ctx) {
-    await ctx.write(
-      'packages/backend/convex/access.ts',
-      `import type { QueryCtx, MutationCtx } from './_generated/server';
+    if (ctx.options.example === 'messages')
+      await ctx.write(
+        'packages/backend/convex/access.ts',
+        `import type { QueryCtx, MutationCtx } from './_generated/server';
 export async function getOwner(ctx: QueryCtx | MutationCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error('Sign in to access messages.');
   return identity.tokenIdentifier;
 }
 `,
-    );
+      );
     await ctx.write(
       'packages/backend/convex/auth.config.ts',
       `import type { AuthConfig } from 'convex/server';

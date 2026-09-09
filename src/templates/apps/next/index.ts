@@ -1,12 +1,20 @@
 import type { AppTemplate } from '../../../generator/types.js';
 import { versions } from '../../versions.js';
-import { common, manifest, port, webMessages, webTsconfig } from '../shared.js';
+import {
+  common,
+  entryContent,
+  manifest,
+  port,
+  webMessages,
+  webTsconfig,
+} from '../shared.js';
 
 export const nextTemplate: AppTemplate = {
   id: 'next',
   label: 'Next.js',
   async generate(context, app) {
     const dir = `apps/${app.name}`;
+    const entry = entryContent(context, app, '..');
     const pkg = manifest(context, app);
     pkg.scripts = {
       ...pkg.scripts,
@@ -66,9 +74,9 @@ export default function Layout({ children }: { children: ReactNode }) {
       `${dir}/src/app/page.tsx`,
       `import { Providers } from '../providers';
 import { AuthControls } from '../auth-controls';
-import { Messages } from '../messages';
+${entry.imports}
 export default function Home() {
-  return <main><Providers><AuthControls /><Messages /></Providers></main>;
+  return <main><Providers><AuthControls />${entry.content}</Providers></main>;
 }
 `,
     );

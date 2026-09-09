@@ -42,3 +42,5 @@ Release-please maintains a PR with the next version and changelog. Do not add ch
 ## Reporting problems
 
 Use the issue templates for reproducible bugs and concrete feature requests. Include framework/auth choices, operating system, Node and pnpm versions, and the first useful error. Remove credentials and deployment secrets. Do not post vulnerabilities with exploitable private details in public issues; contact the repository maintainers privately through their published contact information.
+
+Set `CCM_EXAMPLE=none` when running `pnpm test:e2e` to check blank starters. The default is `messages`. New framework and auth combinations must support both choices or reject unsupported options explicitly.

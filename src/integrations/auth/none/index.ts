@@ -4,14 +4,15 @@ export const noneAdapter: AuthAdapter = {
   id: 'none',
   label: 'None',
   async apply(ctx) {
-    await ctx.write(
-      'packages/backend/convex/access.ts',
-      `import type { QueryCtx, MutationCtx } from './_generated/server';
+    if (ctx.options.example === 'messages')
+      await ctx.write(
+        'packages/backend/convex/access.ts',
+        `import type { QueryCtx, MutationCtx } from './_generated/server';
 export async function getOwner(_ctx: QueryCtx | MutationCtx): Promise<string | undefined> {
   return undefined;
 }
 `,
-    );
+      );
     for (const app of ctx.options.apps) {
       await writeProviders(ctx, app);
       await ctx.write(

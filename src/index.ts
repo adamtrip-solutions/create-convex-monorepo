@@ -8,6 +8,7 @@ export type {
   AuthAdapter,
   Framework,
   Auth,
+  Example,
 } from './generator/types.js';
 
 export type { RawOptions } from './generator/options.js';

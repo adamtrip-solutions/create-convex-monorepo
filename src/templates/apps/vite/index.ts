@@ -1,12 +1,20 @@
 import type { AppTemplate } from '../../../generator/types.js';
 import { versions } from '../../versions.js';
-import { common, manifest, port, webMessages, webTsconfig } from '../shared.js';
+import {
+  common,
+  entryContent,
+  manifest,
+  port,
+  webMessages,
+  webTsconfig,
+} from '../shared.js';
 
 export const viteTemplate: AppTemplate = {
   id: 'vite',
   label: 'Vite + React',
   async generate(context, app) {
     const dir = `apps/${app.name}`;
+    const entry = entryContent(context, app, '.');
     const pkg = manifest(context, app);
     pkg.scripts = {
       ...pkg.scripts,
@@ -42,10 +50,10 @@ export const viteTemplate: AppTemplate = {
 import { createRoot } from 'react-dom/client';
 import { Providers } from './providers';
 import { AuthControls } from './auth-controls';
-import { Messages } from './messages';
+${entry.imports}
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing root element.');
-createRoot(root).render(<StrictMode><main><Providers><AuthControls /><Messages /></Providers></main></StrictMode>);
+createRoot(root).render(<StrictMode><main><Providers><AuthControls />${entry.content}</Providers></main></StrictMode>);
 `,
     );
     await common(context, app, 'VITE_CONVEX_URL');

@@ -68,8 +68,34 @@ try {
     if (env !== `${variable}=https://pack-test.convex.cloud\n`)
       throw new Error(`Published URL linker failed for ${app}`);
   }
+  run(
+    bin,
+    [
+      'blank',
+      '--apps',
+      'next,expo',
+      '--example',
+      'none',
+      '--no-install',
+      '--no-git',
+    ],
+    directory,
+  );
+  const blank = join(directory, 'blank');
+  const blankFiles = await readdir(blank, { recursive: true });
+  if (blankFiles.some((file) => /messages\.tsx?$/.test(file)))
+    throw new Error('Blank tarball starter contains demo code');
+  if (
+    !(
+      await readFile(
+        join(blank, 'packages/backend/convex/_generated/api.d.ts'),
+        'utf8',
+      )
+    ).includes('ApiFromModules<{}>')
+  )
+    throw new Error('Published package lost blank generated types');
   console.log(
-    'PASS installed tarball bin, runtime assets and standalone URL linking',
+    'PASS installed tarball bin, both starter assets and standalone URL linking',
   );
 } finally {
   await rm(directory, { recursive: true, force: true });
