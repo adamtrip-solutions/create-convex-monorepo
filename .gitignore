@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.e2e/
+.env*
+!.env.example
+*.tgz
+.DS_Store
+tests/.generated/

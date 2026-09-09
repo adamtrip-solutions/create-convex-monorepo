@@ -1,0 +1,88 @@
+[
+  {
+    "label": "Next only",
+    "apps": "next",
+    "auth": "none",
+    "expected": [["web", "next", "NEXT_PUBLIC", null]]
+  },
+  {
+    "label": "Vite only",
+    "apps": "vite",
+    "auth": "none",
+    "expected": [["web", "vite", "VITE", null]]
+  },
+  {
+    "label": "TanStack Start only",
+    "apps": "tanstack-start",
+    "auth": "none",
+    "expected": [["web", "tanstack-start", "VITE", null]]
+  },
+  {
+    "label": "Expo only",
+    "apps": "expo",
+    "auth": "none",
+    "expected": [["mobile", "expo", "EXPO_PUBLIC", null]]
+  },
+  {
+    "label": "Next + Expo",
+    "apps": "next,expo",
+    "auth": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Next + Vite",
+    "apps": "next,vite",
+    "auth": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null]
+    ]
+  },
+  {
+    "label": "TanStack Start + Expo",
+    "apps": "tanstack-start,expo",
+    "auth": "none",
+    "expected": [
+      ["web", "tanstack-start", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Next + Clerk",
+    "apps": "next",
+    "auth": "clerk",
+    "expected": [["web", "next", "NEXT_PUBLIC", "@clerk/nextjs"]]
+  },
+  {
+    "label": "Expo + Clerk",
+    "apps": "expo",
+    "auth": "clerk",
+    "expected": [["mobile", "expo", "EXPO_PUBLIC", "@clerk/expo"]]
+  },
+  {
+    "label": "Next + Expo + Clerk",
+    "apps": "next,expo",
+    "auth": "clerk",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@clerk/nextjs"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@clerk/expo"]
+    ]
+  },
+  {
+    "label": "Vite + Clerk",
+    "apps": "vite",
+    "auth": "clerk",
+    "expected": [["web", "vite", "VITE", "@clerk/react"]]
+  },
+  {
+    "label": "TanStack Start + Clerk",
+    "apps": "tanstack-start",
+    "auth": "clerk",
+    "expected": [
+      ["web", "tanstack-start", "VITE", "@clerk/tanstack-react-start"]
+    ]
+  }
+]

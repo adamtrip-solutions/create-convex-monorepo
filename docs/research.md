@@ -1,0 +1,64 @@
+# Research
+
+Investigated 2026-09-09 before implementation. Registry releases inspected: Convex 1.45.0, Next 16.3.4, Vite 8.2.2, TanStack Start 1.168.50, Expo 57.0.21, Clerk Next 7.9.1, Clerk React 6.15.1, Clerk Expo 4.6.5. Templates pin tested versions. Expo's official blank TypeScript template 57.0.23 selects React 19.2.3, React Native 0.86.3 and TypeScript 6.0.3; we use that compatibility set across apps.
+
+## Convex types and code generation
+
+Inspected the published `convex@1.45.0` tarball, especially `src/cli/codegen.ts`, `src/cli/lib/components.ts`, `src/cli/lib/codegen.ts`, and `src/cli/codegen_templates/{api,dataModel,server,tsconfig}.ts`. [Source](https://github.com/get-convex/convex-js/tree/main/src/cli).
+
+The default API consists of runtime `api.js` and `api.d.ts`. The latter derives function references through `ApiFromModules` and imports the actual backend modules as types. `dataModel.d.ts` imports the schema; `server.d.ts` supplies typed query and mutation builders. TypeScript follows those imports across workspace boundaries. Keeping only the runtime file loses function inference. Runtime `anyApi` in official generated JavaScript is expected; it does not imply that the paired declarations are untyped. The official generated declarations themselves contain generic `any` constraints. They must remain unmodified.
+
+The package exposes `./api` with an explicit `types` condition pointing to the original `.d.ts` and a `default` condition pointing to the original `.js`. It exposes `./dataModel` for type imports. It does not bundle declarations, re-export from a barrel, or expose schema and server functions as runtime entry points. This keeps the original declaration graph intact. Source backend files must remain available in the workspace. Every frontend gets compile-time assertions against this public subpath.
+
+The current CLI requires deployment selection and credentials before `codegen`, even without components. A hidden `--system-udfs` path exists but is not a supported offline application workflow and must not be used. Ship official generated output for the example backend, then refresh it with normal `convex dev`. Generated code belongs in version control. [Generated API](https://docs.convex.dev/generated-api/api), [data model](https://docs.convex.dev/generated-api/data-model), [configuration](https://docs.convex.dev/production/project-configuration).
+
+Static API and data model generation now exist as beta options. They avoid some inference costs but update only while codegen runs, lose jump-to-definition, and require returns validators to avoid weak return types. v0.1 keeps dynamic codegen and supplies returns validators. Do not flatten types or edit generated internals.
+
+## Workspaces and bundlers
+
+Run Convex commands from `packages/backend`, which owns the Convex dependency, configuration and deployment `.env.local`. A root command uses `pnpm --filter` to select that package. Only one backend watcher runs. Frontends declare a `workspace:*` backend dependency and the same pinned Convex version.
+
+No TypeScript project references, `composite`, declaration output or frontend `rootDir` boundary is imposed. Dynamic Convex types cause backend sources to enter frontend TypeScript programs. Frontend and backend checks use bundler resolution. Runtime frontend bundles should reach only `api.js` and Convex's client runtime, never backend implementations. Next supports workspace packages through `transpilePackages`; Vite understands workspace links. [Next documentation](https://nextjs.org/docs/app/api-reference/config/next-config-js/transpilePackages), [Vite guide](https://vite.dev/guide/).
+
+TanStack Start currently uses the Vite `tanstackStart()` plugin before the React plugin, a router factory and file routes. v0.1 uses standard Convex React hooks with client-rendered query data. This is explicitly supported by Convex. SSR prefetching and authenticated server queries are outside this release. [Convex with Start](https://docs.convex.dev/client/tanstack/tanstack-start), [Start setup](https://tanstack.com/start/latest/docs/framework/react/build-from-scratch).
+
+Expo SDK 54+ supports isolated pnpm installations. SDK 52+ automatically configures workspace watching and resolution when using `expo/metro-config`. Use the default config, not old `watchFolders`, `extraNodeModules` or hoisting workarounds. SDK 55+ enables autolinking module resolution in monorepos. React and native dependencies must match the SDK; duplicate React runtimes are a real risk. Native uses `ConvexReactClient` with `unsavedChangesWarning: false`. Typechecking alone does not prove Metro works; test iOS and Android JS exports too. [Expo monorepos](https://docs.expo.dev/guides/monorepos/), [autolinking](https://docs.expo.dev/modules/autolinking/), [Convex native quickstart](https://docs.convex.dev/quickstart/react-native).
+
+## Official example and known reports
+
+The [official Turbo/Expo/Next/Clerk monorepo](https://github.com/get-convex/turbo-expo-nextjs-clerk-convex-monorepo) confirms the shared backend package, package-scoped Convex commands and default Metro config. Its current pins lag the registry, including Expo 55 and Convex 1.35, and it uses hoisted pnpm installs. Use it as architectural evidence, not a current dependency manifest.
+
+Reports checked in both requested repositories:
+
+- [convex-backend #361](https://github.com/get-convex/convex-backend/issues/361), open: API types degrade through package re-exports. Maintainer suggests TypeScript codegen; the reporter then sees bundle growth. Avoid that barrel path and test the original JS/declaration export.
+- [convex-js #154](https://github.com/get-convex/convex-js/issues/154), open: generated types pull backend source dependencies into client TypeScript programs. This is a consequence of dynamic inference, not evidence that runtime code must ship to clients.
+- [convex-js #147](https://github.com/get-convex/convex-js/issues/147), open: Windows pnpm component codegen and symlinks. No components in v0.1; Windows CI must cover the generator and workspace behavior.
+- [convex-js #20](https://github.com/get-convex/convex-js/issues/20) and [#121](https://github.com/get-convex/convex-js/issues/121), open: workspace hoisting and Node external package resolution. The example uses Convex's default runtime and has no Node external packages.
+
+Open issue status is a research observation, not a claim that each failure reproduces on 1.45.0. See tests for behavior actually verified here.
+
+## Environment and auth
+
+Convex's CLI writes deployment configuration beside its package, not into every frontend. Next reads `NEXT_PUBLIC_CONVEX_URL`, Vite and Start read `VITE_CONVEX_URL`, Expo reads `EXPO_PUBLIC_CONVEX_URL`. Public values are embedded by bundlers and must use statically named accesses. Do not copy backend `.env.local` files into clients. The setup instructions require copying only the public URL.
+
+Clerk uses `ConvexProviderWithClerk` and its SDK `useAuth`. Browser controls must wait for Convex authentication before mounting protected queries. The backend independently verifies identity; UI gating is not authorization. Clerk demos keep each user's messages private using a token-identifier index. Configure the `convex` JWT template in Clerk and the issuer on the Convex deployment. Next server middleware uses a server-only `CLERK_SECRET_KEY`; Expo and Vite must never receive it. Current SDK names are `@clerk/react` and `@clerk/expo`, replacing their legacy names. Next 16 calls middleware `proxy.ts`.
+
+Expo Clerk uses SecureStore token caching and a native OAuth flow. Enable the Native API, Google connection and the app's scheme redirect in Clerk. Full native builds and real identity-provider credentials are separate validation from Metro export. [Convex Clerk](https://docs.convex.dev/auth/clerk), [Clerk Expo](https://clerk.com/docs/expo/getting-started/quickstart), [native OAuth](https://clerk.com/docs/expo/guides/development/custom-flows/authentication/oauth-connections), [Clerk Next](https://clerk.com/docs/nextjs/getting-started/quickstart).
+
+## CLI publishing and process model
+
+`pnpm create convex-monorepo` resolves the `create-convex-monorepo` npm package. Publish one matching bin with a Node shebang. `npx create-convex-monorepo` uses the same bin. A local checkout does not make that registry command use unpublished source; document a local bin and tarball test. [pnpm create](https://pnpm.io/cli/create), [npm init](https://docs.npmjs.com/cli/v11/commands/npm-init/).
+
+Turborepo persistent tasks must not depend on other persistent tasks. Run backend initialization directly in a terminal first, then use uncached persistent dev tasks with streamed logs. Build/typecheck must not start a deployment. Public environment values participate in build hashes; secret values stay server-side. [Turbo development](https://turborepo.com/docs/crafting-your-repository/developing-applications), [environment variables](https://turborepo.com/docs/crafting-your-repository/using-environment-variables).
+
+## Verified implementation findings
+
+- TypeScript 6 did not implicitly expose Node globals in the package-local Convex config. Clerk's `process.env` read failed until `types: ["node"]` was explicitly configured alongside the backend's direct `@types/node` dependency. This changes the supported tsconfig, not generated API internals.
+- Turbo 2.10.12 rejects `interactive: true` with `--ui=stream`. The generated dev task omits that field and sets concurrency to the selected app count plus two. Direct `convex:setup` owns first-run prompts; individual Expo commands provide keyboard interaction when needed. Actual streamed startup of all four apps and one backend passed.
+- Expo URI schemes must start with a letter even when npm project names may start with a number. Generated schemes use `ccm-<project>-<app>` consistently in app configuration and Clerk redirects.
+- The current Clerk Expo dependency graph emits optional `ws` native accelerator and Solana TypeScript 5 peer warnings under this TypeScript 6 stack. Installation, generated TypeScript checks and both native Metro exports passed without overrides or ignored TypeScript errors. Optional postinstall scripts are not blanket-approved. Native wallet integration is outside this example. TanStack's route CLI also emits an upstream circular-export warning while generating routes successfully.
+- The npm registry returned 404 for `create-convex-monorepo` during this session. That does not reserve the name. Publishing and registry ownership are separate maintainer steps.
+
+Additional issue status checks: [convex-js #53](https://github.com/get-convex/convex-js/issues/53) remains open for excessive type-instantiation depth on larger monorepos; [#153](https://github.com/get-convex/convex-js/issues/153) closed without a planned root-config lookup change; [convex-backend #254](https://github.com/get-convex/convex-backend/issues/254) closed after a reported fix in 1.29.3. These are not reasons to downgrade the pinned release.
+
+See [verification](verification.md) for executed commands and limits. The installed tarball test checks that npm packaging includes both runtime assets and generated declarations.

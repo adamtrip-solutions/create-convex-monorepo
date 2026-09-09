@@ -1,0 +1,18 @@
+export const versions = {
+  convex: '1.45.0',
+  react: '19.2.3',
+  typescript: '6.0.3',
+  pnpm: '10.34.5',
+  turbo: '2.10.12',
+  next: '16.3.4',
+  vite: '8.2.2',
+  viteReact: '6.1.1',
+  tanstackStart: '1.168.50',
+  expo: '57.0.21',
+  reactNative: '0.86.3',
+  clerkNext: '7.9.1',
+  clerkReact: '6.15.1',
+  clerkExpo: '4.6.5',
+  eslint: '10.10.0',
+  typescriptEslint: '8.70.0',
+} as const;
