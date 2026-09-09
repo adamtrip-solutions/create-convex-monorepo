@@ -4,11 +4,11 @@ Generation has one normalized input, a filesystem context, a framework registry,
 
 ## Execution
 
-`src/commands/create.ts` parses flags and collects missing interactive answers. `src/generator/options.ts` validates names, resolves app names, rejects unsupported choices, and sets install/git defaults. Both the CLI and exported `generateProject` API use this normalization.
+`src/commands/create.ts` parses flags and collects missing interactive answers. `src/generator/options.ts` validates names, resolves app names, rejects unsupported choices, and sets install/git defaults and validates the optional Convex initialization step. Both the CLI and exported `generateProject` API use this normalization.
 
-`src/generator/index.ts` checks the destination and creates a sibling staging directory. It generates root files, copies the backend source and official generated assets, runs each selected app template, then applies one auth adapter. Only after template composition succeeds does it copy files exclusively into the destination and run optional installation and `git init`. The commit is not an atomic rename. A failure rolls back only files and directories created by that invocation, preserving an existing empty directory and concurrent user files.
+`src/generator/index.ts` checks the destination and creates a sibling staging directory. It generates root files, copies the backend source and official generated assets, runs each selected app template, then applies one auth adapter. Only after template composition succeeds does it copy files exclusively into the destination and run optional installation, `git init`, and Convex initialization. The commit is not an atomic rename. A failure rolls back only files and directories created by that invocation, preserving an existing empty directory and concurrent user files.
 
-Template errors clean up staging. Installation and git failures preserve completed project files so users can retry setup. Existing non-empty directories and symlinks are rejected. No git commit or registry publication occurs during generation.
+Template errors clean up staging. Installation, git and Convex initialization failures preserve completed project files so users can retry setup. Existing non-empty directories and symlinks are rejected. No git commit or registry publication occurs during generation.
 
 ## Contracts and ownership
 
@@ -34,7 +34,7 @@ Do not bundle those declarations, export backend implementation modules to clien
 
 The backend owns deployment configuration. Each app owns its public URL and publishable auth key with the prefix required by its bundler. Server secrets never receive public prefixes. Auth adapters add `.env.clerk.example` alongside the framework's `.env.example`; users combine their values in `.env.local`.
 
-Setup runs outside Turbo so Convex account and deployment prompts have a terminal. Development runs one persistent backend watcher and the selected apps with streamed logs. Build and typecheck tasks do not deploy or start watchers. Public environment variables participate in build inputs.
+The generated `scripts/convex-setup.mjs` is a standalone Node script copied from `assets/setup`. It resolves the installed Convex CLI from the backend package and runs `convex dev --once` with inherited terminal output. Setup runs outside Turbo so account and deployment prompts have a terminal. Only a successful push triggers URL linking. The helper reads backend `.env` and `.env.local`, with local values taking precedence, and copies only `CONVEX_URL`. It preflights application paths, rejects symlinks, and appends a framework-specific assignment while preserving existing settings. Repeating the same link leaves files unchanged. Cancellation and failures return a nonzero exit status, preserve the project, and allow setup to be retried. `convex:link` runs just the linking stage. Both commands work without the generator installed. Development runs one persistent backend watcher and the selected apps with streamed logs. Build and typecheck tasks do not deploy or start watchers. Public environment variables participate in build inputs.
 
 ## Extension and compatibility policy
 

@@ -1,13 +1,22 @@
+import { readFile } from 'node:fs/promises';
 import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
 import { versions as v } from '../versions.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   const { options, scope } = ctx;
+  await ctx.write(
+    'scripts/convex-setup.mjs',
+    await readFile(
+      new URL('../../../assets/setup/convex-setup.mjs', import.meta.url),
+      'utf8',
+    ),
+  );
   const scripts: Record<string, string> = {
     dev: `turbo run dev --ui=stream --concurrency=${options.apps.length + 2}`,
     'convex:dev': `pnpm --filter @${scope}/backend dev`,
-    'convex:setup': `pnpm --filter @${scope}/backend exec convex dev --once`,
+    'convex:setup': 'node scripts/convex-setup.mjs',
+    'convex:link': 'node scripts/convex-setup.mjs --link-only',
     build: 'turbo run build',
     typecheck: 'turbo run typecheck',
     lint: 'turbo run lint',
@@ -131,7 +140,7 @@ pnpm install
 pnpm convex:setup
 \`\`\`
 
-The setup command runs Convex in its own package and asks you to select or create a deployment. It writes packages/backend/.env.local. Keep that file private. Copy each app's .env.example to .env.local, then copy only the deployment URL into the public variable below. Use a cloud development deployment for physical phones; localhost on a phone is the phone itself.
+The setup command runs Convex in its own package and asks you to select or create a deployment. After a successful push, it copies only CONVEX_URL from packages/backend/.env.local into each app's .env.local using the public variable below. Other settings are preserved. If initialization ran during generation, you can go straight to pnpm dev. Keep backend environment files private. Run pnpm convex:link to refresh frontend URLs after switching deployments; restart the apps after linking. Use a cloud development deployment for physical phones; localhost on a phone is the phone itself.
 
 | Application | Public URL variable |
 | --- | --- |

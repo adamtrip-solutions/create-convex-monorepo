@@ -10,6 +10,7 @@ export interface ProjectOptions {
   auth: Auth;
   packageManager: 'pnpm';
   install: boolean;
+  initConvex: boolean;
   git: boolean;
 }
 export interface PackageManifest {

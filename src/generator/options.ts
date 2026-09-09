@@ -6,6 +6,7 @@ export interface RawOptions {
   auth?: string;
   packageManager?: string;
   install?: boolean;
+  initConvex?: boolean;
   git?: boolean;
   yes?: boolean;
 }
@@ -32,6 +33,11 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
   if (error) throw new Error(`Invalid project name "${name}". ${error}`);
   if (raw.packageManager !== undefined && raw.packageManager !== 'pnpm')
     throw new Error('Only pnpm is supported in v0.1.');
+  const initConvex = raw.initConvex ?? false;
+  if (initConvex && raw.install === false)
+    throw new Error(
+      '--init-convex requires dependencies. Omit --no-install or use --no-init-convex.',
+    );
   const auth = raw.auth ?? 'none';
   if (auth !== 'none' && auth !== 'clerk')
     throw new Error(`Unknown auth provider "${auth}". Choose none or clerk.`);
@@ -89,7 +95,8 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     apps,
     auth: auth as Auth,
     packageManager: 'pnpm',
-    install: raw.install ?? raw.yes ?? false,
+    install: raw.install ?? (initConvex || raw.yes || false),
+    initConvex,
     git: raw.git ?? raw.yes ?? false,
   };
 }

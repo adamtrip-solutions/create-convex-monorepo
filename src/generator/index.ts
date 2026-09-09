@@ -132,6 +132,12 @@ export async function generateProject(
       await runCommand('git', ['init'], target, settings.signal);
       settings.onProgress?.('Initialized git');
     }
+    if (options.initConvex) {
+      recovery = 'pnpm convex:setup';
+      settings.onProgress?.('Starting Convex setup');
+      await runCommand('pnpm', ['convex:setup'], target, settings.signal);
+      settings.onProgress?.('Initialized Convex and linked frontend URLs');
+    }
   } catch (error) {
     throw new Error(
       `Project files are ready at ${target}, but setup failed. ${error instanceof Error ? error.message : String(error)}\nRun ${recovery} in that directory to retry.`,

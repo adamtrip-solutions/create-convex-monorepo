@@ -39,7 +39,7 @@ Open issue status is a research observation, not a claim that each failure repro
 
 ## Environment and auth
 
-Convex's CLI writes deployment configuration beside its package, not into every frontend. Next reads `NEXT_PUBLIC_CONVEX_URL`, Vite and Start read `VITE_CONVEX_URL`, Expo reads `EXPO_PUBLIC_CONVEX_URL`. Public values are embedded by bundlers and must use statically named accesses. Do not copy backend `.env.local` files into clients. The setup instructions require copying only the public URL.
+Convex's CLI writes deployment configuration beside its package, not into every frontend. Next reads `NEXT_PUBLIC_CONVEX_URL`, Vite and Start read `VITE_CONVEX_URL`, Expo reads `EXPO_PUBLIC_CONVEX_URL`. Public values are embedded by bundlers and must use statically named accesses. Do not copy backend `.env.local` files into clients. The generated setup helper copies only the public URL after a successful initialization.
 
 Clerk uses `ConvexProviderWithClerk` and its SDK `useAuth`. Browser controls must wait for Convex authentication before mounting protected queries. The backend independently verifies identity; UI gating is not authorization. Clerk demos keep each user's messages private using a token-identifier index. Configure the `convex` JWT template in Clerk and the issuer on the Convex deployment. Next server middleware uses a server-only `CLERK_SECRET_KEY`; Expo and Vite must never receive it. Current SDK names are `@clerk/react` and `@clerk/expo`, replacing their legacy names. Next 16 calls middleware `proxy.ts`.
 
@@ -62,3 +62,11 @@ Turborepo persistent tasks must not depend on other persistent tasks. Run backen
 Additional issue status checks: [convex-js #53](https://github.com/get-convex/convex-js/issues/53) remains open for excessive type-instantiation depth on larger monorepos; [#153](https://github.com/get-convex/convex-js/issues/153) closed without a planned root-config lookup change; [convex-backend #254](https://github.com/get-convex/convex-backend/issues/254) closed after a reported fix in 1.29.3. These are not reasons to downgrade the pinned release.
 
 See [verification](verification.md) for executed commands and limits. The installed tarball test checks that npm packaging includes both runtime assets and generated declarations.
+
+## Optional initialization and URL linking
+
+The supported first-run command is `convex dev --once` in the backend package. It performs normal account/deployment selection, code generation and a push, then exits. The helper resolves the installed package's CLI through its exported `package.json` and invokes `bin/main.js` with Node. This avoids shell quoting and pnpm executable differences while preserving the backend working directory and terminal. The CLI entry path is pinned-package behavior verified against Convex 1.45.0. [CLI documentation](https://docs.convex.dev/cli), [published CLI source](https://github.com/get-convex/convex-js/blob/main/src/cli/dev.ts).
+
+Convex writes the selected deployment and public URL to backend environment files. Linking reads `.env` followed by `.env.local`, parses quoted values and comments, and uses only `CONVEX_URL`. It ignores ambient URL variables, deployment keys, and auth secrets. Frontend files retain their existing content; when the URL changes, a final assignment overrides the old value. Repeating an unchanged link does not rewrite the file. [Environment handling source](https://github.com/get-convex/convex-js/blob/main/src/cli/lib/envvars.ts).
+
+Clerk's issuer must exist on the deployment before its auth configuration can be pushed. A fresh setup can therefore stop after deployment selection and before URL linking. The project stays available: configure `CLERK_JWT_ISSUER_DOMAIN` and rerun `pnpm convex:setup`. The generator does not use hidden skip-push flags or weaken auth to make initialization appear successful. Local deployment URLs also need care with Expo: a physical device cannot reach the host computer through its own localhost address.

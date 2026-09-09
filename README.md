@@ -51,30 +51,32 @@ Application name?       mobile
 Add another frontend?   No
 Authentication?         Clerk
 Initialize git?         Yes
-Install dependencies?   Yes
+Initialize Convex and link frontend URLs?   Yes
 ```
 
-Turborepo and the backend, TypeScript config, and ESLint config packages are included in every v0.1 project.
+Selecting Convex initialization installs dependencies first, then opens Convex's own account and deployment prompts. Declining it leaves a separate dependency-install prompt. Turborepo and the backend, TypeScript config, and ESLint config packages are included in every v0.1 project.
 
 ## Non-interactive usage
 
 ```sh
+node dist/cli/index.js my-app --apps next,expo --init-convex --yes
 node dist/cli/index.js my-app --apps next,expo --auth clerk --yes
 node dist/cli/index.js my-app --apps web:next,admin:vite --no-install --no-git
 node dist/cli/index.js my-app --apps app:tanstack-start,dashboard:next --auth none --package-manager pnpm --yes
 ```
 
-| Option                      | Meaning                                                     |
-| --------------------------- | ----------------------------------------------------------- |
-| `--apps`                    | Comma-separated framework IDs or `name:framework` entries   |
-| `--auth`                    | `none`, the default, or `clerk`                             |
-| `--package-manager`         | `pnpm`; other managers are rejected in v0.1                 |
-| `--install`, `--no-install` | Enable or skip dependency installation                      |
-| `--git`, `--no-git`         | Enable or skip `git init`; no commit is created             |
-| `--yes`, `-y`               | Skip prompts and accept defaults, including install and git |
-| `--help`, `--version`       | Show usage or the generator version                         |
+| Option                              | Meaning                                                     |
+| ----------------------------------- | ----------------------------------------------------------- |
+| `--apps`                            | Comma-separated framework IDs or `name:framework` entries   |
+| `--auth`                            | `none`, the default, or `clerk`                             |
+| `--package-manager`                 | `pnpm`; other managers are rejected in v0.1                 |
+| `--install`, `--no-install`         | Enable or skip dependency installation                      |
+| `--init-convex`, `--no-init-convex` | Initialize Convex and link URLs; enables installation       |
+| `--git`, `--no-git`                 | Enable or skip `git init`; no commit is created             |
+| `--yes`, `-y`                       | Skip prompts and accept defaults, including install and git |
+| `--help`, `--version`               | Show usage or the generator version                         |
 
-Without a terminal, prompts are disabled and install/git default to off unless explicitly enabled or `--yes` is passed. Explicit negative flags override `--yes`. The default app is Next.js. Project and app names must be lowercase letters, digits, and hyphens, at most 100 characters, with no path separators or reserved device names.
+Without a terminal, prompts are disabled and install/git default to off unless explicitly enabled or `--yes` is passed. Explicit negative flags override `--yes`. Convex initialization defaults to off when prompts are skipped, including with `--yes`; request it explicitly with `--init-convex`. That flag still lets Convex prompt for an account or deployment, and conflicts with `--no-install`. The default app is Next.js. Project and app names must be lowercase letters, digits, and hyphens, at most 100 characters, with no path separators or reserved device names.
 
 ## Supported frameworks
 
@@ -131,7 +133,9 @@ pnpm install             # if installation was skipped
 pnpm convex:setup
 ```
 
-Setup runs Convex in `packages/backend` and selects or creates a deployment. Copy each app's `.env.example` to its own `.env.local`. Copy only the public deployment URL from the backend configuration into the variable listed above. For Clerk, also follow the next section before completing the backend push.
+Skip these commands if you selected initialization during generation. Setup runs the installed Convex CLI in `packages/backend`, selects or creates a deployment, and pushes once. After success, it links the backend's `CONVEX_URL` to every app's `.env.local` using that framework's public variable. Existing comments and other settings remain intact; backend credentials stay in the backend. For Clerk, follow the next section before completing the backend push.
+
+After switching deployments, run `pnpm convex:link` to refresh the frontend URLs without initializing or pushing again. Restart development processes after linking. This updates local files only; configure production URLs separately in your hosting provider.
 
 ```sh
 pnpm dev                 # one backend watcher and all selected apps
@@ -179,8 +183,8 @@ Typechecking and Metro export checks do not establish that real OAuth, device pe
 
 ## Troubleshooting
 
-- **Destination already exists:** choose a new or empty directory. The CLI refuses non-empty directories and symlinks. Template failures remove staging output; install/git failures preserve the completed project and print a retry command.
-- **Missing URL screen:** configure that app's `.env.local` with the framework-specific public variable, then restart development.
+- **Destination already exists:** choose a new or empty directory. The CLI refuses non-empty directories and symlinks. Template failures remove staging output; install/git/Convex setup failures preserve the completed project and print a retry command.
+- **Missing URL screen:** run `pnpm convex:setup`, or `pnpm convex:link` if the backend is already configured, then restart development.
 - **Authentication never connects:** check the `convex` JWT template and deployment issuer. Use the same Clerk application across frontends.
 - **Missing API types:** keep both generated JavaScript and declarations, run the backend watcher, and verify matching Convex versions. Do not fix this by casting the API.
 - **Missing Start route tree:** run that app's `routes:generate` script. Its typecheck script runs route generation automatically.

@@ -7,7 +7,7 @@ Start with current framework and Convex documentation, then install a minimal up
 1. Add the framework ID to `Framework` in `src/generator/types.ts` and to the accepted list in `src/generator/options.ts`.
 2. Create `src/templates/apps/<id>/index.ts` exporting an `AppTemplate`. Use `context.write`, `context.json`, and shared manifest helpers. Generate framework files under `apps/${app.name}`.
 3. Register it in `src/templates/apps/index.ts` and add the interactive label in `src/commands/create.ts`.
-4. Generate the public Convex environment variable with the framework's required prefix. Use statically named environment access where the bundler requires it.
+4. Generate the public Convex environment variable with the framework's required prefix. Use statically named environment access where the bundler requires it. Add its public variable to `publicVariable` in `assets/setup/convex-setup.mjs`, update the generated README environment table, and test URL linking for the new framework.
 5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own `src/providers.tsx` and `src/auth-controls.tsx`; the framework template must not write those files.
 6. Add platform handling in `src/integrations/auth/shared.ts` and a binding in the Clerk adapter. If the integration cannot work, add explicit compatibility validation before output is written.
 7. Add versions, development/build/typecheck/lint scripts, and any route-generation step the framework needs on a clean checkout.

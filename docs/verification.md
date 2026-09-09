@@ -4,16 +4,16 @@ Executed on 2026-09-09 on macOS with Node 24.17.0 and pnpm 10.34.5. Results refe
 
 ## Repository checks
 
-| Command                          | Result                                                                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile` | Passed                                                                                                                          |
-| `pnpm lint`                      | Passed                                                                                                                          |
-| `pnpm format:check`              | Passed                                                                                                                          |
-| `pnpm typecheck`                 | Passed                                                                                                                          |
-| `pnpm test`                      | 59 passed: 41 core, 13 generator/golden, 5 backend                                                                              |
-| `pnpm build`                     | Passed                                                                                                                          |
-| `pnpm pack`                      | Passed                                                                                                                          |
-| `node scripts/pack-smoke.mjs`    | Installed the tarball outside the checkout and generated Next + Expo + Clerk through its bin; official generated assets present |
+| Command                          | Result                                                                                                                                                    |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | Passed                                                                                                                                                    |
+| `pnpm lint`                      | Passed                                                                                                                                                    |
+| `pnpm format:check`              | Passed                                                                                                                                                    |
+| `pnpm typecheck`                 | Passed                                                                                                                                                    |
+| `pnpm test`                      | 73 passed: 41 core, 13 generator/golden, 14 setup, 5 backend                                                                                              |
+| `pnpm build`                     | Passed                                                                                                                                                    |
+| `pnpm pack`                      | Passed                                                                                                                                                    |
+| `node scripts/pack-smoke.mjs`    | Installed the tarball outside the checkout and generated Next + Expo + Clerk through its bin; official generated assets and standalone URL linking passed |
 
 The twelve golden combinations cover every requested fixture plus Vite + Clerk and Start + Clerk. An additional regression test covers numeric-leading names, matching native auth redirects, ten applications, dev concurrency and tracked environment examples. Filesystem tests cover traversal, symlinks, existing content, cancellation, collisions, and failed install/git recovery.
 
@@ -42,3 +42,15 @@ No browser was available through the browser-control tool, so page interaction a
 Real Clerk sessions, Google OAuth, MFA/session tasks, native Xcode/Gradle builds and physical devices were not tested. Metro exports prove JavaScript module resolution and bundling, not native binary execution. Start's Convex data is client-driven; authenticated server prefetching is not configured. Optional upstream peer warnings are recorded in research.md.
 
 Windows and Node 22 checks are configured in CI but were not executed locally. No npm publication, remote repository creation or production deployment occurred.
+
+## Initialization and release automation checks
+
+The initialization follow-up passed repository install, lint, formatting, typecheck, all 73 tests, build, pack, and installed-tarball smoke checks. Setup tests cover option conflicts, dependency ordering, preserving failed projects, all four environment prefixes, existing multiline settings, secret exclusion, invalid URLs, symlinks, child-process failure, and cancellation. The tarball test runs the copied URL linker without installing the generated project's dependencies.
+
+Ran the built CLI with `--apps web:next,admin:vite,app:tanstack-start,mobile:expo --auth none --init-convex --no-git` in a fresh temporary directory with `CONVEX_AGENT_MODE=anonymous`. It installed dependencies, pushed to a real local Convex deployment and linked every frontend. Each generated environment file contained exactly its public URL assignment. Re-running `pnpm convex:link` preserved their modification times. The resulting root `pnpm typecheck`, `pnpm lint` and `pnpm build` passed for all four apps, including iOS and Android Metro/Hermes exports.
+
+A separate PTY run accepted the new initialization prompt for Next + Expo. Dependencies installed automatically, Convex pushed successfully, and both URLs linked. Anonymous mode exercised local setup; browser account login and cloud project selection were not tested.
+
+Fresh technical review reproduced a cancellation race during URL linking. The fix passes the abort signal through the linking stage and checks it before each write and before reporting completion. A focused reviewer follow-up reran the reproduction and confirmed rejection after cancellation, with the remaining app untouched. Partial completed writes stay available and linking can be rerun.
+
+The release-please configuration passed validation against its upstream schema, and the PR-title rule accepted five valid titles and rejected five invalid titles. CLI and generated metadata versions now come from package.json. GitHub Actions, repository permissions and release creation have not been exercised on a remote repository.

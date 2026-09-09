@@ -9,7 +9,9 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "types": ["node", "vite/client"],
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "vitest*.ts"],
   "exclude": ["tests/.generated"]

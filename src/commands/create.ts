@@ -17,13 +17,16 @@ Generate a pnpm + Turborepo workspace sharing one Convex backend.
   --auth <provider>         none (default) or clerk
   --package-manager <name>  pnpm (v0.1)
   --install / --no-install  Install generated dependencies
+  --init-convex / --no-init-convex  Set up Convex and link URLs (requires install)
   --git / --no-git          Initialize a git repository
   --yes, -y                Accept defaults, including installation and git
   --help, -h               Show usage
   --version, -v            Show version
 
 Without a terminal, prompts are disabled. Installation and git default to off
-unless explicitly enabled or --yes is passed. Named apps may repeat a framework.
+unless explicitly enabled or --yes is passed. Convex setup requires --init-convex
+when prompts are skipped; --yes does not opt into Convex account setup.
+Named apps may repeat a framework.
 `;
 export function parseCommand(args: string[]): {
   raw: RawOptions;
@@ -37,6 +40,8 @@ export function parseCommand(args: string[]): {
       apps: { type: 'string' },
       auth: { type: 'string' },
       'package-manager': { type: 'string' },
+      'init-convex': { type: 'boolean' },
+      'no-init-convex': { type: 'boolean' },
       install: { type: 'boolean' },
       'no-install': { type: 'boolean' },
       git: { type: 'boolean' },
@@ -54,7 +59,14 @@ export function parseCommand(args: string[]): {
     throw new Error('Choose either --install or --no-install.');
   if (values.git && values['no-git'])
     throw new Error('Choose either --git or --no-git.');
+  if (values['init-convex'] && values['no-init-convex'])
+    throw new Error('Choose either --init-convex or --no-init-convex.');
   const raw: RawOptions = {};
+  if (
+    values['init-convex'] !== undefined ||
+    values['no-init-convex'] !== undefined
+  )
+    raw.initConvex = !values['no-init-convex'] && !!values['init-convex'];
   if (positionals[0] !== undefined) raw.name = positionals[0];
   if (values.apps !== undefined) raw.apps = values.apps;
   if (values.auth !== undefined) raw.auth = values.auth;
@@ -167,6 +179,16 @@ export async function runCreate(
           initialValue: true,
         }),
       );
+    if (raw.initConvex === undefined && raw.install !== false) {
+      raw.initConvex = answer(
+        await prompts.confirm({
+          message:
+            'Initialize Convex and link frontend URLs? (installs dependencies)',
+          initialValue: true,
+        }),
+      );
+    }
+    if (raw.initConvex && raw.install !== false) raw.install = true;
     if (raw.install === undefined)
       raw.install = answer(
         await prompts.confirm({
@@ -181,6 +203,6 @@ export async function runCreate(
     onProgress: (message) => console.log(`✓ ${message}`),
   });
   console.log(
-    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : '  pnpm install\n'}  pnpm convex:setup\n\nCopy the deployment URL into each app's .env.local using its .env.example,\nthen run pnpm dev. If using Clerk, append .env.clerk.example too and follow\nthe generated README for auth setup.`,
+    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : '  pnpm install\n'}${options.initConvex ? '  pnpm dev' : '  pnpm convex:setup\n  pnpm dev'}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : ''}`,
   );
 }

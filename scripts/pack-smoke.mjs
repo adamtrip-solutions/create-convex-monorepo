@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import spawn from 'cross-spawn';
@@ -51,7 +51,26 @@ try {
   );
   if (!files.includes('api.d.ts') || !files.includes('api.js'))
     throw new Error('Published package lost generated types');
-  console.log('PASS installed tarball bin and runtime assets');
+  const project = join(directory, 'packed');
+  await writeFile(
+    join(project, 'packages/backend/.env.local'),
+    'CONVEX_URL=https://pack-test.convex.cloud\nCONVEX_DEPLOY_KEY=never-copy-this\n',
+  );
+  run(process.execPath, ['scripts/convex-setup.mjs', '--link-only'], project);
+  for (const [app, variable] of [
+    ['web', 'NEXT_PUBLIC_CONVEX_URL'],
+    ['mobile', 'EXPO_PUBLIC_CONVEX_URL'],
+  ]) {
+    const env = await readFile(
+      join(project, 'apps', app, '.env.local'),
+      'utf8',
+    );
+    if (env !== `${variable}=https://pack-test.convex.cloud\n`)
+      throw new Error(`Published URL linker failed for ${app}`);
+  }
+  console.log(
+    'PASS installed tarball bin, runtime assets and standalone URL linking',
+  );
 } finally {
   await rm(directory, { recursive: true, force: true });
 }
