@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - name: Validate release metadata before bootstrap or publishing
+      - name: Validate release metadata before publishing
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
@@ -86,6 +86,4 @@ jobs:
         if: steps.package.outputs.published != 'true'
         env:
           TARBALL: ${{ steps.package.outputs.tarball }}
-          # First publication only; remove the secret after configuring npm OIDC.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: npm publish "$TARBALL" --access public --provenance --ignore-scripts
