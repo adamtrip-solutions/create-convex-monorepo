@@ -55,8 +55,6 @@ jobs:
       ref: ${{ needs.release.outputs.sha }}
   publish:
     needs: [release, verify]
-    # First publish creates the npm package; enable this after configuring trust.
-    if: vars.NPM_PUBLISHING_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: npm
     concurrency:
@@ -88,4 +86,6 @@ jobs:
         if: steps.package.outputs.published != 'true'
         env:
           TARBALL: ${{ steps.package.outputs.tarball }}
+          # First publication only; remove the secret after configuring npm OIDC.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: npm publish "$TARBALL" --access public --provenance --ignore-scripts

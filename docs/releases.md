@@ -1,6 +1,6 @@
 # Releases
 
-This repository uses Conventional Commits and release-please for versions, changelogs, release PRs, and GitHub releases. GitHub Actions tests and publishes the release tarball to npm through trusted publishing. The first publication needs account setup.
+This repository uses Conventional Commits and release-please for versions, changelogs, release PRs, and GitHub releases. GitHub Actions tests and publishes the release tarball to npm. The first publication uses a bootstrap token; subsequent releases use trusted publishing. This follows the publishing model in [convex-cloudflare-email](https://github.com/adamtrip-solutions/convex-cloudflare-email/blob/main/.github/workflows/release.yml).
 
 ## Version policy
 
@@ -24,24 +24,24 @@ The public repository is `adamtrip-solutions/create-convex-monorepo`. The packag
 - Use `main` as the release branch. Enable Actions and allow GitHub Actions to create pull requests.
 - Enable squash merging with the PR title as the commit title. Require the Conventional PR title check and `CI passed` before merging.
 - Create a GitHub environment named `npm`. Restrict deployments to tags matching `v*`. Protect release tags against updates and deletion.
-- Keep the repository variable `NPM_PUBLISHING_ENABLED` unset or `false` until the first package publication and npm trust configuration are complete.
+- Configure `NPM_BOOTSTRAP_TOKEN` in the `npm` environment before the first release, or configure npm trusted publishing if the package already exists. No publishing-enable variable is required.
 
 The release workflow uses `GITHUB_TOKEN` by default. GitHub may require approval before running CI on a bot-created release PR. An optional `RELEASE_PLEASE_TOKEN` with repository contents, issues and pull-request write permissions can avoid that interruption. The npm dispatch step always uses `GITHUB_TOKEN` with `actions: write`; it does not require Actions permission on the optional token. [GitHub token event rules](https://docs.github.com/en/actions/concepts/security/github_token).
 
 ## First npm publication
 
-1. Create an account on [npmjs.com](https://www.npmjs.com/signup), verify your email, and enable two-factor authentication. The package is unscoped, so an npm organization is not needed for the `create-convex-monorepo` name.
-2. Merge the first release-please PR after its CI passes. The release workflow creates the version tag and dispatches **Publish npm package** at that tag. With publishing disabled, it still runs the complete test matrix and saves the tested `npm-package` artifact.
-3. Download that artifact from the successful publishing workflow run. It contains `create-convex-monorepo-X.Y.Z.tgz`. Authenticate locally and publish that exact archive, replacing `X.Y.Z` with the release version:
+1. Use your existing npm account with a verified email and two-factor authentication. The package is unscoped, so a separate npm organization is not required.
+2. Create a short-lived granular npm token with Read and write package permissions that allow creation of `create-convex-monorepo`. Enable Bypass two-factor authentication for this first unattended publish. A token limited to the existing `convex-cloudflare-email` package cannot create this new package.
+3. Save it as `NPM_BOOTSTRAP_TOKEN` in this repository's [npm environment](https://github.com/adamtrip-solutions/create-convex-monorepo/settings/environments). Use GitHub's secret UI, or run the following command in your own terminal and paste the token at its hidden prompt:
 
    ```sh
-   npm login
-   npm publish ./create-convex-monorepo-X.Y.Z.tgz --access public --ignore-scripts
+   gh secret set NPM_BOOTSTRAP_TOKEN --env npm --repo adamtrip-solutions/create-convex-monorepo
    ```
 
-   Complete npm's authentication prompts in your own terminal. Do not paste passwords, tokens or 2FA codes into issues or chat. This initial local publication creates the package and does not have GitHub provenance.
+   GitHub secrets are write-only; a stored token in another repository cannot be read back and copied. Do not paste it into chat or commit it.
 
-4. Open the package settings on npm and add a GitHub Actions trusted publisher with these exact values:
+4. Merge the first release-please PR after CI passes. The release workflow creates the version tag and dispatches **Publish npm package**. It tests the release commit and automatically publishes the verified archive with provenance. There is no local `npm publish` or archive download step.
+5. After that first publication succeeds, configure a GitHub Actions trusted publisher in the npm package settings:
 
    | Field             | Value                                                   |
    | ----------------- | ------------------------------------------------------- |
@@ -51,9 +51,9 @@ The release workflow uses `GITHUB_TOKEN` by default. GitHub may require approval
    | Environment       | `npm`                                                   |
    | Allowed action    | Enable direct `npm publish`, not only staged publishing |
 
-5. Set the GitHub repository variable `NPM_PUBLISHING_ENABLED` to `true`. Subsequent releases publish automatically using OIDC, without an npm token stored in GitHub.
+6. Delete the `NPM_BOOTSTRAP_TOKEN` GitHub secret and revoke that npm token. Subsequent releases use OIDC without a stored npm credential. Once OIDC is configured, npm can require two-factor authentication and disallow token-based publishing.
 
-Current npm documentation requires a package to exist before configuring trust. Use the real tested release for this first publish; no placeholder package is needed. [Account setup](https://docs.npmjs.com/creating-a-new-npm-user-account/), [trust prerequisites](https://docs.npmjs.com/cli/v11/commands/npm-trust/#prerequisites), [trusted publisher configuration](https://docs.npmjs.com/trusted-publishers/).
+The bootstrap token is available only to the final publish step, after all validation jobs pass. Current npm documentation requires the package to exist before configuring its trusted publisher; the bootstrap token lets CI create it. [Token setup](https://docs.npmjs.com/creating-and-viewing-access-tokens/), [trusted publisher configuration](https://docs.npmjs.com/trusted-publishers/).
 
 ## Automated release flow
 

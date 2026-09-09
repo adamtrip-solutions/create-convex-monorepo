@@ -46,7 +46,7 @@ Use Conventional Commits for commits and PR titles. For example, `feat(cli): ini
 
 Use `fix:` for a patch, `feat:` for a minor, and `!` for a breaking change, such as `feat(cli)!: change application selection flags`. Explain breaking changes and migration steps in the PR body. These rules also apply before v1.0, so a breaking change from 0.1.0 proposes 1.0.0. `perf:` also triggers a patch; other ordinary maintenance commits do not trigger a release alone.
 
-Release-please maintains a PR with the next version and changelog. Do not add changeset files or manually bump versions for normal changes. Maintainers review and merge the release PR to create a GitHub release, which starts the npm publishing workflow. It verifies the release commit and publishes the tested tarball once trusted publishing is enabled. See [release setup and publishing](docs/releases.md).
+Release-please maintains a PR with the next version and changelog. Do not add changeset files or manually bump versions for normal changes. Maintainers review and merge the release PR to create a GitHub release, which starts the npm publishing workflow. It verifies the release commit and publishes the tested tarball using a bootstrap token for the first release and trusted publishing afterward. See [release setup and publishing](docs/releases.md).
 
 ## Reporting problems
 
