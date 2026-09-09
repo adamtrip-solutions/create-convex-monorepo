@@ -1,0 +1,19 @@
+name: Conventional commits
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  title:
+    name: Conventional PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const conventional = /^(feat|fix|perf|docs|style|refactor|test|build|ci|chore|revert)(\([^()\r\n]+\))?!?: \S[^\r\n]*$/;
+            if (!conventional.test(title)) {
+              core.setFailed('Use a Conventional Commit title, such as "feat(cli): initialize Convex" or "fix(expo): resolve backend imports". See CONTRIBUTING.md.');
+            }

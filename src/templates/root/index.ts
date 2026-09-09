@@ -1,4 +1,5 @@
 import type { GeneratorContext } from '../../generator/types.js';
+import { getPackageVersion } from '../../version.js';
 import { versions as v } from '../versions.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
@@ -59,7 +60,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   );
   await ctx.json('convex-monorepo.json', {
     version: 1,
-    generator: '0.1.0',
+    generator: await getPackageVersion(),
     name: options.name,
     packageManager: options.packageManager,
     monorepo: 'turbo',

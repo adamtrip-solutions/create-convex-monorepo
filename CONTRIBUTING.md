@@ -33,9 +33,11 @@ Run `pnpm format` before the final checks. A pull request should state the concr
 
 ## Releases
 
-Run `pnpm changeset` for a user-visible change and choose the appropriate semantic version bump. Describe the generated behavior users will receive. The package starts at v0.1; document breaking changes explicitly even during pre-1.0 development.
+Use Conventional Commits for commits and PR titles. For example, `feat(cli): initialize Convex after generation`, `fix(expo): resolve shared backend imports`, or `docs: clarify deployment setup`. The PR title check runs on each pull request. Maintainers squash merge with that title so release-please can read the resulting commit.
 
-Maintainers run `pnpm version-packages`, review the version and changelog changes, and verify a package tarball with `pnpm pack`. Test the packaged CLI from outside the repository before publishing. Publishing is a separate maintainer action; no generation command publishes packages. Registry usage becomes available only after `create-convex-monorepo` is published with its matching executable.
+Use `fix:` for a patch, `feat:` for a minor, and `!` for a breaking change, such as `feat(cli)!: change application selection flags`. Explain breaking changes and migration steps in the PR body. These rules also apply before v1.0, so a breaking change from 0.1.0 proposes 1.0.0. `perf:` also triggers a patch; other ordinary maintenance commits do not trigger a release alone.
+
+Release-please maintains a PR with the next version and changelog. Do not add changeset files or manually bump versions for normal changes. Maintainers review and merge the release PR to create a GitHub release, then publish to npm separately after package checks. See [release setup and publishing](docs/releases.md).
 
 ## Reporting problems
 

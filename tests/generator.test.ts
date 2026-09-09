@@ -8,6 +8,7 @@ import type {
   PackageManifest,
   ProjectOptions,
 } from '../src/generator/types.js';
+import { getPackageVersion } from '../src/version.js';
 import { versions } from '../src/templates/versions.js';
 
 interface Golden {
@@ -59,7 +60,10 @@ describe('generated project golden matrix', () => {
       const json = async <T>(path: string): Promise<T> =>
         JSON.parse(await read(path));
       const manifest = await json<PackageManifest>('package.json');
-      const config = await json<ProjectOptions>('convex-monorepo.json');
+      const config = await json<ProjectOptions & { generator: string }>(
+        'convex-monorepo.json',
+      );
+      expect(config.generator).toBe(await getPackageVersion());
       expect(
         config.apps.map(({ name, framework }) => [name, framework]),
       ).toEqual(
