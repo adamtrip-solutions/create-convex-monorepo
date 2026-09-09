@@ -1,0 +1,14 @@
+# Changelog
+
+## [0.2.0](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.1.0...v0.2.0) (2026-09-09)
+
+
+### Features
+
+* **cli:** add blank project option ([cea02c1](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/cea02c1ba852d643afc814e45502ea77798ad28f))
+* **cli:** initialize Convex and link frontend URLs ([ff6f38b](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/ff6f38b4074be3f424f84fa749a2d6f32c44113f))
+
+
+### Bug Fixes
+
+* **cli:** wait for Convex to close after cancellation ([545149a](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/545149a90d852f38460729e6727302df51ef44a2))
