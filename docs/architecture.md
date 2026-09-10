@@ -40,10 +40,22 @@ The generated `scripts/convex-setup.mjs` is a standalone Node script copied from
 
 Registries and TypeScript unions make supported choices explicit. Dependencies are pinned in `src/templates/versions.ts` and in framework bindings where necessary. New adapters should add concrete capabilities, with install, type, and bundler evidence for each supported combination. Reject an unsupported combination clearly rather than emitting code known to fail.
 
-`convex-monorepo.json` records a versioned description of the output for future commands. It is not currently consumed by an upgrade or migration command. The exported API supports programmatic generation; custom runtime registry injection is not implemented.
+`convex-monorepo.json` records a versioned description of the output. Workspace commands validate it before inspecting or planning edits. The exported API supports programmatic generation; custom runtime registry injection is not implemented.
 
 ## Starter content
 
 `example` is independent of framework and auth selection. `messages` keeps the existing example; `none` selects blank apps and the empty backend assets. The backend template chooses the matching official generated declarations. App entry content comes from a shared helper, while framework setup and auth adapters keep their existing responsibilities. Auth adapters omit the demo's access helper in blank mode but still configure the selected provider.
 
 Blank apps do not include tests that assume an empty API forever. The generated-project test runner injects temporary compile-time assertions for an exactly empty API and table list, rejects unknown modules, and checks for widened types. Those files belong only to the disposable test fixture.
+
+## Workspace commands
+
+Both binaries ship in `create-convex-monorepo`: `create-convex-monorepo` creates a project, and `convex-monorepo` manages it afterward. `src/commands/workspace.ts` parses command-specific options and prompts. Application logic lives in `src/workspace` and is exported for programmatic use.
+
+`project.ts` walks upward to metadata, validates version 1, retains extension fields, and rejects unsafe file paths. `add.ts` renders temporary scaffolds with the existing app/auth adapters, then selects only the new app or authentication changes. Auth package updates merge only the fields changed by the adapter; source files must match the expected baseline before replacement. Per-app example overrides survive later auth additions.
+
+`env.ts` shares the standalone setup script's URL validation and dotenv linking helpers. A declaration file types that plain JavaScript module for the compiled CLI; the JavaScript implementation is separately checked by TypeScript. Generated projects still receive the standalone script and need no CLI dependency for initial Convex setup.
+
+`changes.ts` applies file plans after checking snapshots, absent destinations, and path safety. Dry runs perform the same preflight without acquiring a lock or writing. Mutations hold a workspace lock, use exclusive creation or temporary-file replacement, and roll back only files that still match their written contents. The lock coordinates CLI instances, not editors; snapshot checks cannot make arbitrary external writers transactional. File plans contain before/after text and may include local environment values, so the CLI displays paths rather than serializing mutation plans.
+
+`doctor.ts` checks local configuration and uses the app's installed TypeScript compiler for an in-memory API probe. It never emits probe files. `upgrade.ts` queries the fixed official npm package endpoint with cancellation and a timeout. Its dependency baseline belongs to the running CLI, and is not a compatibility claim about every newer upstream package.
