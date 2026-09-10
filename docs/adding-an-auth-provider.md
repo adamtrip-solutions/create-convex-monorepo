@@ -29,3 +29,11 @@ Test unauthenticated rejection and cross-user isolation on the backend. Generate
 Use test credentials only for integration checks that need a provider account, and report those checks separately from static tests. Add provider-specific setup and troubleshooting to the generated README, repository README, and research notes. An unsupported framework combination must fail validation before generation rather than silently omitting auth.
 
 Cover both starter-content choices in adapter tests. Blank projects retain authentication configuration and providers but omit example-specific access helpers and functions.
+
+## Installing auth after generation
+
+Existing-workspace auth installation renders the no-auth baseline and the selected provider, then plans their differences. The current public command supports `add auth clerk`; adding another provider also requires extending CLI selection, metadata validation, doctor dependency checks, and `planAddAuth`.
+
+Define the backend files the provider may add or change. Do not broaden the planner to overwrite every backend difference: schemas, user functions, and Convex generated internals must remain under project ownership. For changed app source files, require an unchanged baseline or return an actionable conflict. Merge manifest entries without replacing unrelated dependencies or scripts. Generate a separate setup guide instead of replacing the project's README.
+
+Test installation on existing apps for every framework and starter choice, customized-source conflicts, dependency conflicts, repeat installation, stored-data implications, and cancellation. A provider migration between identities needs a separate design; it is not implied by adding an auth adapter.

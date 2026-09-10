@@ -26,6 +26,57 @@ Both commands run the same CLI. You can also install it globally with `npm insta
 
 Contributors can run the checkout with `pnpm dev`; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Manage an existing workspace
+
+The same npm package also provides the `convex-monorepo` command. Install it in the generated workspace:
+
+```sh
+pnpm add -Dw create-convex-monorepo@latest
+pnpm exec convex-monorepo add
+```
+
+Or run it without installing a project dependency:
+
+```sh
+pnpm --package create-convex-monorepo@latest dlx convex-monorepo doctor
+npx --yes --package create-convex-monorepo@latest convex-monorepo doctor
+```
+
+Run commands from the workspace root or any subdirectory:
+
+```sh
+pnpm exec convex-monorepo add app admin --framework vite --example none --dry-run
+pnpm exec convex-monorepo add app admin --framework vite --example none --install
+pnpm exec convex-monorepo add app mobile --framework expo --no-install
+pnpm exec convex-monorepo add auth clerk --dry-run
+pnpm exec convex-monorepo add auth clerk --install
+pnpm exec convex-monorepo env sync --app mobile
+pnpm exec convex-monorepo doctor
+pnpm exec convex-monorepo upgrade --check
+```
+
+| Command           | Behavior                                                                                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add app`         | Creates an app using the existing backend and auth, updates root scripts and metadata, and links the public backend URL when configured.                  |
+| `add auth clerk`  | Adds Clerk to generated app providers and the backend auth configuration. Customized files that need replacement cause a conflict.                        |
+| `env sync`        | Links only the public backend URL, using each framework's variable prefix. Supports `--app` and `--dry-run`.                                              |
+| `doctor`          | Checks workspace configuration, installed dependencies, environment settings, and shared API types. Supports `--json`; errors exit with status 1.         |
+| `upgrade --check` | Compares generator versions with npm's latest stable release and reports the running CLI's tested dependency baseline through `--json`. Makes no changes. |
+
+The add commands support `--dry-run`, `--install`, `--no-install`, and `--yes`. Without prompts, provide the app name and framework; dependency installation defaults to off. `--yes` enables installation unless `--no-install` is set, and never overrides conflicts. A dry run shows file paths without printing environment values or installing dependencies.
+
+Existing workspaces with metadata version 1, including projects created with 0.2.1, are supported. Preserve `convex-monorepo.json`; the CLI reads it rather than guessing which directories belong to your project. Per-app starter choices are recorded there when they differ from the original selection.
+
+### Changes and conflicts
+
+Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app directories, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend.
+
+Auth addition supports `none` to Clerk. It preserves backend schemas, functions, generated internals, unrelated package fields, and existing README content. Follow the new `CLERK_SETUP.md` for account configuration. Existing public messages do not acquire an owner automatically and will not appear in authenticated accounts. Review stored-data migration separately. Already configured Clerk is a no-op; replacing an auth provider is not supported.
+
+A workspace lock prevents two CLI edits from running together. Each planned file is checked again before writing. Failed edits roll back files that still contain this command's output; observed concurrent edits are preserved and reported. Filesystem checks are optimistic, so avoid editing affected files while a command is applying. A failed dependency installation leaves the applied files available for retry with `pnpm install`.
+
+Doctor is read-only and uses an in-memory TypeScript probe. It does not run application scripts, start services, configure a deployment, validate a real Clerk session, or prove a native Expo build works. Missing installation or environment configuration is reported with suggested steps. The upgrade command does not rewrite files, migrate templates, or update dependency versions.
+
 ## Interactive usage
 
 With a terminal attached, the CLI asks for missing choices:
@@ -118,7 +169,7 @@ my-app/
 └── package.json
 ```
 
-`convex-monorepo.json` records the selected applications and auth provider. It is metadata for later tooling; it does not implement upgrade or add commands.
+`convex-monorepo.json` records the selected applications and auth provider. The workspace commands use this metadata to locate apps and plan changes. `upgrade --check` reports versions without applying migrations.
 
 ## Multiple frontends
 

@@ -75,7 +75,16 @@ jobs:
           - apps: next,vite,tanstack-start,expo
             auth: clerk
             example: none
+          - apps: next,admin:vite,portal:tanstack-start,expo
+            auth: clerk
+            example: messages
+            workspaceCommands: '1'
+          - apps: next,admin:vite,portal:tanstack-start,expo
+            auth: clerk
+            example: none
+            workspaceCommands: '1'
     env:
+      CCM_WORKSPACE_COMMANDS: ${{ matrix.workspaceCommands || '0' }}
       CCM_EXAMPLE: ${{ matrix.example || 'messages' }}
       CCM_APPS: ${{ matrix.apps }}
       CCM_AUTH: ${{ matrix.auth }}

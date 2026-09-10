@@ -37,9 +37,12 @@ export function validateReleaseManifest(manifest, tag, repository) {
     throw new Error('Expected a public npm package.');
   if (
     !record(manifest.bin) ||
-    manifest.bin['create-convex-monorepo'] !== 'dist/cli/index.js'
+    manifest.bin['create-convex-monorepo'] !== 'dist/cli/index.js' ||
+    manifest.bin['convex-monorepo'] !== 'dist/cli/workspace.js'
   )
-    throw new Error('Missing create-convex-monorepo binary.');
+    throw new Error(
+      'Missing create-convex-monorepo or convex-monorepo binary.',
+    );
   return `create-convex-monorepo-${tag.slice(1)}.tgz`;
 }
 

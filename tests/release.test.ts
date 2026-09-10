@@ -9,7 +9,10 @@ const manifest = {
   version: '0.2.0',
   repository: { type: 'git', url: `git+https://github.com/${repository}.git` },
   publishConfig: { access: 'public' },
-  bin: { 'create-convex-monorepo': 'dist/cli/index.js' },
+  bin: {
+    'create-convex-monorepo': 'dist/cli/index.js',
+    'convex-monorepo': 'dist/cli/workspace.js',
+  },
 };
 describe('release package validation', () => {
   it('selects only the archive matching the stable release', () => {
@@ -35,6 +38,7 @@ describe('release package validation', () => {
     { private: true },
     { publishConfig: { access: 'restricted' } },
     { bin: {} },
+    { bin: { 'create-convex-monorepo': 'dist/cli/index.js' } },
   ])('rejects mismatched release metadata %j', (patch) => {
     expect(() =>
       validateReleaseManifest({ ...manifest, ...patch }, 'v0.2.0', repository),

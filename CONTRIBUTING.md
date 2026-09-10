@@ -34,6 +34,12 @@ Describe the failing behavior, the generated combination involved, and the expec
 
 Check current upstream documentation before changing Convex generation, exports, bundler resolution, or SDK versions. Record compatibility findings in `docs/research.md`. Do not edit Convex-generated internals, cast away shared API types, or suppress errors to pass a build. Refresh official generated assets through supported Convex tooling when the example backend changes.
 
+## Workspace command development
+
+`pnpm dev:workspace --help` runs the management CLI from source. Run it inside a generated fixture by invoking the built `convex-monorepo` binary or using the exported planning APIs in tests. `pnpm test:workspace:e2e` generates one app, adds the remaining frameworks, adds Clerk, syncs URLs, installs dependencies, and runs doctor, typechecks, lint, and builds. Set `CCM_EXAMPLE=none` to test adding apps after Clerk configuration on a blank project.
+
+Changes to mutation commands need tests for customized files, preflight conflicts, dry runs, cancellation, and preservation of unrelated content. Diagnostic tests should include both missing dependencies and real installed type resolution. Mock registry responses in unit tests for upgrade checks.
+
 ## Contribution and review process
 
 Fork the repository, make changes on a branch in your fork, and open a pull request against `main`. A fork is your own copy; creating one or pushing to it does not change this repository or grant access to it.

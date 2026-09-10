@@ -105,6 +105,45 @@ try {
     ).includes('ApiFromModules<{}>')
   )
     throw new Error('Published package lost blank generated types');
+  const workspaceBin = join(
+    directory,
+    'node_modules',
+    '.bin',
+    'convex-monorepo',
+  );
+  run(workspaceBin, ['--version'], directory);
+  run(
+    'pnpm',
+    ['--package', tarball, 'dlx', 'convex-monorepo', '--help'],
+    directory,
+  );
+  const before = await readFile(join(blank, 'convex-monorepo.json'), 'utf8');
+  run(
+    workspaceBin,
+    ['add', 'app', 'admin', '--framework', 'vite', '--dry-run'],
+    blank,
+  );
+  if ((await readFile(join(blank, 'convex-monorepo.json'), 'utf8')) !== before)
+    throw new Error('Packed dry run changed metadata');
+  run(
+    workspaceBin,
+    ['add', 'app', 'admin', '--framework', 'vite', '--no-install'],
+    blank,
+  );
+  run(workspaceBin, ['add', 'auth', 'clerk', '--no-install'], blank);
+  await writeFile(
+    join(blank, 'packages/backend/.env.local'),
+    'CONVEX_URL=https://pack-test.convex.cloud\n',
+  );
+  run(workspaceBin, ['env', 'sync', '--app', 'admin'], blank);
+  const updated = JSON.parse(
+    await readFile(join(blank, 'convex-monorepo.json'), 'utf8'),
+  );
+  if (
+    updated.auth !== 'clerk' ||
+    !updated.apps.some((app) => app.name === 'admin')
+  )
+    throw new Error('Packed workspace commands failed');
   console.log(
     'PASS installed tarball bin, both starter assets and standalone URL linking',
   );

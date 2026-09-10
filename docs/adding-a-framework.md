@@ -25,3 +25,9 @@ Do not add a declaration bundler, a generic API cast, or copied backend code. Ch
 Generate the framework alone, with another frontend, and with every advertised auth provider. Cover both `--example messages` and `--example none`; use the shared entry-content helper so blank apps do not import demo files. Install from a clean directory, typecheck, lint, and run a production build. For a native framework, run its actual JavaScript bundler for supported platforms. Exercise the query and mutation against a development backend when credentials or local deployment tooling are available; report separately when that check was skipped.
 
 Add focused output assertions, option-selection coverage, and representative generated-project CI coverage. Tests must catch missing generated declarations and widened argument/return types. Update README support notes and this guide if the framework introduces a new integration contract.
+
+## Existing-workspace commands
+
+Add the framework's dependency expectations and diagnostic checks to `src/workspace/doctor.ts`. Verify that `add app` renders the framework at its real workspace index so development ports remain distinct. Add command tests for a new app next to an existing customized app, both starter choices, inherited auth, automatic URL linking, and a dry run. Extend the command E2E matrix to install and build the added framework.
+
+The add planner uses the same template as project creation. It copies only the new application's files and updates workspace metadata and root scripts. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
