@@ -22,7 +22,8 @@ The initial manifest recorded 0.1.0 as the existing baseline. `bootstrap-sha` po
 The public repository is `adamtrip-solutions/create-convex-monorepo`. The package's repository URL must match it for npm provenance.
 
 - Use `main` as the release branch. Enable Actions and allow GitHub Actions to create pull requests.
-- Enable squash merging with the PR title as the commit title. Require the Conventional PR title check and `CI passed` before merging.
+- Enable squash merging with the PR title as the commit title and keep auto-merge disabled. Require the Conventional PR title check and `CI passed` from GitHub Actions, an approving code-owner review, and resolved conversations before merging. Restrict `main` updates to `adamtrip`; see the administrator exception in [Contributing](../CONTRIBUTING.md#contribution-and-review-process).
+- Require workflow approval for all outside contributors. Approving a workflow run does not approve the PR or publish a release.
 - Create a GitHub environment named `npm`. Restrict deployments to tags matching `v*`. Protect release tags against updates and deletion.
 - Configure npm trusted publishing as described below. No npm secret or publishing-enable variable is required.
 
