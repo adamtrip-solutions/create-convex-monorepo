@@ -34,6 +34,18 @@ Describe the failing behavior, the generated combination involved, and the expec
 
 Check current upstream documentation before changing Convex generation, exports, bundler resolution, or SDK versions. Record compatibility findings in `docs/research.md`. Do not edit Convex-generated internals, cast away shared API types, or suppress errors to pass a build. Refresh official generated assets through supported Convex tooling when the example backend changes.
 
+## Contribution and review process
+
+Fork the repository, make changes on a branch in your fork, and open a pull request against `main`. A fork is your own copy; creating one or pushing to it does not change this repository or grant access to it.
+
+Outside-contributor workflows require maintainer approval before they run. Approval to run CI only permits the tests to execute; it does not approve or merge the change. Fork PR workflows run with read-only repository permissions and do not receive repository secrets.
+
+The normal merge requirements are a passing `CI passed` check, a passing `Conventional PR title` check, an approving review, and resolved review conversations. New commits dismiss previous approvals. `.github/CODEOWNERS` names `@adamtrip` for all files, including itself and the release workflows. GitHub reads code ownership from the PR's target branch, so this requirement starts applying once the file is on `main`.
+
+Auto-merge is disabled. The `main` push allowlist contains only `@adamtrip`; passing CI does not give contributors permission to merge. Release-please creates release PRs, but does not merge them. The maintainer decides when a release PR is ready, and merging it starts automated npm publication.
+
+Repository administrators retain GitHub's branch-protection override. This permits the sole maintainer to merge their own PRs, which GitHub does not let them approve. The override also applies to tools authenticated as that administrator; it is not a separate human-approval mechanism. Adding another administrator or granting access to an admin credential grants that power too. Routine contributions should use PRs, and automation should not use the override to merge contributions without the maintainer's explicit instruction.
+
 ## Tests and pull requests
 
 Add focused regression tests for the behavior being fixed. Run generated-app typechecks and builds for affected frameworks and auth choices. For Expo, include Metro export evidence. Report exact checks run, failures, skipped checks, and whether real backend/auth interaction was exercised. Never include deployment keys or personal environment files in fixtures or logs.
