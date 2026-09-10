@@ -13,6 +13,11 @@
     "allowJs": true,
     "checkJs": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "vitest*.ts",
+    "assets/setup/*.mjs"
+  ],
   "exclude": ["tests/.generated"]
 }

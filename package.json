@@ -5,7 +5,8 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "create-convex-monorepo": "dist/cli/index.js"
+    "create-convex-monorepo": "dist/cli/index.js",
+    "convex-monorepo": "dist/cli/workspace.js"
   },
   "exports": {
     ".": {
@@ -39,7 +40,9 @@
     "test:e2e": "node scripts/e2e.mjs",
     "test:backend": "tsx scripts/backend-fixtures.ts && vitest run --config vitest.backend.config.ts",
     "prepack": "pnpm build",
-    "test:package": "node scripts/pack-smoke.mjs"
+    "test:package": "node scripts/pack-smoke.mjs",
+    "dev:workspace": "tsx src/cli/workspace.ts",
+    "test:workspace:e2e": "node scripts/workspace-e2e.mjs"
   },
   "dependencies": {
     "@clack/prompts": "1.8.0",

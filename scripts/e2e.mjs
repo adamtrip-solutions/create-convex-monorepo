@@ -1,16 +1,24 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import spawn from 'cross-spawn';
-import { generateProject } from '../dist/index.js';
+import { generateProject, normalizeOptions } from '../dist/index.js';
 
 const apps =
   process.env.CCM_APPS ?? 'next,admin:vite,portal:tanstack-start,expo';
 const auth = process.env.CCM_AUTH ?? 'none';
 const example = process.env.CCM_EXAMPLE ?? 'messages';
+const workspaceCommands = process.env.CCM_WORKSPACE_COMMANDS === '1';
+const selections = normalizeOptions({ apps, auth, example }).apps;
 const directory = await mkdtemp(join(tmpdir(), 'ccm-e2e-'));
 const project = await generateProject(
-  { name: 'fixture', apps, auth, example },
+  {
+    name: 'fixture',
+    apps: workspaceCommands ? selections.slice(0, 1) : apps,
+    auth: workspaceCommands ? 'none' : auth,
+    example,
+  },
   { cwd: directory },
 );
 function run(args) {
@@ -30,7 +38,64 @@ function run(args) {
   if (result.status !== 0)
     throw new Error(`pnpm ${args.join(' ')} exited ${result.status}`);
 }
+function command(args) {
+  const result = spawn.sync(
+    process.execPath,
+    [
+      fileURLToPath(new URL('../dist/cli/workspace.js', import.meta.url)),
+      ...args,
+    ],
+    {
+      cwd: project,
+      stdio: 'inherit',
+      timeout: 120_000,
+    },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0)
+    throw new Error(`Workspace command failed: ${args.join(' ')}`);
+}
+async function snapshot() {
+  const files = {};
+  for (const file of await readdir(project, { recursive: true })) {
+    try {
+      files[file] = await readFile(join(project, file), 'utf8');
+    } catch (error) {
+      if (error.code !== 'EISDIR') throw error;
+    }
+  }
+  return JSON.stringify(files);
+}
 try {
+  if (workspaceCommands) {
+    await writeFile(
+      join(project, 'packages/backend/.env.local'),
+      'CONVEX_URL=https://example.convex.cloud\n',
+    );
+    const before = await snapshot();
+    command(['add', 'app', 'dry-run-only', '--framework', 'expo', '--dry-run']);
+    if ((await snapshot()) !== before)
+      throw new Error('Dry-run changed workspace files');
+    // Exercise migration of all four existing apps, and adding apps after auth setup.
+    if (example === 'none' && auth === 'clerk')
+      command(['add', 'auth', 'clerk', '--no-install']);
+    for (const app of selections.slice(1))
+      command([
+        'add',
+        'app',
+        app.name,
+        '--framework',
+        app.framework,
+        '--no-install',
+      ]);
+    if (example !== 'none' && auth === 'clerk')
+      command(['add', 'auth', 'clerk', '--no-install']);
+    command(['env', 'sync']);
+    const linked = await snapshot();
+    command(['env', 'sync', '--dry-run']);
+    if ((await snapshot()) !== linked)
+      throw new Error('Environment dry-run changed files');
+  }
   const config = JSON.parse(
     await readFile(join(project, 'convex-monorepo.json'), 'utf8'),
   );
@@ -76,6 +141,7 @@ export type MissingModule = typeof api.notAModule;
     );
   }
   run(['install', '--no-frozen-lockfile']);
+  if (workspaceCommands) command(['doctor', '--json']);
   run(['typecheck']);
   run(['lint']);
   run(['build']);
@@ -105,7 +171,9 @@ export type MissingModule = typeof api.notAModule;
       }
     }
   }
-  console.log(`PASS generated ${apps} / ${auth} / ${example}`);
+  console.log(
+    `PASS ${workspaceCommands ? 'workspace commands' : 'generated'} ${apps} / ${auth} / ${example}`,
+  );
 } catch (error) {
   console.error(`Fixture retained at ${project}`);
   process.exitCode = 1;
