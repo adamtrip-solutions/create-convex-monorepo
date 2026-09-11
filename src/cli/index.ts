@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { getPackageVersion } from '../version.js';
-import { runCreate } from '../commands/create.js';
+import { runEntry } from '../commands/entry.js';
 
 const controller = new AbortController();
-const interrupt = () => controller.abort(new Error('Generation interrupted.'));
+const interrupt = () => controller.abort(new Error('Command interrupted.'));
 process.once('SIGINT', interrupt);
 process.once('SIGTERM', interrupt);
 try {
-  await runCreate(
+  await runEntry(
     process.argv.slice(2),
     await getPackageVersion(),
     controller.signal,

@@ -125,17 +125,23 @@ try {
   );
   if ((await readFile(join(blank, 'convex-monorepo.json'), 'utf8')) !== before)
     throw new Error('Packed dry run changed metadata');
+  // Let npm infer the primary bin from the packed package name, as npx does.
+  const launcher = ['--yes', `file:${tarball}`];
+  run('npx', launcher, join(blank, 'apps/web/src'));
   run(
-    workspaceBin,
-    ['add', 'app', 'admin', '--framework', 'vite', '--no-install'],
-    blank,
+    'npx',
+    [...launcher, 'add', 'app', 'admin', '--framework', 'vite', '--no-install'],
+    join(blank, 'apps/web/src'),
   );
-  run(workspaceBin, ['add', 'auth', 'clerk', '--no-install'], blank);
+  run('npx', [...launcher, 'add', 'auth', 'clerk', '--no-install'], blank);
+  const main = await readFile(join(blank, 'apps/admin/src/main.tsx'), 'utf8');
+  if (!/render\(\n\s+<StrictMode>/.test(main))
+    throw new Error('Packed generator produced unformatted JSX');
   await writeFile(
     join(blank, 'packages/backend/.env.local'),
     'CONVEX_URL=https://pack-test.convex.cloud\n',
   );
-  run(workspaceBin, ['env', 'sync', '--app', 'admin'], blank);
+  run('npx', [...launcher, 'env', 'sync', '--app', 'admin'], blank);
   const updated = JSON.parse(
     await readFile(join(blank, 'convex-monorepo.json'), 'utf8'),
   );

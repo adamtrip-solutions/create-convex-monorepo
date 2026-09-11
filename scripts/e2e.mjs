@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import spawn from 'cross-spawn';
+import { format } from 'prettier';
 import { generateProject, normalizeOptions } from '../dist/index.js';
 
 const apps =
@@ -41,10 +42,7 @@ function run(args) {
 function command(args) {
   const result = spawn.sync(
     process.execPath,
-    [
-      fileURLToPath(new URL('../dist/cli/workspace.js', import.meta.url)),
-      ...args,
-    ],
+    [fileURLToPath(new URL('../dist/cli/index.js', import.meta.url)), ...args],
     {
       cwd: project,
       stdio: 'inherit',
@@ -105,7 +103,8 @@ try {
       // so adding their first function does not break a generated test.
       await writeFile(
         join(project, 'apps', app.name, 'src/blank.type-test.ts'),
-        `
+        await format(
+          `
 import type { api } from '@fixture/backend/api';
 import type { DataModel, TableNames } from '@fixture/backend/dataModel';
 type Assert<T extends true> = T;
@@ -118,6 +117,8 @@ export type ModelIsTyped = Assert<Equal<IsAny<DataModel>, false>>;
 // @ts-expect-error No functions have been defined.
 export type MissingModule = typeof api.notAModule;
 `,
+          { parser: 'typescript', singleQuote: true, trailingComma: 'all' },
+        ),
       );
     }
     const prefix =
@@ -141,6 +142,7 @@ export type MissingModule = typeof api.notAModule;
     );
   }
   run(['install', '--no-frozen-lockfile']);
+  run(['format:check']);
   if (workspaceCommands) command(['doctor', '--json']);
   run(['typecheck']);
   run(['lint']);

@@ -20,6 +20,8 @@ An auth adapter implements `apply(context)`. It owns backend `access.ts`, option
 
 `context.write` and `context.json` create files once and reject unsafe paths and collisions. `context.mergePackage` can update only manifests created by that context. Dependency maps merge by key and reject conflicting versions; script patches replace matching script keys. Other top-level manifest fields replace their previous values. This is intentionally not a generic deep-merge engine.
 
+`src/generator/format.ts` uses the pinned Prettier runtime API with explicit options before authored files are written. It never resolves user configuration or loads user plugins. Convex `_generated` assets, route-tree output, and unsupported extensions such as dotenv pass through unchanged. Generated workspaces receive matching format scripts, configuration, and ignore patterns. Formatting failure is a generation failure and uses the same staging cleanup.
+
 The package-manager contract lives in `src/package-manager/index.ts`. pnpm owns installation; subprocesses receive argument arrays and inherited terminal output. The root template owns Turborepo and workspace configuration. There is no Nx adapter or speculative migration engine.
 
 ## Shared Convex API
@@ -50,9 +52,9 @@ Blank apps do not include tests that assume an empty API forever. The generated-
 
 ## Workspace commands
 
-Both binaries ship in `create-convex-monorepo`: `create-convex-monorepo` creates a project, and `convex-monorepo` manages it afterward. `src/commands/workspace.ts` parses command-specific options and prompts. Application logic lives in `src/workspace` and is exported for programmatic use.
+Both binaries ship in `create-convex-monorepo`. `src/commands/entry.ts` routes the create binary to creation or workspace commands, so the same npm package works through npx without a local or global installation. With no arguments, existing workspace metadata selects an interactive management menu or noninteractive help. Explicit `create <name>` resolves reserved-name ambiguity. The separate `convex-monorepo` binary remains a management-only entry point. `src/commands/workspace.ts` parses command-specific options and prompts. Application logic lives in `src/workspace` and is exported for programmatic use.
 
-`project.ts` walks upward to metadata, validates version 1, retains extension fields, and rejects unsafe file paths. `add.ts` renders temporary scaffolds with the existing app/auth adapters, then selects only the new app or authentication changes. Auth package updates merge only the fields changed by the adapter; source files must match the expected baseline before replacement. Per-app example overrides survive later auth additions.
+`project.ts` walks upward to metadata, validates version 1, retains extension fields, and rejects unsafe file paths. `add.ts` renders temporary scaffolds with the existing app/auth adapters, then selects only the new app or authentication changes. Auth package updates merge only the fields changed by the adapter; source files must match the expected baseline before replacement. Comparison normalizes formatting with the same formatter to support older unformatted templates, preserving meaningful code and comment differences as conflicts. Apply-time snapshots still compare exact contents. Per-app example overrides survive later auth additions.
 
 `env.ts` shares the standalone setup script's URL validation and dotenv linking helpers. A declaration file types that plain JavaScript module for the compiled CLI; the JavaScript implementation is separately checked by TypeScript. Generated projects still receive the standalone script and need no CLI dependency for initial Convex setup.
 
