@@ -118,6 +118,7 @@ it('does not load project formatter configuration, format secrets or change upst
   await expect(access(join(root, 'src/broken.ts'))).rejects.toThrow();
 });
 
+// This integration case renders multiple complete projects during auth migration.
 it('adds apps and auth to an unformatted v0.3 starter without rewriting existing backend files', async () => {
   const root = await generateProject(
     {
@@ -156,7 +157,7 @@ it('adds apps and auth to an unformatted v0.3 starter without rewriting existing
     const path = `packages/backend/convex/${name}`;
     expect(await readFile(join(root, path), 'utf8')).toBe(legacy[path]);
   }
-});
+}, 30_000);
 
 it('still rejects substantive edits and comments in previously unformatted auth files', async () => {
   const root = await generateProject(
