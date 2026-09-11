@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
 import { versions as v } from '../versions.js';
+import { formattingOptions } from '../../generator/format.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   const { options, scope } = ctx;
@@ -20,6 +21,8 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     build: 'turbo run build',
     typecheck: 'turbo run typecheck',
     lint: 'turbo run lint',
+    format: 'prettier --write .',
+    'format:check': 'prettier --check .',
   };
   for (const app of options.apps)
     scripts[`dev:${app.name}`] = `pnpm --filter @${scope}/${app.name} dev`;
@@ -31,8 +34,13 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     packageManager: `pnpm@${v.pnpm}`,
     engines: { node: '>=22.12.0' },
     scripts,
-    devDependencies: { turbo: v.turbo },
+    devDependencies: { turbo: v.turbo, prettier: v.prettier },
   });
+  await ctx.json('.prettierrc.json', formattingOptions);
+  await ctx.write(
+    '.prettierignore',
+    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.output/\n**/dist/\n**/.turbo/\npnpm-lock.yaml\n.env*\n**/.env*\n',
+  );
   await ctx.write(
     'pnpm-workspace.yaml',
     "packages:\n  - 'apps/*'\n  - 'packages/*'\n\nonlyBuiltDependencies:\n  - esbuild\n  - sharp\n  - unrs-resolver\n",
@@ -176,6 +184,7 @@ ${options.apps.map((a) => `pnpm dev:${a.name}`).join('\n')}
 pnpm convex:dev
 pnpm typecheck
 pnpm lint
+pnpm format:check
 pnpm build
 \`\`\`
 

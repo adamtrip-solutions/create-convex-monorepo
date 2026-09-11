@@ -5,6 +5,7 @@ import { generateProject, normalizeOptions } from '../generator/index.js';
 import type { Auth, Example, Framework, AppSpec } from '../generator/types.js';
 import { readText, type Workspace } from './project.js';
 import type { ChangePlan } from './changes.js';
+import { equivalentGeneratedFile } from '../generator/format.js';
 import { readBackendEnvironment } from './env.js';
 import {
   deploymentUrl,
@@ -14,12 +15,6 @@ import {
 
 type Files = Map<string, string>;
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
-const normalizeNewlines = (text: string | null | undefined) =>
-  text?.replace(/\r\n/g, '\n');
-const equivalent = (
-  left: string | null | undefined,
-  right: string | null | undefined,
-) => normalizeNewlines(left) === normalizeNewlines(right);
 const retainNewlines = (text: string, original: string | null) =>
   original?.includes('\r\n') ? text.replace(/\r?\n/g, '\r\n') : text;
 
@@ -141,7 +136,10 @@ async function verifyMessages(
   for (const name of ['schema.ts', 'messages.ts', 'access.ts']) {
     const path = `packages/backend/convex/${name}`;
     const contents = await guardedRead(workspace, plan, path);
-    if (contents === null || !equivalent(contents, baseline.get(path)))
+    if (
+      contents === null ||
+      !(await equivalentGeneratedFile(path, contents, baseline.get(path)))
+    )
       throw new Error(
         `Incompatible messages backend: ${path} is missing or customized. Restore the generated messages contract, or add an app with --example none.`,
       );
@@ -286,7 +284,11 @@ export async function planAddApp(
   if (workspace.config.auth === 'clerk') {
     const path = 'packages/backend/convex/auth.config.ts';
     if (
-      !equivalent(await guardedRead(workspace, plan, path), generated.get(path))
+      !(await equivalentGeneratedFile(
+        path,
+        await guardedRead(workspace, plan, path),
+        generated.get(path),
+      ))
     )
       throw new Error(`Incompatible Clerk configuration in ${path}.`);
   }
@@ -385,7 +387,7 @@ export async function planAddAuth(
       if (!select(path) || before.get(path) === target) continue;
       const baseline = before.get(path) ?? null;
       const current = await readText(workspace.root, path);
-      if (equivalent(current, target)) {
+      if (await equivalentGeneratedFile(path, current, target)) {
         plan.guards!.push({ path, contents: current });
         continue;
       }
@@ -396,7 +398,7 @@ export async function planAddAuth(
         baseline !== null
       )
         next = mergePackage(current, baseline, target, path);
-      else if (!equivalent(current, baseline))
+      else if (!(await equivalentGeneratedFile(path, current, baseline)))
         throw new Error(
           `Conflict in ${path}: file is customized or already exists. No files were changed.`,
         );
