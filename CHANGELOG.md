@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.2.1...v0.3.0) (2026-09-10)
+
+
+### Features
+
+* **cli:** add workspace management commands ([#4](https://github.com/adamtrip-solutions/create-convex-monorepo/issues/4)) ([3fb819e](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/3fb819eda72a26471d6b9bd515fa4b19e90955e6))
+
 ## [0.2.1](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.2.0...v0.2.1) (2026-09-09)
 
 
