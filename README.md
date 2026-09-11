@@ -28,31 +28,40 @@ Contributors can run the checkout with `pnpm dev`; see [CONTRIBUTING.md](CONTRIB
 
 ## Manage an existing workspace
 
-The same npm package also provides the `convex-monorepo` command. Install it in the generated workspace:
+Run the same CLI from the workspace root or any subdirectory. No global or project installation is needed:
 
 ```sh
-pnpm add -Dw create-convex-monorepo@latest
-pnpm exec convex-monorepo add
+npx create-convex-monorepo@latest
 ```
 
-Or run it without installing a project dependency:
+With a terminal attached, it detects `convex-monorepo.json` and offers a menu to add an app, add Clerk, check the workspace, sync frontend URLs, or check for updates. Without a terminal, it prints management help without changing files.
+
+You can also run each command directly:
 
 ```sh
-pnpm --package create-convex-monorepo@latest dlx convex-monorepo doctor
-npx --yes --package create-convex-monorepo@latest convex-monorepo doctor
+npx create-convex-monorepo@latest add app admin --framework vite --example none --dry-run
+npx create-convex-monorepo@latest add app admin --framework vite --example none --install
+npx create-convex-monorepo@latest add app mobile --framework expo --no-install
+npx create-convex-monorepo@latest add auth clerk --dry-run
+npx create-convex-monorepo@latest add auth clerk --install
+npx create-convex-monorepo@latest env sync --app mobile
+npx create-convex-monorepo@latest doctor
+npx create-convex-monorepo@latest upgrade --check
 ```
 
-Run commands from the workspace root or any subdirectory:
+The same commands work through pnpm:
 
 ```sh
-pnpm exec convex-monorepo add app admin --framework vite --example none --dry-run
-pnpm exec convex-monorepo add app admin --framework vite --example none --install
-pnpm exec convex-monorepo add app mobile --framework expo --no-install
-pnpm exec convex-monorepo add auth clerk --dry-run
-pnpm exec convex-monorepo add auth clerk --install
-pnpm exec convex-monorepo env sync --app mobile
-pnpm exec convex-monorepo doctor
-pnpm exec convex-monorepo upgrade --check
+pnpm create convex-monorepo@latest add app admin --framework vite --no-install
+pnpm create convex-monorepo@latest doctor
+```
+
+The separate `convex-monorepo` binary remains available for users who install the package locally or globally. For example, after `pnpm add -Dw create-convex-monorepo@latest`, run `pnpm exec convex-monorepo doctor`.
+
+To explicitly generate a new project, use `create <project-name>`. This also lets you use a command name such as `doctor` as the project name:
+
+```sh
+npx create-convex-monorepo@latest create doctor --apps vite --no-install --no-git
 ```
 
 | Command           | Behavior                                                                                                                                                  |
@@ -179,7 +188,7 @@ Use explicit names to choose folders and repeat a framework:
 pnpm create convex-monorepo@latest acme --apps web:next,admin:next,mobile:expo --yes
 ```
 
-Apps become `@acme/web`, `@acme/admin`, and `@acme/mobile`. All depend on `@acme/backend` through `workspace:*`. The generator assigns distinct web development ports. v0.1 creates a new workspace; adding an app to an existing workspace is not implemented.
+Apps become `@acme/web`, `@acme/admin`, and `@acme/mobile`. All depend on `@acme/backend` through `workspace:*`. The generator assigns distinct web development ports. Use `npx create-convex-monorepo@latest add app` to add another frontend later.
 
 ## First run and development
 
@@ -204,6 +213,17 @@ pnpm build
 ```
 
 Complete setup in a normal terminal before starting Turbo. Stop a separately running backend watcher before `pnpm dev`, which starts its own. Public environment values are embedded at build time; rebuild frontends when they change. Backend build checks types and does not deploy.
+
+## Code formatting
+
+Generated source and configuration files are formatted with Prettier before they are written, including when using `--no-install`. New workspaces include a pinned Prettier dependency and matching configuration:
+
+```sh
+pnpm format
+pnpm format:check
+```
+
+Convex `_generated` files, TanStack's generated route tree, build output, lockfiles, and environment files are excluded. Adding an app formats its new files; it does not reformat existing application code. Auth migration accepts formatting differences in older starters while still rejecting customized code that would be replaced.
 
 ## Convex backend sharing
 
@@ -255,7 +275,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [adding a framework](docs/adding-a-frame
 
 ## Roadmap
 
-The next release should add `doctor` to check deployment URLs, generated types, version alignment, and auth setup in an existing workspace. Later candidates are `add app`, another auth provider, and additional package-manager adapters. These commands are not available in v0.1.
+Next candidates are reviewed upgrade migrations, additional auth providers, and more package-manager adapters. `upgrade --check` currently reports versions without changing dependencies.
 
 MIT licensed. See [LICENSE](LICENSE).
 

@@ -13,6 +13,11 @@ export const help = `create-convex-monorepo [project-name] [options]
 
 Generate a pnpm + Turborepo workspace sharing one Convex backend.
 
+Use create <project-name> to explicitly create a project, including names such
+as add or doctor. Inside an existing workspace, running without arguments opens
+the management menu. Commands: add app, add auth clerk, doctor, env sync,
+upgrade --check. No global or project installation is required.
+
   --apps <list>             next,vite,tanstack-start,expo or web:next,admin:vite
   --example <name>         messages (default) or none for blank apps
   --auth <provider>         none (default) or clerk

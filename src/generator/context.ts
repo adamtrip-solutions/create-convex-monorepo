@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile, lstat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { formatGeneratedFile } from './format.js';
 import type {
   GeneratorContext,
   PackageManifest,
@@ -81,7 +82,9 @@ export function createContext(
       if (owned.has(target))
         throw new Error(`Template output collision: ${path}`);
       await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, contents, { flag: 'wx' });
+      await writeFile(target, await formatGeneratedFile(path, contents), {
+        flag: 'wx',
+      });
       owned.add(target);
     },
     async json(path, value) {
@@ -96,7 +99,10 @@ export function createContext(
       const base: PackageManifest = JSON.parse(await readFile(target, 'utf8'));
       await writeFile(
         target,
-        `${JSON.stringify(mergeManifests(base, patch), null, 2)}\n`,
+        await formatGeneratedFile(
+          path,
+          `${JSON.stringify(mergeManifests(base, patch), null, 2)}\n`,
+        ),
       );
     },
   };

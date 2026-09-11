@@ -1,4 +1,5 @@
 export const versions = {
+  prettier: '3.8.3',
   convex: '1.45.0',
   react: '19.2.3',
   typescript: '6.0.3',

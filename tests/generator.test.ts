@@ -186,7 +186,7 @@ describe('generated project golden matrix', () => {
           expect(app.dependencies).toHaveProperty(sdk);
           expect(providers).toContain('ConvexProviderWithClerk');
           expect(providers).toContain('<Authenticated>');
-          expect(providers).toContain('<Unauthenticated><AuthControls />');
+          expect(providers).toMatch(/<Unauthenticated>\s*<AuthControls \/>/);
           const env = await read(`${dir}/.env.clerk.example`);
           expect(env).toContain(`${prefix}_CLERK_PUBLISHABLE_KEY=\n`);
           expect(env).not.toMatch(
