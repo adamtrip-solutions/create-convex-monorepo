@@ -34,7 +34,7 @@ Run the same CLI from the workspace root or any subdirectory. No global or proje
 npx create-convex-monorepo@latest
 ```
 
-With a terminal attached, it detects `convex-monorepo.json` and offers a menu to add an app, add Clerk, check the workspace, sync frontend URLs, or check for updates. Without a terminal, it prints management help without changing files.
+With a terminal attached, it detects `convex-monorepo.json` and offers a menu to add an app, add Clerk, check the workspace, sync frontend URLs, update dependencies, or check for updates. Without a terminal, it prints management help without changing files.
 
 You can also run each command directly:
 
@@ -47,6 +47,8 @@ npx create-convex-monorepo@latest add auth clerk --install
 npx create-convex-monorepo@latest env sync --app mobile
 npx create-convex-monorepo@latest doctor
 npx create-convex-monorepo@latest upgrade --check
+npx create-convex-monorepo@latest upgrade --dry-run
+npx create-convex-monorepo@latest upgrade --install
 ```
 
 The same commands work through pnpm:
@@ -70,9 +72,10 @@ npx create-convex-monorepo@latest create doctor --apps vite --no-install --no-gi
 | `add auth clerk`  | Adds Clerk to generated app providers and the backend auth configuration. Customized files that need replacement cause a conflict.                        |
 | `env sync`        | Links only the public backend URL, using each framework's variable prefix. Supports `--app` and `--dry-run`.                                              |
 | `doctor`          | Checks workspace configuration, installed dependencies, environment settings, and shared API types. Supports `--json`; errors exit with status 1.         |
+| `upgrade`         | Updates existing exact dependency pins and the pnpm version to the running CLI's tested baseline. Keeps newer pins and rejects non-exact customizations.  |
 | `upgrade --check` | Compares generator versions with npm's latest stable release and reports the running CLI's tested dependency baseline through `--json`. Makes no changes. |
 
-The add commands support `--dry-run`, `--install`, `--no-install`, and `--yes`. Without prompts, provide the app name and framework; dependency installation defaults to off. `--yes` enables installation unless `--no-install` is set, and never overrides conflicts. A dry run shows file paths without printing environment values or installing dependencies.
+The add and upgrade commands support `--dry-run`, `--install`, `--no-install`, and `--yes`. Without prompts, add app requires the app name and framework. Dependency installation defaults to off. `--yes` enables installation unless `--no-install` is set, and never overrides conflicts. A dry run shows file paths without printing environment values or installing dependencies.
 
 Existing workspaces with metadata version 1, including projects created with 0.2.1, are supported. Preserve `convex-monorepo.json`; the CLI reads it rather than guessing which directories belong to your project. Per-app starter choices are recorded there when they differ from the original selection.
 
@@ -84,7 +87,9 @@ Auth addition supports `none` to Clerk. It preserves backend schemas, functions,
 
 A workspace lock prevents two CLI edits from running together. Each planned file is checked again before writing. Failed edits roll back files that still contain this command's output; observed concurrent edits are preserved and reported. Filesystem checks are optimistic, so avoid editing affected files while a command is applying. A failed dependency installation leaves the applied files available for retry with `pnpm install`.
 
-Doctor is read-only and uses an in-memory TypeScript probe. It does not run application scripts, start services, configure a deployment, validate a real Clerk session, or prove a native Expo build works. Missing installation or environment configuration is reported with suggested steps. The upgrade command does not rewrite files, migrate templates, or update dependency versions.
+Doctor is read-only and uses an in-memory TypeScript probe. It does not run application scripts, start services, configure a deployment, validate a real Clerk session, or prove a native Expo build works. Missing installation or environment configuration is reported with suggested steps.
+
+Upgrade updates matching dependency entries in root, app, and shared-package manifests and records the running CLI version in metadata. It never downgrades exact pins. Non-exact managed pins, such as `^` ranges, cause a conflict before any writes. User-added dependencies and unrelated package fields are preserved; missing tested dependencies are reported but not added. Manifests are rewritten from parsed JSON, so comments are not supported and integer values above 2^53 lose precision. Upgrade does not migrate template files or write the lockfile itself. Run `pnpm install` afterward, or use `--install`, to update the lockfile.
 
 ## Interactive usage
 
@@ -275,7 +280,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [adding a framework](docs/adding-a-frame
 
 ## Roadmap
 
-Next candidates are reviewed upgrade migrations, additional auth providers, and more package-manager adapters. `upgrade --check` currently reports versions without changing dependencies.
+Next candidates are reviewed upgrade migrations, additional auth providers, and more package-manager adapters. `upgrade` updates dependency pins; template migrations remain manual.
 
 MIT licensed. See [LICENSE](LICENSE).
 
