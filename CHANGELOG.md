@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.3.0...v0.3.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* format generated projects and manage workspaces through npx ([#6](https://github.com/adamtrip-solutions/create-convex-monorepo/issues/6)) ([65513f7](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/65513f79426a7d0201fdbcfcee69468eac0c68df))
+
 ## [0.3.0](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.2.1...v0.3.0) (2026-09-10)
 
 
