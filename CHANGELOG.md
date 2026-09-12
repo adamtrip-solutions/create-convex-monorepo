@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.3.1...v0.4.0) (2026-09-12)
+
+
+### Features
+
+* **auth:** add Convex Auth as a second provider ([#11](https://github.com/adamtrip-solutions/create-convex-monorepo/issues/11)) ([502fcab](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/502fcabe95e3c5c62d80c97ebe6ed50456bb6b64))
+* **cli:** add package command for blank shared packages ([#9](https://github.com/adamtrip-solutions/create-convex-monorepo/issues/9)) ([10003b2](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/10003b2626f9c79a8853a6f661e391c0ba2866c6))
+* **cli:** upgrade dependency pins to the tested baseline ([#8](https://github.com/adamtrip-solutions/create-convex-monorepo/issues/8)) ([8c8e8c2](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/8c8e8c2cc67fdd599df41539970604859d9b0027))
+
 ## [0.3.1](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.3.0...v0.3.1) (2026-09-11)
 
 
