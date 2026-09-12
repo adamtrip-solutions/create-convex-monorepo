@@ -37,6 +37,8 @@ const clerk: Record<Framework, string> = {
 };
 const baselines: Record<string, string> = {
   convex: versions.convex,
+  '@convex-dev/auth': versions.convexAuth,
+  '@auth/core': versions.authCore,
   react: versions.react,
   typescript: versions.typescript,
   next: versions.next,
@@ -194,9 +196,10 @@ export async function doctor(
   }
   async function environment(
     directory: string,
+    filenames = ['.env', '.env.local'],
   ): Promise<Map<string, string | undefined>> {
     let values: Record<string, string | undefined> = {};
-    for (const filename of ['.env', '.env.local']) {
+    for (const filename of filenames) {
       const path = `${directory}/${filename}`;
       const contents = await text(path);
       try {
@@ -362,6 +365,17 @@ export async function doctor(
       'Restore the backend Clerk auth configuration before deploying.',
     );
   }
+  if (config.auth === 'convex-auth') {
+    for (const name of ['auth.config.ts', 'auth.ts', 'http.ts']) {
+      const path = `packages/backend/convex/${name}`;
+      if ((await text(path)) === null)
+        issue(
+          'auth-config-missing',
+          `Convex Auth is recorded in metadata but ${path} is missing.`,
+          `Restore the generated Convex Auth file ${path} before deploying.`,
+        );
+    }
+  }
   const backend = await manifest('packages/backend/package.json');
   const backendName = typeof backend.name === 'string' ? backend.name : '';
   if (backendName !== `@${config.name}/backend`)
@@ -467,7 +481,13 @@ export async function doctor(
     }
   }
   await dependencies('', rootManifest, ['turbo']);
-  await dependencies('packages/backend', backend, ['convex', 'typescript']);
+  await dependencies('packages/backend', backend, [
+    'convex',
+    'typescript',
+    ...(config.auth === 'convex-auth'
+      ? ['@convex-dev/auth', '@auth/core']
+      : []),
+  ]);
   for (const app of config.apps) {
     const directory = `apps/${app.name}`;
     const pkg = await manifest(`${directory}/package.json`);
@@ -477,6 +497,10 @@ export async function doctor(
       'typescript',
       ...frameworks[app.framework],
       ...(config.auth === 'clerk' ? [clerk[app.framework]] : []),
+      ...(config.auth === 'convex-auth' ? ['@convex-dev/auth'] : []),
+      ...(config.auth === 'convex-auth' && app.framework === 'expo'
+        ? ['expo-secure-store']
+        : []),
     ]);
     if (
       !backendName ||
@@ -495,13 +519,39 @@ export async function doctor(
           ? 'EXPO_PUBLIC'
           : 'VITE';
     const env = await environment(directory);
-    for (const secret of ['CLERK_SECRET_KEY', 'CONVEX_DEPLOY_KEY']) {
-      if (env.get(`${prefix}_${secret}`))
-        issue(
-          'public-secret',
-          `${directory} exposes ${secret} through a public environment variable.`,
-          'Remove the public assignment, rotate the exposed credential, and rebuild the app.',
-        );
+    let envFiles: string[] = [];
+    try {
+      // Validate the app directory before enumerating environment files.
+      await readText(root, `${directory}/.doctor-parent-check`);
+      envFiles = (await readdir(join(root, directory))).filter(
+        (name) => name === '.env' || name.startsWith('.env.'),
+      );
+    } catch {
+      // Missing or unsafe app directories are reported by the checks above.
+    }
+    const exposed = new Set<string>();
+    for (const filename of envFiles) {
+      const values = await environment(directory, [filename]);
+      for (const secret of [
+        'CLERK_SECRET_KEY',
+        'CONVEX_DEPLOY_KEY',
+        'JWT_PRIVATE_KEY',
+        'JWKS',
+      ]) {
+        if (
+          ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'].some((publicPrefix) =>
+            values.get(`${publicPrefix}_${secret}`),
+          )
+        )
+          exposed.add(secret);
+      }
+    }
+    for (const secret of exposed) {
+      issue(
+        'public-secret',
+        `${directory} exposes ${secret} through a public environment variable.`,
+        'Remove the public assignment, rotate the exposed credential, and rebuild the app.',
+      );
     }
     const key = publicVariable(app.framework);
     if (!validUrl(env.get(key)))

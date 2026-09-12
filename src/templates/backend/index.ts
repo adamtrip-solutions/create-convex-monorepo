@@ -49,10 +49,11 @@ export async function generateBackend(ctx: GeneratorContext): Promise<void> {
     "# Run pnpm convex:setup from the workspace root.\n# Convex writes deployment selection and public URLs to this package's .env.local.\n# Never copy this file wholesale into an application.\n",
   );
   const assetDir = new URL('../../../assets/backend/convex/', import.meta.url);
-  const selectedAssets =
-    ctx.options.example === 'none'
-      ? new URL('../../../assets/backend-blank/convex/', import.meta.url)
-      : assetDir;
+  const assetName = `backend${ctx.options.example === 'none' ? '-blank' : ''}${ctx.options.auth === 'convex-auth' ? '-convex-auth' : ''}`;
+  const selectedAssets = new URL(
+    `../../../assets/${assetName}/convex/`,
+    import.meta.url,
+  );
   const files =
     ctx.options.example === 'none'
       ? ['schema.ts', 'tsconfig.json']

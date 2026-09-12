@@ -18,14 +18,14 @@ afterEach(async () => {
       .map((path) => rm(path, { recursive: true, force: true })),
   );
 });
-async function fixture() {
+async function fixture(auth: 'clerk' | 'convex-auth' = 'clerk') {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-upgrade-test-'));
   temporary.push(cwd);
   const root = await generateProject(
     {
       name: 'sample',
       apps: 'web:next,mobile:expo',
-      auth: 'clerk',
+      auth,
       example: 'messages',
       install: false,
       git: false,
@@ -566,6 +566,38 @@ it('preserves mixed per-app examples and their Clerk dependencies', async () => 
   expect(
     (await loadWorkspace(workspace.root)).config.apps.at(-1)?.example,
   ).toBe('none');
+  expect(
+    (await planUpgrade(await loadWorkspace(workspace.root))).changes,
+  ).toEqual([]);
+});
+
+it('upgrades Convex Auth and Auth.js pins from generated manifest baselines', async () => {
+  const workspace = await fixture('convex-auth');
+  for (const path of [
+    'apps/web/package.json',
+    'apps/mobile/package.json',
+    'packages/backend/package.json',
+  ])
+    await edit(workspace.root, path, (pkg) => {
+      pkg.dependencies['@convex-dev/auth'] = '0.0.1';
+      if (path.startsWith('packages/'))
+        pkg.dependencies['@auth/core'] = '0.1.0';
+    });
+  const before = await snapshot(workspace.root);
+  await applyPlan(await planUpgrade(workspace));
+  const after = await snapshot(workspace.root);
+  for (const path of [
+    'apps/web/package.json',
+    'apps/mobile/package.json',
+    'packages/backend/package.json',
+  ]) {
+    const dependencies = JSON.parse(after[path]!).dependencies;
+    expect(dependencies['@convex-dev/auth']).toBe(versions.convexAuth);
+    if (path.startsWith('packages/'))
+      expect(dependencies['@auth/core']).toBe(versions.authCore);
+  }
+  for (const [path, content] of Object.entries(before))
+    if (!path.endsWith('package.json')) expect(after[path], path).toBe(content);
   expect(
     (await planUpgrade(await loadWorkspace(workspace.root))).changes,
   ).toEqual([]);

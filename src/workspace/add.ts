@@ -222,16 +222,23 @@ export async function planAddApp(
       );
   }
   if (example === 'messages') await verifyMessages(workspace, plan, generated);
-  if (workspace.config.auth === 'clerk') {
-    const path = 'packages/backend/convex/auth.config.ts';
-    if (
-      !(await equivalentGeneratedFile(
-        path,
-        await guardedRead(workspace, plan, path),
-        generated.get(path),
-      ))
-    )
-      throw new Error(`Incompatible Clerk configuration in ${path}.`);
+  if (workspace.config.auth !== 'none') {
+    const files =
+      workspace.config.auth === 'clerk'
+        ? ['auth.config.ts']
+        : ['auth.config.ts', 'auth.ts', 'http.ts'];
+    const label = workspace.config.auth === 'clerk' ? 'Clerk' : 'Convex Auth';
+    for (const name of files) {
+      const path = `packages/backend/convex/${name}`;
+      if (
+        !(await equivalentGeneratedFile(
+          path,
+          await guardedRead(workspace, plan, path),
+          generated.get(path),
+        ))
+      )
+        throw new Error(`Incompatible ${label} configuration in ${path}.`);
+    }
   }
   for (const [path, after] of generated) {
     if (path.startsWith(`${dir}/`))
@@ -422,7 +429,13 @@ export async function planAddAuth(
   provider: 'clerk',
 ): Promise<ChangePlan> {
   if (provider !== 'clerk')
-    throw new Error(`Unsupported authentication provider: ${provider}.`);
+    throw new Error(
+      'Only Clerk authentication can be installed. Use add auth clerk.',
+    );
+  if (workspace.config.auth === 'convex-auth')
+    throw new Error(
+      'Convex Auth is already configured. Switching authentication providers requires a manual migration.',
+    );
   const plan = initialPlan(workspace);
   if (workspace.config.auth === 'clerk') {
     plan.notes.push('Clerk is already configured.');

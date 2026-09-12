@@ -3,13 +3,18 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
+  realpath,
   rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseEnv } from 'node:util';
+import { parseEnv, promisify } from 'node:util';
+import { execFile } from 'node:child_process';
+import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
+import { generateAuthKeys } from '../assets/setup/convex-auth-keys.mjs';
 import { generateProject } from '../src/generator/index.js';
 import { normalizeOptions } from '../src/generator/options.js';
 import { parseCommand } from '../src/commands/create.js';
@@ -31,10 +36,13 @@ afterEach(async () => {
       .map((path) => rm(path, { recursive: true, force: true })),
   );
 });
-async function fixture(apps = 'next,admin:vite,portal:tanstack-start,expo') {
+async function fixture(
+  apps = 'next,admin:vite,portal:tanstack-start,expo',
+  auth = 'none',
+) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-setup-'));
   temporary.push(cwd);
-  const root = await generateProject({ name: 'fixture', apps }, { cwd });
+  const root = await generateProject({ name: 'fixture', apps, auth }, { cwd });
   return { cwd, root };
 }
 async function backendEnv(root: string, contents: string) {
@@ -224,6 +232,142 @@ async function fakeConvex(root: string, code: string) {
   );
   await writeFile(join(pkg, 'bin/main.js'), code);
 }
+
+describe('Convex Auth key setup', () => {
+  const run = promisify(execFile);
+  it('generates a PKCS8 RSA 2048 key and a matching public signing JWKS', () => {
+    const { privateKey, jwks } = generateAuthKeys();
+    expect(privateKey).toMatch(/^-----BEGIN PRIVATE KEY-----\n/);
+    const privateObject = createPrivateKey(privateKey);
+    expect(privateObject.asymmetricKeyType).toBe('rsa');
+    expect(privateObject.asymmetricKeyDetails?.modulusLength).toBe(2048);
+    expect(jwks.keys).toHaveLength(1);
+    expect(jwks.keys[0]).toEqual({
+      use: 'sig',
+      ...createPublicKey(privateObject).export({ format: 'jwk' }),
+    });
+    expect(jwks.keys[0]).toMatchObject({
+      kty: 'RSA',
+      n: expect.any(String),
+      e: 'AQAB',
+    });
+    const payload = Buffer.from('auth-key-test');
+    const publicObject = createPublicKey({ key: jwks.keys[0]!, format: 'jwk' });
+    expect(
+      verify(
+        'sha256',
+        payload,
+        publicObject,
+        sign('sha256', payload, privateObject),
+      ),
+    ).toBe(true);
+  });
+  it.each([
+    { args: [], flags: [], deployment: 'the selected deployment' },
+    { args: ['--prod'], flags: ['--prod'], deployment: '--prod' },
+    {
+      args: ['--', '--prod', '--env-file', '.env.production'],
+      flags: ['--prod', '--env-file', '.env.production'],
+      deployment: '--prod',
+    },
+  ])(
+    'runs both installed CLI commands with $args and keeps private values out of files and output',
+    async ({ args, flags, deployment }) => {
+      const { root, cwd } = await fixture('next', 'convex-auth');
+      await fakeConvex(
+        root,
+        `
+      const assert = require('node:assert/strict');
+      const fs = require('node:fs');
+      const crypto = require('node:crypto');
+      const args = process.argv.slice(2);
+      const flags = ${JSON.stringify(flags)};
+        assert.equal(process.cwd(), ${JSON.stringify(await realpath(join(root, 'packages/backend')))});
+      assert.deepEqual(args.slice(0, 2 + flags.length), ['env', 'set', ...flags]);
+      const [name, ...values] = args.slice(2 + flags.length);
+      if (name === 'JWT_PRIVATE_KEY') {
+        assert.equal(values.length, 2);
+        assert.equal(values[0], '--');
+        assert.match(values[1], /^-----BEGIN PRIVATE KEY-----/);
+        const publicKey = crypto.createPublicKey(crypto.createPrivateKey(values[1])).export({ format: 'jwk' });
+        fs.writeFileSync('public-key.json', JSON.stringify(publicKey));
+      } else {
+        assert.equal(name, 'JWKS');
+        assert.equal(values.length, 1);
+        assert.deepEqual(JSON.parse(values[0]), { keys: [{ use: 'sig', ...JSON.parse(fs.readFileSync('public-key.json', 'utf8')) }] });
+      }
+      fs.appendFileSync('calls.txt', name + '\\n');
+      console.log(values.join(' '));
+      console.error(values.join(' '));
+    `,
+      );
+      const result = await run(
+        process.execPath,
+        [join(root, 'scripts/convex-auth-keys.mjs'), ...args],
+        { cwd },
+      );
+      expect(result).toEqual({
+        stdout: `Set JWT_PRIVATE_KEY and JWKS for ${deployment}.\n`,
+        stderr: '',
+      });
+      expect(
+        await readFile(join(root, 'packages/backend/calls.txt'), 'utf8'),
+      ).toBe('JWT_PRIVATE_KEY\nJWKS\n');
+      for (const file of await readdir(root, {
+        recursive: true,
+        withFileTypes: true,
+      })) {
+        if (file.isFile()) {
+          // Script source contains the PEM header check, but no private key data.
+          expect(
+            await readFile(join(file.parentPath, file.name), 'utf8'),
+          ).not.toMatch(/-----BEGIN PRIVATE KEY-----\r?\n[A-Za-z0-9+/]/);
+        }
+      }
+    },
+  );
+  it('exits nonzero with an install instruction when Convex is missing', async () => {
+    const { root } = await fixture('next', 'convex-auth');
+    await expect(
+      run(process.execPath, [join(root, 'scripts/convex-auth-keys.mjs')]),
+    ).rejects.toMatchObject({
+      code: 1,
+      stdout: '',
+      stderr:
+        'Convex is not installed. Run pnpm install, then pnpm convex:auth-keys.\n',
+    });
+  });
+  it.each(['JWT_PRIVATE_KEY', 'JWKS'])(
+    'exits nonzero without printing values when setting %s fails',
+    async (variable) => {
+      const { root } = await fixture('next', 'convex-auth');
+      await fakeConvex(
+        root,
+        `
+      const name = process.argv[4];
+      require('node:fs').appendFileSync('calls.txt', name + '\\n');
+      console.error(process.argv.join(' '));
+      if (name === ${JSON.stringify(variable)}) process.exit(1);
+    `,
+      );
+      await expect(
+        run(process.execPath, [join(root, 'scripts/convex-auth-keys.mjs')]),
+      ).rejects.toMatchObject({
+        code: 1,
+        stdout: '',
+        stderr: `Convex env set ${variable} failed. Check the deployment configuration and CLI access, then rerun pnpm convex:auth-keys with the same deployment flags to set both values.\n`,
+      });
+      expect(
+        await readFile(join(root, 'packages/backend/calls.txt'), 'utf8'),
+      ).toBe(
+        variable === 'JWT_PRIVATE_KEY'
+          ? 'JWT_PRIVATE_KEY\n'
+          : 'JWT_PRIVATE_KEY\nJWKS\n',
+      );
+    },
+  );
+});
+
 it('runs the installed Convex CLI in the backend package, then links the URL', async () => {
   const { root } = await fixture('next');
   await fakeConvex(

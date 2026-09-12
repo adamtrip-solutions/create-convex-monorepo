@@ -2,6 +2,8 @@ import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
 import noneSchema from './.generated/none/packages/backend/convex/schema';
 import clerkSchema from './.generated/clerk/packages/backend/convex/schema';
+import convexAuthSchema from './.generated/convex-auth/packages/backend/convex/schema';
+import { api as convexAuthApi } from './.generated/convex-auth/packages/backend/convex/_generated/api';
 import { api as publicApi } from './.generated/none/packages/backend/convex/_generated/api';
 import { api as privateApi } from './.generated/clerk/packages/backend/convex/_generated/api';
 const noneModules = import.meta.glob(
@@ -59,5 +61,65 @@ test('Clerk identities cannot read another user’s messages', async () => {
   expect(await bob.query(privateApi.messages.list, {})).toEqual([]);
   expect(await alice.query(privateApi.messages.list, {})).toMatchObject([
     { body: 'private' },
+  ]);
+});
+
+const convexAuthModules = import.meta.glob(
+  './.generated/convex-auth/packages/backend/convex/**/*.{js,ts}',
+);
+
+test('Convex Auth backend rejects unauthenticated reads and writes', async () => {
+  const t = convexTest(convexAuthSchema, convexAuthModules);
+  await expect(t.query(convexAuthApi.messages.list, {})).rejects.toThrow(
+    'Sign in to access messages.',
+  );
+  await expect(
+    t.mutation(convexAuthApi.messages.send, { body: 'no' }),
+  ).rejects.toThrow('Sign in to access messages.');
+});
+
+test('Convex Auth users own messages across sessions and cannot read another user', async () => {
+  const t = convexTest(convexAuthSchema, convexAuthModules);
+  const { aliceId, bobId, aliceSession, secondAliceSession, bobSession } =
+    await t.run(async (ctx) => {
+      const aliceId = await ctx.db.insert('users', {
+        email: 'alice@example.com',
+      });
+      const bobId = await ctx.db.insert('users', { email: 'bob@example.com' });
+      const expirationTime = Date.now() + 60_000;
+      const aliceSession = await ctx.db.insert('authSessions', {
+        userId: aliceId,
+        expirationTime,
+      });
+      const secondAliceSession = await ctx.db.insert('authSessions', {
+        userId: aliceId,
+        expirationTime,
+      });
+      const bobSession = await ctx.db.insert('authSessions', {
+        userId: bobId,
+        expirationTime,
+      });
+      return { aliceId, bobId, aliceSession, secondAliceSession, bobSession };
+    });
+  const alice = t.withIdentity({
+    subject: `${aliceId}|${aliceSession}`,
+    issuer: 'https://example.convex.site',
+  });
+  const returningAlice = t.withIdentity({
+    subject: `${aliceId}|${secondAliceSession}`,
+    issuer: 'https://example.convex.site',
+  });
+  const bob = t.withIdentity({
+    subject: `${bobId}|${bobSession}`,
+    issuer: 'https://example.convex.site',
+  });
+  await alice.mutation(convexAuthApi.messages.send, { body: 'alice private' });
+  expect(await bob.query(convexAuthApi.messages.list, {})).toEqual([]);
+  await bob.mutation(convexAuthApi.messages.send, { body: 'bob private' });
+  expect(
+    await returningAlice.query(convexAuthApi.messages.list, {}),
+  ).toMatchObject([{ body: 'alice private', owner: aliceId }]);
+  expect(await bob.query(convexAuthApi.messages.list, {})).toMatchObject([
+    { body: 'bob private', owner: bobId },
   ]);
 });

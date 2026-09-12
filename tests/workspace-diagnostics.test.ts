@@ -52,6 +52,90 @@ async function snapshot(root: string): Promise<Record<string, string>> {
 }
 
 describe('workspace doctor', () => {
+  it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'])(
+    'reports %s signing values in every app environment file without exposing them',
+    async (prefix) => {
+      const workspace = await fixture('web:next', 'convex-auth');
+      for (const filename of [
+        '.env',
+        '.env.local',
+        '.env.production',
+        '.env.staging.local',
+      ]) {
+        await put(
+          workspace.root,
+          `apps/web/${filename}`,
+          `${prefix}_JWT_PRIVATE_KEY=never-expose-private\n${prefix}_JWKS=never-expose-jwks\n`,
+        );
+        const report = await doctor(workspace);
+        expect(
+          report.issues.filter((issue) => issue.code === 'public-secret'),
+        ).toEqual(
+          ['JWT_PRIVATE_KEY', 'JWKS'].map((secret) => ({
+            code: 'public-secret',
+            severity: 'error',
+            message: `apps/web exposes ${secret} through a public environment variable.`,
+            fix: 'Remove the public assignment, rotate the exposed credential, and rebuild the app.',
+          })),
+        );
+        expect(JSON.stringify(report)).not.toContain('never-expose');
+        await rm(join(workspace.root, `apps/web/${filename}`));
+      }
+    },
+  );
+  it('requires SecureStore only in Convex Auth Expo apps', async () => {
+    const workspace = await fixture(
+      'web:next,spa:vite,start:tanstack-start,mobile:expo',
+      'convex-auth',
+    );
+    const path = join(workspace.root, 'apps/mobile/package.json');
+    const pkg = JSON.parse(await readFile(path, 'utf8'));
+    expect(pkg.dependencies['expo-secure-store']).toBeDefined();
+    delete pkg.dependencies['expo-secure-store'];
+    await writeFile(path, JSON.stringify(pkg));
+    const report = await doctor(workspace);
+    expect(
+      report.issues.filter((issue) =>
+        issue.message.includes('expo-secure-store'),
+      ),
+    ).toEqual([
+      {
+        code: 'dependency-missing',
+        severity: 'error',
+        message: 'apps/mobile does not declare expo-secure-store.',
+        fix: 'Restore the required dependency and run pnpm install.',
+      },
+    ]);
+  });
+  it('warns when the backend resolves @auth/core outside the tested baseline', async () => {
+    const workspace = await fixture('web:vite', 'convex-auth');
+    const path = 'packages/backend/node_modules/@auth/core/package.json';
+    await put(
+      workspace.root,
+      path,
+      JSON.stringify({ name: '@auth/core', version: '0.1.0' }),
+    );
+    const report = await doctor(workspace);
+    expect(report.issues).toContainEqual({
+      code: 'dependency-baseline',
+      severity: 'warning',
+      message:
+        'packages/backend resolves @auth/core@0.1.0, outside this CLI’s tested baseline.',
+      fix: 'Run npx create-convex-monorepo@latest upgrade, then pnpm install.',
+    });
+    await put(
+      workspace.root,
+      path,
+      JSON.stringify({ name: '@auth/core', version: versions.authCore }),
+    );
+    expect(
+      (await doctor(workspace)).issues.filter(
+        (issue) =>
+          issue.code === 'dependency-baseline' &&
+          issue.message.includes('@auth/core'),
+      ),
+    ).toEqual([]);
+  });
   it('reports missing Clerk backend config and public secret assignments without values', async () => {
     const workspace = await fixture('web:next');
     workspace.config.auth = 'clerk';
@@ -68,6 +152,39 @@ describe('workspace doctor', () => {
       true,
     );
     expect(JSON.stringify(report)).not.toContain('never-expose-this');
+  });
+  it('checks Convex Auth files and dependencies without requiring Clerk keys', async () => {
+    const workspace = await fixture('web:next,mobile:expo', 'convex-auth');
+    const before = await snapshot(workspace.root);
+    const initial = await doctor(workspace);
+    expect(
+      initial.issues.filter((issue) => issue.code === 'auth-env-missing'),
+    ).toEqual([]);
+    expect(
+      initial.issues.filter((issue) => issue.code === 'auth-config-missing'),
+    ).toEqual([]);
+    expect(
+      initial.issues.filter(
+        (issue) =>
+          issue.code === 'dependency-uninstalled' &&
+          issue.message.includes('@convex-dev/auth'),
+      ),
+    ).toHaveLength(3);
+    expect(await snapshot(workspace.root)).toEqual(before);
+    for (const name of ['auth.config.ts', 'auth.ts', 'http.ts'])
+      await rm(join(workspace.root, `packages/backend/convex/${name}`));
+    const missing = await doctor(workspace);
+    for (const name of ['auth.config.ts', 'auth.ts', 'http.ts']) {
+      const issue = missing.issues.find(
+        (issue) =>
+          issue.code === 'auth-config-missing' &&
+          issue.message.includes(`convex/${name}`),
+      );
+      expect(issue?.fix).toContain(`packages/backend/convex/${name}`);
+    }
+    expect(
+      missing.issues.filter((issue) => issue.code === 'auth-env-missing'),
+    ).toEqual([]);
   });
   it('reports missing installs and URLs without changing generated files', async () => {
     const workspace = await fixture();
