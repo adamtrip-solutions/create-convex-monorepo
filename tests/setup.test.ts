@@ -282,7 +282,8 @@ describe('Convex Auth key setup', () => {
       const crypto = require('node:crypto');
       const args = process.argv.slice(2);
       const flags = ${JSON.stringify(flags)};
-        assert.equal(process.cwd(), ${JSON.stringify(await realpath(join(root, 'packages/backend')))});
+      // Windows temp paths can use 8.3 short names; compare native realpaths.
+      assert.equal(fs.realpathSync.native(process.cwd()), ${JSON.stringify(await realpath(join(root, 'packages/backend')))});
       assert.deepEqual(args.slice(0, 2 + flags.length), ['env', 'set', ...flags]);
       const [name, ...values] = args.slice(2 + flags.length);
       if (name === 'JWT_PRIVATE_KEY') {
