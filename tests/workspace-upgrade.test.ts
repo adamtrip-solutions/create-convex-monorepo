@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { generateProject } from '../src/generator/index.js';
 import { versions } from '../src/templates/versions.js';
@@ -42,7 +42,13 @@ async function snapshot(root: string): Promise<Record<string, string>> {
   })) {
     if (entry.isFile()) {
       const path = join(entry.parentPath, entry.name);
-      files[path.slice(root.length + 1)] = await readFile(path, 'utf8');
+      // Keys use forward slashes so lookups match plan paths on Windows.
+      files[
+        path
+          .slice(root.length + 1)
+          .split(sep)
+          .join('/')
+      ] = await readFile(path, 'utf8');
     }
   }
   return files;
