@@ -8,6 +8,7 @@ import { runWorkspace, workspaceHelp } from './workspace.js';
 const managementCommands = new Set(['add', 'doctor', 'env', 'upgrade']);
 const actions = [
   { value: 'app', label: 'Add an application', args: ['add', 'app'] },
+  { value: 'package', label: 'Add a shared package', args: ['add', 'package'] },
   {
     value: 'auth',
     label: 'Add Clerk authentication',

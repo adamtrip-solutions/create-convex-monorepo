@@ -34,7 +34,7 @@ Run the same CLI from the workspace root or any subdirectory. No global or proje
 npx create-convex-monorepo@latest
 ```
 
-With a terminal attached, it detects `convex-monorepo.json` and offers a menu to add an app, add Clerk, check the workspace, sync frontend URLs, update dependencies, or check for updates. Without a terminal, it prints management help without changing files.
+With a terminal attached, it detects `convex-monorepo.json` and offers a menu to add an app, add a shared package, add Clerk, check the workspace, sync frontend URLs, update dependencies, or check for updates. Without a terminal, it prints management help without changing files.
 
 You can also run each command directly:
 
@@ -42,6 +42,8 @@ You can also run each command directly:
 npx create-convex-monorepo@latest add app admin --framework vite --example none --dry-run
 npx create-convex-monorepo@latest add app admin --framework vite --example none --install
 npx create-convex-monorepo@latest add app mobile --framework expo --no-install
+npx create-convex-monorepo@latest add package shared --dry-run
+npx create-convex-monorepo@latest add package shared --no-install
 npx create-convex-monorepo@latest add auth clerk --dry-run
 npx create-convex-monorepo@latest add auth clerk --install
 npx create-convex-monorepo@latest env sync --app mobile
@@ -69,19 +71,22 @@ npx create-convex-monorepo@latest create doctor --apps vite --no-install --no-gi
 | Command           | Behavior                                                                                                                                                  |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `add app`         | Creates an app using the existing backend and auth, updates root scripts and metadata, and links the public backend URL when configured.                  |
+| `add package`     | Creates a blank shared TypeScript package under `packages/<name>` and records it in metadata.                                                             |
 | `add auth clerk`  | Adds Clerk to generated app providers and the backend auth configuration. Customized files that need replacement cause a conflict.                        |
 | `env sync`        | Links only the public backend URL, using each framework's variable prefix. Supports `--app` and `--dry-run`.                                              |
 | `doctor`          | Checks workspace configuration, installed dependencies, environment settings, and shared API types. Supports `--json`; errors exit with status 1.         |
 | `upgrade`         | Updates existing exact dependency pins and the pnpm version to the running CLI's tested baseline. Keeps newer pins and rejects non-exact customizations.  |
 | `upgrade --check` | Compares generator versions with npm's latest stable release and reports the running CLI's tested dependency baseline through `--json`. Makes no changes. |
 
-The add and upgrade commands support `--dry-run`, `--install`, `--no-install`, and `--yes`. Without prompts, add app requires the app name and framework. Dependency installation defaults to off. `--yes` enables installation unless `--no-install` is set, and never overrides conflicts. A dry run shows file paths without printing environment values or installing dependencies.
+The `add app`, `add package`, `add auth`, and `upgrade` commands support `--dry-run`, `--install`, `--no-install`, and `--yes`. Without prompts, provide the app name and framework for `add app`, or the package name for `add package`. Dependency installation defaults to off. `--yes` enables installation unless `--no-install` is set, and never overrides conflicts. A dry run shows file paths without printing environment values or installing dependencies.
 
-Existing workspaces with metadata version 1, including projects created with 0.2.1, are supported. Preserve `convex-monorepo.json`; the CLI reads it rather than guessing which directories belong to your project. Per-app starter choices are recorded there when they differ from the original selection.
+Existing workspaces with metadata version 1, including projects created with 0.2.1, are supported. Preserve `convex-monorepo.json`; the CLI reads it rather than guessing which directories belong to your project. Per-app starter choices are recorded there when they differ from the original selection. Shared packages added by the CLI are recorded in the optional `packages` list as `{ "name": "shared" }` entries.
 
 ### Changes and conflicts
 
-Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app directories, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend.
+Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app or package paths, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend.
+
+Package addition creates plain TypeScript source with shared lint and typecheck settings. Add `"@<scope>/<name>": "workspace:*"` to each consuming app's dependencies, then run `pnpm install`. Next configs are updated when they match the generated config apart from the `transpilePackages` string list, so repeated `add package` calls keep appending. A missing config or any other customization produces a note with the required manual edit. Other frameworks need no config change.
 
 Auth addition supports `none` to Clerk. It preserves backend schemas, functions, generated internals, unrelated package fields, and existing README content. Follow the new `CLERK_SETUP.md` for account configuration. Existing public messages do not acquire an owner automatically and will not appear in authenticated accounts. Review stored-data migration separately. Already configured Clerk is a no-op; replacing an auth provider is not supported.
 

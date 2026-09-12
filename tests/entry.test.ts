@@ -70,6 +70,7 @@ describe('create binary dispatch', () => {
   it.each([
     ['add', 'app', 'admin', '--framework', 'vite', '--dry-run'],
     ['add', 'auth', 'clerk', '--no-install'],
+    ['add', 'package', 'shared', '--no-install'],
     ['doctor', '--json'],
     ['env', 'sync', '--app', 'web'],
     ['upgrade', '--check', '--json'],
@@ -175,6 +176,7 @@ describe('workspace auto-detection', () => {
 
   it.each([
     ['app', ['add', 'app']],
+    ['package', ['add', 'package']],
     ['auth', ['add', 'auth', 'clerk']],
     ['doctor', ['doctor']],
     ['env', ['env', 'sync']],
@@ -191,6 +193,7 @@ describe('workspace auto-detection', () => {
         expect.objectContaining({
           options: expect.arrayContaining([
             { value: 'app', label: expect.any(String) },
+            { value: 'package', label: 'Add a shared package' },
             { value: 'auth', label: expect.any(String) },
             { value: 'doctor', label: expect.any(String) },
             { value: 'env', label: expect.any(String) },
