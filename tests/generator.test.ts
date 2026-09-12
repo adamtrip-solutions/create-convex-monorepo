@@ -15,6 +15,7 @@ interface Golden {
   label: string;
   apps: string;
   auth: string;
+  example?: string;
   expected: [string, string, string, string | null][];
 }
 const scenarios: Golden[] = JSON.parse(
@@ -51,6 +52,7 @@ describe('generated project golden matrix', () => {
           name: 'golden-app',
           apps: scenario.apps,
           auth: scenario.auth,
+          example: scenario.example ?? 'messages',
           install: false,
           git: false,
         },
@@ -60,6 +62,28 @@ describe('generated project golden matrix', () => {
       const json = async <T>(path: string): Promise<T> =>
         JSON.parse(await read(path));
       const manifest = await json<PackageManifest>('package.json');
+      if (scenario.auth === 'convex-auth') {
+        expect(manifest.scripts?.['convex:auth-keys']).toBe(
+          'node scripts/convex-auth-keys.mjs',
+        );
+        expect(await read('scripts/convex-auth-keys.mjs')).toBe(
+          await readFile(
+            new URL('../assets/setup/convex-auth-keys.mjs', import.meta.url),
+            'utf8',
+          ),
+        );
+        expect(await read('README.md')).toContain(
+          'pnpm convex:auth-keys --prod',
+        );
+        expect(
+          await read('packages/backend/.env.convex-auth.example'),
+        ).toContain('pnpm convex:auth-keys');
+      } else {
+        expect(manifest.scripts).not.toHaveProperty('convex:auth-keys');
+        expect(await readdir(join(root, 'scripts'))).not.toContain(
+          'convex-auth-keys.mjs',
+        );
+      }
       const config = await json<ProjectOptions & { generator: string }>(
         'convex-monorepo.json',
       );
@@ -100,7 +124,15 @@ describe('generated project golden matrix', () => {
         },
         './dataModel': { types: './convex/_generated/dataModel.d.ts' },
       });
-      expect(backend.dependencies).toEqual({ convex: versions.convex });
+      expect(backend.dependencies).toEqual({
+        convex: versions.convex,
+        ...(scenario.auth === 'convex-auth'
+          ? {
+              '@convex-dev/auth': versions.convexAuth,
+              '@auth/core': versions.authCore,
+            }
+          : {}),
+      });
       expect(backend.scripts).toMatchObject({
         dev: 'convex dev',
         codegen: 'convex codegen',
@@ -108,8 +140,16 @@ describe('generated project golden matrix', () => {
       expect(backend.scripts?.build).not.toMatch(/deploy|codegen/);
       const api = await read('packages/backend/convex/_generated/api.d.ts');
       expect(api).toContain('ApiFromModules');
-      expect(api).toContain('messages: typeof messages');
-      expect(api).toContain('access: typeof access');
+      if (scenario.example === 'none') {
+        expect(api).not.toMatch(/messages|access\.js/);
+      } else {
+        expect(api).toContain('messages: typeof messages');
+        expect(api).toContain('access: typeof access');
+      }
+      if (scenario.auth === 'convex-auth') {
+        expect(api).toContain('../auth.js');
+        expect(api).toContain('../http.js');
+      }
       expect(await read('packages/backend/convex/_generated/api.js')).toContain(
         'anyApi',
       );
@@ -122,24 +162,54 @@ describe('generated project golden matrix', () => {
       expect(
         await read('packages/backend/convex/_generated/server.js'),
       ).toContain('queryGeneric');
-      const messages = await read('packages/backend/convex/messages.ts');
-      expect(messages).toContain('getOwner(ctx)');
-      expect(messages).toContain("withIndex('by_owner'");
-      expect(messages).toContain("q.eq('owner', owner)");
-      expect(messages).toContain('take(50)');
-      const access = await read('packages/backend/convex/access.ts');
-      if (scenario.auth === 'clerk') {
-        expect(access).toContain('ctx.auth.getUserIdentity()');
-        expect(access).toMatch(/if \(!identity\) throw/);
-        expect(access).toContain('identity.tokenIdentifier');
-        expect(await read('packages/backend/convex/auth.config.ts')).toContain(
-          "applicationID: 'convex'",
+      if (scenario.example !== 'none') {
+        const messages = await read('packages/backend/convex/messages.ts');
+        expect(messages).toContain('getOwner(ctx)');
+        expect(messages).toContain("withIndex('by_owner'");
+        expect(messages).toContain("q.eq('owner', owner)");
+        expect(messages).toContain('take(50)');
+        const access = await read('packages/backend/convex/access.ts');
+        if (scenario.auth === 'clerk') {
+          expect(access).toContain('ctx.auth.getUserIdentity()');
+          expect(access).toMatch(/if \(!identity\) throw/);
+          expect(access).toContain('identity.tokenIdentifier');
+          expect(
+            await read('packages/backend/convex/auth.config.ts'),
+          ).toContain("applicationID: 'convex'");
+        } else if (scenario.auth === 'convex-auth') {
+          expect(access).toContain('getAuthUserId(ctx)');
+          expect(access).toContain('Promise<string>');
+          expect(access).toContain('Sign in to access messages.');
+          expect(access).not.toContain('tokenIdentifier');
+        } else {
+          expect(access).toContain('return undefined');
+          expect(
+            await readdir(join(root, 'packages/backend/convex')),
+          ).not.toContain('auth.config.ts');
+        }
+      }
+      if (scenario.auth === 'convex-auth') {
+        expect(await read('packages/backend/convex/schema.ts')).toContain(
+          '...authTables',
         );
-      } else {
-        expect(access).toContain('return undefined');
-        expect(
-          await readdir(join(root, 'packages/backend/convex')),
-        ).not.toContain('auth.config.ts');
+        expect(await read('packages/backend/convex/auth.ts')).toContain(
+          '@convex-dev/auth/providers/Password',
+        );
+        expect(await read('packages/backend/convex/auth.ts')).toContain(
+          'providers: [Password]',
+        );
+        expect(await read('packages/backend/convex/http.ts')).toContain(
+          'auth.addHttpRoutes(http)',
+        );
+        const authConfig = await read('packages/backend/convex/auth.config.ts');
+        expect(authConfig).toContain('process.env.CONVEX_SITE_URL');
+        expect(authConfig).toContain("applicationID: 'convex'");
+        const deploymentEnv = await read(
+          'packages/backend/.env.convex-auth.example',
+        );
+        for (const variable of ['JWT_PRIVATE_KEY', 'JWKS', 'SITE_URL'])
+          expect(deploymentEnv).toContain(variable);
+        expect(await read('README.md')).toContain('## Convex Auth setup');
       }
       for (const [name, framework, prefix, sdk] of scenario.expected) {
         const dir = `apps/${name}`;
@@ -171,18 +241,74 @@ describe('generated project golden matrix', () => {
         );
         const providers = await read(`${dir}/src/providers.tsx`);
         expect(providers).toContain(`${prefix}_CONVEX_URL`);
-        const demo = await read(`${dir}/src/messages.tsx`);
-        expect(demo).toContain("from '@golden-app/backend/api'");
-        expect(demo).toContain('useQuery(api.messages.list, {})');
-        expect(demo).toContain('useMutation(api.messages.send)');
-        const contract = await read(`${dir}/src/convex-api.type-test.ts`);
-        expect(contract).toContain('IsAny<typeof api>');
-        expect(contract).toContain("Doc<'messages'>[]");
-        expect(contract).toContain(
-          'FunctionArgs<typeof api.messages.send>, { body: string }',
-        );
-        expect(contract).toContain('@ts-expect-error');
-        if (sdk) {
+        if (scenario.example !== 'none') {
+          const demo = await read(`${dir}/src/messages.tsx`);
+          expect(demo).toContain("from '@golden-app/backend/api'");
+          expect(demo).toContain('useQuery(api.messages.list, {})');
+          expect(demo).toContain('useMutation(api.messages.send)');
+          const contract = await read(`${dir}/src/convex-api.type-test.ts`);
+          expect(contract).toContain('IsAny<typeof api>');
+          expect(contract).toContain("Doc<'messages'>[]");
+          expect(contract).toContain(
+            'FunctionArgs<typeof api.messages.send>, { body: string }',
+          );
+          expect(contract).toContain('@ts-expect-error');
+        } else {
+          expect(await readdir(join(root, dir, 'src'))).not.toContain(
+            'messages.tsx',
+          );
+          expect(await readdir(join(root, dir, 'src'))).not.toContain(
+            'convex-api.type-test.ts',
+          );
+        }
+        if (scenario.auth === 'convex-auth') {
+          expect(app.dependencies).toHaveProperty(
+            '@convex-dev/auth',
+            versions.convexAuth,
+          );
+          expect(providers).toContain("from '@convex-dev/auth/react'");
+          expect(providers).toContain('<ConvexAuthProvider');
+          expect(providers).toContain('<Authenticated>');
+          expect(providers).toContain('<AuthLoading>');
+          expect(providers).toMatch(/<Unauthenticated>\s*<AuthControls \/>/);
+          expect(providers).not.toContain('CLERK_');
+          const files = await readdir(join(root, dir));
+          expect(files).not.toContain('.env.clerk.example');
+          expect(await read(`${dir}/.env.example`)).not.toMatch(
+            /JWT_PRIVATE_KEY|JWKS|CLERK_/,
+          );
+          const controls = await read(`${dir}/src/auth-controls.tsx`);
+          expect(controls).toContain('useAuthActions');
+          expect(controls).toContain("signIn('password'");
+          expect(controls).toContain('signOut');
+          expect(controls).toContain('signUp');
+          expect(controls).toContain('signIn');
+          expect(controls).not.toContain('alert(');
+          if (framework === 'expo') {
+            expect(app.dependencies).toHaveProperty(
+              'expo-secure-store',
+              '57.0.3',
+            );
+            expect(controls).toContain('TextInput');
+            expect(controls).toContain('secureTextEntry');
+            expect(providers).toContain('expo-secure-store');
+            expect(providers).toContain('storage={');
+            expect(providers).toContain('getItemAsync');
+            expect(providers).toContain('setItemAsync');
+            expect(providers).toContain('deleteItemAsync');
+            expect(controls).not.toContain('scheme:');
+          } else {
+            expect(controls).toContain('<form');
+            expect(controls).toContain('type="email"');
+            expect(controls).toContain('type="password"');
+          }
+          if (framework === 'next') {
+            expect(await readdir(join(root, dir, 'src'))).not.toContain(
+              'proxy.ts',
+            );
+            expect(providers).not.toContain('@convex-dev/auth/nextjs');
+          }
+        } else if (sdk) {
           expect(app.dependencies).toHaveProperty(sdk);
           expect(providers).toContain('ConvexProviderWithClerk');
           expect(providers).toContain('<Authenticated>');
@@ -230,7 +356,7 @@ describe('generated project golden matrix', () => {
           expect(await read(`${dir}/index.ts`)).toContain(
             'registerRootComponent(App)',
           );
-          if (sdk)
+          if (scenario.auth === 'clerk')
             expect(providers).toContain("from '@clerk/expo/token-cache'");
         } else {
           expect(await read(`${dir}/src/main.tsx`)).toContain(

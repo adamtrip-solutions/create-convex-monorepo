@@ -43,8 +43,10 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
   if (example !== 'none' && example !== 'messages')
     throw new Error(`Unknown example "${example}". Choose none or messages.`);
   const auth = raw.auth ?? 'none';
-  if (auth !== 'none' && auth !== 'clerk')
-    throw new Error(`Unknown auth provider "${auth}". Choose none or clerk.`);
+  if (auth !== 'none' && auth !== 'clerk' && auth !== 'convex-auth')
+    throw new Error(
+      `Unknown auth provider "${auth}". Choose none, clerk, or convex-auth.`,
+    );
   const used = new Set<string>();
   const input = raw.apps ?? 'next';
   const entries =

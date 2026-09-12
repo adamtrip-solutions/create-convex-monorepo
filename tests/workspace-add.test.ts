@@ -72,43 +72,50 @@ const frameworks: Framework[] = ['next', 'vite', 'tanstack-start', 'expo'];
 describe.each<Example>(['none', 'messages'])(
   'add app with %s content',
   (example) => {
-    describe.each<Auth>(['none', 'clerk'])('and %s auth', (auth) => {
-      it.each(frameworks)(
-        'adds %s without modifying the backend or existing app',
-        async (framework) => {
-          const workspace = await fixture(example, auth);
-          const before = await snapshot(workspace.root);
-          const plan = await planAddApp(workspace, {
-            name: 'added',
-            framework,
-          });
-          expect(await snapshot(workspace.root)).toEqual(before);
-          await applyPlan(plan, { dryRun: true });
-          expect(await snapshot(workspace.root)).toEqual(before);
-          await applyPlan(plan);
-          const after = await snapshot(workspace.root);
-          for (const [path, contents] of Object.entries(before)) {
-            if (!['package.json', 'convex-monorepo.json'].includes(path))
-              expect(after[path], path).toBe(contents);
-          }
-          const pkg = JSON.parse(after['apps/added/package.json']!);
-          expect(pkg.name).toBe('@sample/added');
-          const root = JSON.parse(after['package.json']!);
-          expect(root.scripts['dev:added']).toBe(
-            'pnpm --filter @sample/added dev',
-          );
-          expect(root.scripts.dev).toContain('--concurrency=4');
-          expect(after['apps/added/src/auth-controls.tsx']).toContain(
-            auth === 'clerk' ? '@clerk/' : 'return null',
-          );
-          const reloaded = await loadWorkspace(workspace.root);
-          expect(reloaded.config.apps).toHaveLength(2);
-          await expect(
-            planAddApp(reloaded, { name: 'added', framework }),
-          ).rejects.toThrow('already exists');
-        },
-      );
-    });
+    describe.each<Auth>(['none', 'clerk', 'convex-auth'])(
+      'and %s auth',
+      (auth) => {
+        it.each(frameworks)(
+          'adds %s without modifying the backend or existing app',
+          async (framework) => {
+            const workspace = await fixture(example, auth);
+            const before = await snapshot(workspace.root);
+            const plan = await planAddApp(workspace, {
+              name: 'added',
+              framework,
+            });
+            expect(await snapshot(workspace.root)).toEqual(before);
+            await applyPlan(plan, { dryRun: true });
+            expect(await snapshot(workspace.root)).toEqual(before);
+            await applyPlan(plan);
+            const after = await snapshot(workspace.root);
+            for (const [path, contents] of Object.entries(before)) {
+              if (!['package.json', 'convex-monorepo.json'].includes(path))
+                expect(after[path], path).toBe(contents);
+            }
+            const pkg = JSON.parse(after['apps/added/package.json']!);
+            expect(pkg.name).toBe('@sample/added');
+            const root = JSON.parse(after['package.json']!);
+            expect(root.scripts['dev:added']).toBe(
+              'pnpm --filter @sample/added dev',
+            );
+            expect(root.scripts.dev).toContain('--concurrency=4');
+            expect(after['apps/added/src/auth-controls.tsx']).toContain(
+              auth === 'clerk'
+                ? '@clerk/'
+                : auth === 'convex-auth'
+                  ? '@convex-dev/auth/react'
+                  : 'return null',
+            );
+            const reloaded = await loadWorkspace(workspace.root);
+            expect(reloaded.config.apps).toHaveLength(2);
+            await expect(
+              planAddApp(reloaded, { name: 'added', framework }),
+            ).rejects.toThrow('already exists');
+          },
+        );
+      },
+    );
   },
 );
 
@@ -532,7 +539,7 @@ it('rejects substantive changes in CRLF auth code without writes', async () => {
 
 describe('add package', () => {
   describe.each<Example>(['none', 'messages'])('%s content', (example) => {
-    it.each<Auth>(['none', 'clerk'])(
+    it.each<Auth>(['none', 'clerk', 'convex-auth'])(
       'adds formatted source with %s auth and preserves unrelated files',
       async (auth) => {
         const workspace = await fixture(example, auth);
@@ -981,3 +988,39 @@ it('rejects adding an app with an existing shared package name', async () => {
   );
   expect(await snapshot(workspace.root)).toEqual(before);
 });
+
+describe.each(['missing', 'customized'])(
+  'add app with %s Convex Auth files',
+  (state) => {
+    it.each(['auth.config.ts', 'auth.ts', 'http.ts'])(
+      'rejects %s when adding a blank app without writes',
+      async (name) => {
+        const workspace = await fixture('none', 'convex-auth');
+        const path = `packages/backend/convex/${name}`;
+        if (state === 'missing') await rm(join(workspace.root, path));
+        else
+          await writeFile(
+            join(workspace.root, path),
+            'export const customized = true;\n',
+          );
+        const before = await snapshot(workspace.root);
+        await expect(
+          planAddApp(workspace, { name: 'added', framework: 'vite' }),
+        ).rejects.toThrow(path);
+        expect(await snapshot(workspace.root)).toEqual(before);
+      },
+    );
+  },
+);
+
+it.each(['none', 'messages'] as const)(
+  'refuses to replace Convex Auth with Clerk in a %s workspace',
+  async (example) => {
+    const workspace = await fixture(example, 'convex-auth');
+    const before = await snapshot(workspace.root);
+    await expect(planAddAuth(workspace, 'clerk')).rejects.toThrow(
+      'Switching authentication providers requires a manual migration',
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);

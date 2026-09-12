@@ -81,6 +81,12 @@ afterEach(() => {
 });
 
 describe('workspace argument parsing', () => {
+  it('keeps Convex Auth installation unsupported and names Clerk', () => {
+    expect(() => parseWorkspaceCommand(['add', 'auth', 'convex-auth'])).toThrow(
+      'Only Clerk authentication is supported. Use add auth clerk.',
+    );
+  });
+
   it.each([
     ['doctor', '--dry-run'],
     ['doctor', '--app', 'web'],

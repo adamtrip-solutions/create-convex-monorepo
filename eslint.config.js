@@ -3,7 +3,9 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
-      'assets/**',
+      'assets/**/*',
+      '!assets/setup/',
+      '!assets/setup/*.mjs',
       'node_modules/**',
       'coverage/**',
       'tests/.generated/**',

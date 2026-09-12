@@ -2,6 +2,8 @@ node_modules
 dist
 assets/backend/convex/_generated
 assets/backend-blank/convex/_generated
+assets/backend-convex-auth/convex/_generated
+assets/backend-blank-convex-auth/convex/_generated
 .e2e
 pnpm-lock.yaml
 tests/.generated

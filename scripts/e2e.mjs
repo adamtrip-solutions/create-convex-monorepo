@@ -17,7 +17,7 @@ const project = await generateProject(
   {
     name: 'fixture',
     apps: workspaceCommands ? selections.slice(0, 1) : apps,
-    auth: workspaceCommands ? 'none' : auth,
+    auth: workspaceCommands && auth === 'clerk' ? 'none' : auth,
     example,
   },
   { cwd: directory },
@@ -146,8 +146,7 @@ try {
       );
     }
     if (example === 'none') {
-      // Test-only contract: keep empty-API assertions out of the user's starter
-      // so adding their first function does not break a generated test.
+      // Keep starter assertions here so adding a user's first function does not break their project.
       await writeFile(
         join(project, 'apps', app.name, 'src/blank.type-test.ts'),
         await format(
@@ -158,10 +157,19 @@ type Assert<T extends true> = T;
 type IsAny<T> = 0 extends (1 & T) ? true : false;
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 export type ApiIsTyped = Assert<Equal<IsAny<typeof api>, false>>;
-export type ApiIsEmpty = Assert<Equal<keyof typeof api, never>>;
-export type TablesAreEmpty = Assert<Equal<TableNames, never>>;
+${
+  auth === 'convex-auth'
+    ? `export type AuthApiExists = Assert<Equal<'auth' extends keyof typeof api ? true : false, true>>;
+export type AuthUsersExist = Assert<Equal<'users' extends TableNames ? true : false, true>>;
+export type NoMessages = Assert<Equal<'messages' extends TableNames ? true : false, false>>;
+// @ts-expect-error No messages example has been defined.
+export type MissingMessages = typeof api.messages;`
+    : `export type ApiIsEmpty = Assert<Equal<keyof typeof api, never>>;
+export type TablesAreEmpty = Assert<Equal<TableNames, never>>;`
+}
+
 export type ModelIsTyped = Assert<Equal<IsAny<DataModel>, false>>;
-// @ts-expect-error No functions have been defined.
+// @ts-expect-error This module has not been defined.
 export type MissingModule = typeof api.notAModule;
 `,
           { parser: 'typescript', singleQuote: true, trailingComma: 'all' },

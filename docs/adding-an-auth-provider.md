@@ -12,6 +12,8 @@ An auth adapter runs after framework generation and owns authentication wiring a
 
 The none adapter demonstrates file ownership. The Clerk adapter demonstrates a binding map that selects SDKs by framework. Keep provider-specific framework details in the adapter; do not introduce auth branches into every app template.
 
+Convex Auth is the second adapter; its independent provider writer lives in `src/integrations/auth/convex-auth/providers.ts`.
+
 `writeProviders` currently implements no-auth and Clerk-compatible provider wiring. A provider with a different session protocol should supply its own provider module or extend that helper with a concrete contract. Do not force an unrelated SDK through Clerk's `useAuth` shape.
 
 ## Required behavior
@@ -20,7 +22,7 @@ Wait for Convex authentication before mounting protected queries, handle loading
 
 Document the identity key used for ownership. Switching providers in a running deployment can change that key and requires a data migration; v0.1 does not implement auth replacement in existing projects.
 
-For native apps, use supported secure token storage and a real redirect flow. State whether the example supports additional verification, MFA, and session tasks. Avoid presenting a successful Metro export as proof of a working identity-provider flow.
+For native apps, use supported secure token storage and implement redirects when the sign-in method requires them. Password-only Convex Auth does not use redirects. State whether the example supports additional verification, MFA, and session tasks. Avoid presenting a successful Metro export as proof of a working identity-provider flow.
 
 ## Tests and documentation
 

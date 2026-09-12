@@ -69,6 +69,13 @@ jobs:
             auth: clerk
           - apps: vite,tanstack-start
             auth: clerk
+          - apps: next,expo
+            auth: convex-auth
+          - apps: vite,tanstack-start
+            auth: convex-auth
+          - apps: next,vite,tanstack-start,expo
+            auth: convex-auth
+            example: none
           - apps: next,vite,tanstack-start,expo
             auth: none
             example: none

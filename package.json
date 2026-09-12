@@ -50,6 +50,8 @@
     "prettier": "3.8.3"
   },
   "devDependencies": {
+    "@convex-dev/auth": "0.0.95",
+    "@auth/core": "0.41.1",
     "@types/cross-spawn": "6.0.6",
     "@types/node": "24.12.2",
     "convex": "1.45.0",

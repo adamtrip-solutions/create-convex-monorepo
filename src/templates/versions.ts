@@ -1,6 +1,8 @@
 export const versions = {
   prettier: '3.8.3',
   convex: '1.45.0',
+  convexAuth: '0.0.95',
+  authCore: '0.41.1',
   react: '19.2.3',
   typescript: '6.0.3',
   pnpm: '10.34.5',

@@ -84,5 +84,35 @@
     "expected": [
       ["web", "tanstack-start", "VITE", "@clerk/tanstack-react-start"]
     ]
+  },
+  {
+    "label": "Next + Convex Auth",
+    "apps": "next",
+    "auth": "convex-auth",
+    "expected": [["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"]]
+  },
+  {
+    "label": "Expo + Convex Auth",
+    "apps": "expo",
+    "auth": "convex-auth",
+    "expected": [["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]]
+  },
+  {
+    "label": "All four + Convex Auth",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Vite + Convex Auth (blank)",
+    "apps": "vite",
+    "auth": "convex-auth",
+    "example": "none",
+    "expected": [["web", "vite", "VITE", "@convex-dev/auth"]]
   }
 ]

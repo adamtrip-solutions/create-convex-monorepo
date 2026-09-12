@@ -87,6 +87,14 @@ describe('options', () => {
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
+  it.each(['none', 'clerk', 'convex-auth'])(
+    'accepts %s auth through CLI options',
+    (auth) => {
+      expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(
+        auth,
+      );
+    },
+  );
   it('selects framework adapters', () =>
     expect(selectTemplate('next').id).toBe('next'));
   it('parses flag negation', () =>
