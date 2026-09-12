@@ -8,7 +8,7 @@ import { applyPlan } from '../workspace/changes.js';
 import { planAddApp, planAddAuth, planAddPackage } from '../workspace/add.js';
 import { planEnvSync } from '../workspace/env.js';
 import { doctor } from '../workspace/doctor.js';
-import { checkUpgrade } from '../workspace/upgrade.js';
+import { checkUpgrade, planUpgrade } from '../workspace/upgrade.js';
 
 export const workspaceHelp = `convex-monorepo <command> [options]
 
@@ -22,13 +22,14 @@ Manage an existing Convex monorepo from its root or any subdirectory.
   add auth [clerk]          Add Clerk authentication
   doctor [--json]           Check workspace configuration and setup
   env sync [--app name]     Copy public Convex URLs to frontend env files
+  upgrade                  Update exact dependency pins to the tested baseline
   upgrade --check [--json]  Check the latest stable generator version
 
-Add options:
+Add and upgrade options:
   --install / --no-install  Install dependencies after applying changes
   --yes, -y                Skip prompts and install unless --no-install
 
-Add and env sync options:
+Add, upgrade, and env sync options:
   --dry-run                Show planned paths without writing or installing
 
   --help, -h               Show usage
@@ -61,6 +62,7 @@ export interface WorkspaceCommand {
   yes: boolean;
   dryRun: boolean;
   json: boolean;
+  check: boolean;
 }
 
 export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
@@ -122,7 +124,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
   } else if (first === 'upgrade') {
     command = 'upgrade';
     maximum = 1;
-    allowed = ['check', 'json'];
+    allowed = values.check ? ['check', 'json'] : [...addFlags, 'check'];
   } else
     throw new Error(
       `Unknown command: ${positionals.join(' ')}. Run convex-monorepo --help.`,
@@ -156,10 +158,6 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     throw new Error(
       'Only Clerk authentication is supported. Use add auth clerk.',
     );
-  if (command === 'upgrade' && !values.check && !values.help && !values.version)
-    throw new Error(
-      'Use convex-monorepo upgrade --check to check versions. Automatic upgrades are not supported.',
-    );
   return {
     command,
     help: !!values.help || (command === 'help' && !values.version),
@@ -167,6 +165,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     yes: !!values.yes,
     dryRun: !!values['dry-run'],
     json: !!values.json,
+    check: !!values.check,
     ...((command === 'add-app' || command === 'add-package') &&
     third !== undefined
       ? { name: third }
@@ -287,7 +286,7 @@ export async function runWorkspace(
       process.exitCode = 1;
     return;
   }
-  if (options.command === 'upgrade') {
+  if (options.command === 'upgrade' && options.check) {
     const result = await checkUpgrade(workspace, signal ? { signal } : {});
     if (options.json) console.log(JSON.stringify(result, null, 2));
     else {
@@ -307,22 +306,24 @@ export async function runWorkspace(
     return;
   }
   const plan =
-    options.command === 'env-sync'
-      ? await planEnvSync(
-          workspace,
-          options.app !== undefined ? { app: options.app } : {},
-        )
-      : options.command === 'add-app'
-        ? await planAddApp(workspace, {
-            name: options.name!,
-            framework: options.framework!,
-            ...(options.example !== undefined
-              ? { example: options.example }
-              : {}),
-          })
-        : options.command === 'add-package'
-          ? await planAddPackage(workspace, { name: options.name! })
-          : await planAddAuth(workspace, 'clerk');
+    options.command === 'upgrade'
+      ? await planUpgrade(workspace)
+      : options.command === 'env-sync'
+        ? await planEnvSync(
+            workspace,
+            options.app !== undefined ? { app: options.app } : {},
+          )
+        : options.command === 'add-app'
+          ? await planAddApp(workspace, {
+              name: options.name!,
+              framework: options.framework!,
+              ...(options.example !== undefined
+                ? { example: options.example }
+                : {}),
+            })
+          : options.command === 'add-package'
+            ? await planAddPackage(workspace, { name: options.name! })
+            : await planAddAuth(workspace, 'clerk');
   console.log(
     options.dryRun ? 'Dry run. Planned changes:' : 'Planned changes:',
   );

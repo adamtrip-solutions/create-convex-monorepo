@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   env: vi.fn(),
   doctor: vi.fn(),
   upgrade: vi.fn(),
+  planUpgrade: vi.fn(),
   install: vi.fn(),
   select: vi.fn(),
   text: vi.fn(),
@@ -29,7 +30,10 @@ vi.mock('../src/workspace/add.js', () => ({
 }));
 vi.mock('../src/workspace/env.js', () => ({ planEnvSync: mocks.env }));
 vi.mock('../src/workspace/doctor.js', () => ({ doctor: mocks.doctor }));
-vi.mock('../src/workspace/upgrade.js', () => ({ checkUpgrade: mocks.upgrade }));
+vi.mock('../src/workspace/upgrade.js', () => ({
+  checkUpgrade: mocks.upgrade,
+  planUpgrade: mocks.planUpgrade,
+}));
 vi.mock('../src/package-manager/index.js', () => ({
   pnpm: { install: mocks.install },
 }));
@@ -67,6 +71,7 @@ beforeEach(() => {
   mocks.package.mockResolvedValue(plan);
   mocks.auth.mockResolvedValue(plan);
   mocks.env.mockResolvedValue(plan);
+  mocks.planUpgrade.mockResolvedValue(plan);
   mocks.apply.mockResolvedValue(undefined);
   mocks.install.mockResolvedValue(undefined);
 });
@@ -91,10 +96,26 @@ describe('workspace argument parsing', () => {
     ['add', 'auth', 'other'],
     ['doctor', 'extra'],
     ['add', 'other'],
-    ['upgrade'],
+    ['upgrade', '--check', '--dry-run'],
+    ['upgrade', '--check', '--install'],
+    ['upgrade', '--check', '--no-install'],
     ['upgrade', '--json'],
   ])('rejects invalid arguments %j', (...args) => {
     expect(() => parseWorkspaceCommand(args)).toThrow();
+  });
+
+  it.each([
+    [],
+    ['--dry-run'],
+    ['--install'],
+    ['--yes'],
+    ['-y'],
+    ['--yes', '--no-install'],
+  ])('accepts upgrade options %j', (...flags) => {
+    expect(parseWorkspaceCommand(['upgrade', ...flags])).toMatchObject({
+      command: 'upgrade',
+      check: false,
+    });
   });
 
   it('parses an explicit application and honors no-install with yes', () => {
@@ -422,5 +443,78 @@ describe('workspace command routing', () => {
       runWorkspace(['env', 'sync'], '1.2.3', controller.signal),
     ).rejects.toThrow('Interrupted');
     expect(mocks.load).not.toHaveBeenCalled();
+  });
+});
+
+describe('upgrade mutations', () => {
+  it.each([['--install'], ['--yes'], ['-y']])(
+    'applies and installs with %j',
+    async (...flags) => {
+      await runWorkspace(['upgrade', ...flags], '1.2.3');
+      expect(mocks.planUpgrade).toHaveBeenCalledExactlyOnceWith(workspace);
+      expect(mocks.upgrade).not.toHaveBeenCalled();
+      expect(mocks.apply).toHaveBeenCalledWith(plan, {});
+      expect(mocks.install).toHaveBeenCalledWith('/workspace', undefined);
+      expect(mocks.apply.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.install.mock.invocationCallOrder[0]!,
+      );
+    },
+  );
+  it.each([[], ['--no-install'], ['--yes', '--no-install']])(
+    'does not install with %j',
+    async (...flags) => {
+      await runWorkspace(['upgrade', ...flags], '1.2.3');
+      expect(mocks.apply).toHaveBeenCalledWith(plan, {});
+      expect(mocks.install).not.toHaveBeenCalled();
+    },
+  );
+  it('preflights dry runs without printing file contents or installing', async () => {
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    await runWorkspace(['upgrade', '--dry-run', '--install'], '1.2.3');
+    expect(mocks.apply).toHaveBeenCalledWith(plan, { dryRun: true });
+    expect(mocks.install).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    const output = vi.mocked(console.log).mock.calls.flat().join('\n');
+    expect(output).toContain('create apps/admin/.env.local');
+    expect(output).not.toContain('must-not-print');
+  });
+  it('prints a no-op and does not install', async () => {
+    mocks.planUpgrade.mockResolvedValueOnce({ ...plan, changes: [] });
+    await runWorkspace(['upgrade', '--install'], '1.2.3');
+    expect(console.log).toHaveBeenCalledWith('No changes needed.');
+    expect(mocks.install).not.toHaveBeenCalled();
+  });
+  it.each([true, false])(
+    'honors the interactive install choice %s',
+    async (install) => {
+      process.stdin.isTTY = true;
+      process.stdout.isTTY = true;
+      mocks.confirm.mockResolvedValueOnce(install);
+      await runWorkspace(['upgrade'], '1.2.3');
+      expect(mocks.confirm).toHaveBeenCalledOnce();
+      expect(mocks.apply).toHaveBeenCalledWith(plan, {});
+      expect(mocks.install).toHaveBeenCalledTimes(install ? 1 : 0);
+    },
+  );
+  it('cancels the install prompt without applying', async () => {
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    mocks.confirm.mockResolvedValueOnce(Symbol('cancel'));
+    await expect(runWorkspace(['upgrade'], '1.2.3')).rejects.toThrow(
+      'cancelled',
+    );
+    expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.install).not.toHaveBeenCalled();
+  });
+  it('does not bypass planner conflicts with yes', async () => {
+    mocks.planUpgrade.mockRejectedValueOnce(
+      new Error('Conflicting dependency pins'),
+    );
+    await expect(runWorkspace(['upgrade', '--yes'], '1.2.3')).rejects.toThrow(
+      'Conflicting',
+    );
+    expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.install).not.toHaveBeenCalled();
   });
 });

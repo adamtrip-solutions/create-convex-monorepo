@@ -1,8 +1,7 @@
-import { mkdtemp, readdir, readFile, rm, lstat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { generateProject, normalizeOptions } from '../generator/index.js';
-import type { Auth, Example, Framework, AppSpec } from '../generator/types.js';
+import { normalizeOptions } from '../generator/index.js';
+import type { Example, Framework } from '../generator/types.js';
 import { readText, type Workspace } from './project.js';
 import type { ChangePlan } from './changes.js';
 import {
@@ -13,70 +12,21 @@ import { validateProjectName } from '../generator/options.js';
 import { versions } from '../templates/versions.js';
 import { readBackendEnvironment } from './env.js';
 import {
+  render,
+  initialPlan,
+  guardedRead,
+  object,
+  json,
+  retainNewlines,
+  metadata,
+  type Files,
+} from './planning.js';
+import {
   deploymentUrl,
   linkEnvironment,
   publicVariable,
 } from '../../assets/setup/convex-setup.mjs';
 
-type Files = Map<string, string>;
-const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
-const retainNewlines = (text: string, original: string | null) =>
-  original?.includes('\r\n') ? text.replace(/\r?\n/g, '\r\n') : text;
-
-async function render(
-  workspace: Workspace,
-  apps: AppSpec[],
-  example: Example,
-  auth: Auth,
-): Promise<Files> {
-  const temporary = await mkdtemp(join(tmpdir(), 'ccm-add-'));
-  try {
-    const root = await generateProject(
-      {
-        name: workspace.config.name,
-        apps,
-        example,
-        auth,
-        install: false,
-        git: false,
-        initConvex: false,
-      },
-      { cwd: temporary },
-    );
-    const files: Files = new Map();
-    async function visit(dir: string) {
-      for (const entry of await readdir(join(root, dir), {
-        withFileTypes: true,
-      })) {
-        const path = dir ? `${dir}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) await visit(path);
-        else files.set(path, await readFile(join(root, path), 'utf8'));
-      }
-    }
-    await visit('');
-    return files;
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
-}
-
-function initialPlan(workspace: Workspace): ChangePlan {
-  return {
-    root: workspace.root,
-    changes: [],
-    notes: [],
-    guards: [{ path: 'convex-monorepo.json', contents: workspace.configText }],
-  };
-}
-async function guardedRead(
-  workspace: Workspace,
-  plan: ChangePlan,
-  path: string,
-) {
-  const contents = await readText(workspace.root, path);
-  plan.guards!.push({ path, contents });
-  return contents;
-}
 async function verifyWorkspace(workspace: Workspace, plan: ChangePlan) {
   const yaml = await guardedRead(workspace, plan, 'pnpm-workspace.yaml');
   // Support the generated workspace layout, including comments and unrelated
@@ -151,12 +101,6 @@ async function verifyMessages(
   }
 }
 
-function object(value: unknown, path: string): Record<string, unknown> {
-  if (value === undefined) return {};
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
-    throw new Error(`Expected an object in ${path}.`);
-  return value as Record<string, unknown>;
-}
 function mergePackage(
   currentText: string,
   beforeText: string,
@@ -208,18 +152,6 @@ function mergePackage(
   }
   return json(result);
 }
-async function metadata(
-  workspace: Workspace,
-  plan: ChangePlan,
-  patch: Record<string, unknown>,
-) {
-  plan.changes.push({
-    path: 'convex-monorepo.json',
-    before: workspace.configText,
-    after: json({ ...workspace.rawConfig, ...patch }),
-  });
-}
-
 export async function planAddApp(
   workspace: Workspace,
   options: { name: string; framework: Framework; example?: Example },

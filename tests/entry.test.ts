@@ -74,6 +74,7 @@ describe('create binary dispatch', () => {
     ['doctor', '--json'],
     ['env', 'sync', '--app', 'web'],
     ['upgrade', '--check', '--json'],
+    ['upgrade'],
   ])(
     'routes management command %j without creating a project',
     async (...args) => {
@@ -92,7 +93,7 @@ describe('create binary dispatch', () => {
   it.each([
     ['doctor', '--force'],
     ['env', 'sync', '--install'],
-    ['upgrade'],
+    ['upgrade', '--json'],
     ['add', 'auth', 'workos'],
     ['--help', '--unknown'],
   ])('does not bypass argument validation for %j', async (...args) => {
@@ -179,7 +180,8 @@ describe('workspace auto-detection', () => {
     ['auth', ['add', 'auth', 'clerk']],
     ['doctor', ['doctor']],
     ['env', ['env', 'sync']],
-    ['upgrade', ['upgrade', '--check']],
+    ['upgrade', ['upgrade']],
+    ['check', ['upgrade', '--check']],
   ])(
     'offers and dispatches the %s action interactively',
     async (action, args) => {
@@ -196,6 +198,7 @@ describe('workspace auto-detection', () => {
             { value: 'doctor', label: expect.any(String) },
             { value: 'env', label: expect.any(String) },
             { value: 'upgrade', label: expect.any(String) },
+            { value: 'check', label: expect.any(String) },
           ]),
         }),
       );
