@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   apply: vi.fn(),
   app: vi.fn(),
+  package: vi.fn(),
   auth: vi.fn(),
   env: vi.fn(),
   doctor: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('../src/workspace/project.js', () => ({ loadWorkspace: mocks.load }));
 vi.mock('../src/workspace/changes.js', () => ({ applyPlan: mocks.apply }));
 vi.mock('../src/workspace/add.js', () => ({
   planAddApp: mocks.app,
+  planAddPackage: mocks.package,
   planAddAuth: mocks.auth,
 }));
 vi.mock('../src/workspace/env.js', () => ({ planEnvSync: mocks.env }));
@@ -62,6 +64,7 @@ beforeEach(() => {
   );
   mocks.load.mockResolvedValue(workspace);
   mocks.app.mockResolvedValue(plan);
+  mocks.package.mockResolvedValue(plan);
   mocks.auth.mockResolvedValue(plan);
   mocks.env.mockResolvedValue(plan);
   mocks.apply.mockResolvedValue(undefined);
@@ -78,6 +81,8 @@ describe('workspace argument parsing', () => {
     ['doctor', '--app', 'web'],
     ['env', 'sync', '--install'],
     ['add', 'auth', '--framework', 'vite'],
+    ['add', 'package', 'shared', '--framework', 'vite'],
+    ['add', 'package', 'shared', '--example', 'none'],
     ['upgrade', '--check', '--yes'],
     ['--force'],
     ['add', 'app', 'web', '--framework', 'vite', '--install', '--no-install'],
@@ -119,6 +124,81 @@ describe('workspace argument parsing', () => {
 });
 
 describe('workspace command routing', () => {
+  it.each(['--install', '--no-install'])(
+    'parses package add flags with %s',
+    (flag) => {
+      expect(
+        parseWorkspaceCommand([
+          'add',
+          'package',
+          'shared',
+          flag,
+          '--yes',
+          '--dry-run',
+        ]),
+      ).toMatchObject({
+        command: 'add-package',
+        name: 'shared',
+        install: flag === '--install',
+        yes: true,
+        dryRun: true,
+      });
+    },
+  );
+  it('routes package addition and installs after applying', async () => {
+    await runWorkspace(['add', 'package', 'shared', '--install'], '1.2.3');
+    expect(mocks.package).toHaveBeenCalledExactlyOnceWith(workspace, {
+      name: 'shared',
+    });
+    expect(mocks.apply).toHaveBeenCalledExactlyOnceWith(plan, {});
+    expect(mocks.install).toHaveBeenCalledExactlyOnceWith(
+      '/workspace',
+      undefined,
+    );
+    expect(mocks.apply.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.install.mock.invocationCallOrder[0]!,
+    );
+  });
+  it('keeps package dry runs from installing', async () => {
+    await runWorkspace(
+      ['add', 'package', 'shared', '--dry-run', '--install'],
+      '1.2.3',
+    );
+    expect(mocks.package).toHaveBeenCalledWith(workspace, { name: 'shared' });
+    expect(mocks.apply).toHaveBeenCalledWith(plan, { dryRun: true });
+    expect(mocks.install).not.toHaveBeenCalled();
+  });
+  it('offers shared packages and validates the name prompt', async () => {
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    mocks.select.mockResolvedValueOnce('add-package');
+    mocks.text.mockResolvedValueOnce('shared');
+    await runWorkspace(['add', '--no-install'], '1.2.3');
+    expect(mocks.select).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        options: expect.arrayContaining([
+          { value: 'add-package', label: 'Shared package' },
+        ]),
+      }),
+    );
+    const prompt = mocks.text.mock.calls[0]![0];
+    expect(prompt.message).toBe('Package name?');
+    expect(prompt.validate('shared')).toBeUndefined();
+    expect(prompt.validate('../bad')).toContain('lowercase');
+    expect(mocks.package).toHaveBeenCalledWith(workspace, { name: 'shared' });
+    expect(mocks.apply).toHaveBeenCalledOnce();
+    expect(mocks.install).not.toHaveBeenCalled();
+  });
+  it('cancels package naming without planning or writing', async () => {
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    mocks.text.mockResolvedValueOnce(Symbol('cancel'));
+    await expect(runWorkspace(['add', 'package'], '1.2.3')).rejects.toThrow(
+      'cancelled',
+    );
+    expect(mocks.package).not.toHaveBeenCalled();
+    expect(mocks.apply).not.toHaveBeenCalled();
+  });
   it.each([[], ['--help'], ['--version'], ['upgrade', '--help']])(
     'handles help and version without loading a workspace %j',
     async (...args) => {
@@ -131,6 +211,7 @@ describe('workspace command routing', () => {
     ['add'],
     ['add', '--yes'],
     ['add', 'app'],
+    ['add', 'package'],
     ['add', 'app', 'admin'],
     ['add', 'app', '--framework', 'vite'],
   ])('requires explicit app inputs without a terminal %j', async (...args) => {

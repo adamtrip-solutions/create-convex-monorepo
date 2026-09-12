@@ -5,7 +5,7 @@ import type { Example, Framework } from '../generator/types.js';
 import { pnpm } from '../package-manager/index.js';
 import { loadWorkspace } from '../workspace/project.js';
 import { applyPlan } from '../workspace/changes.js';
-import { planAddApp, planAddAuth } from '../workspace/add.js';
+import { planAddApp, planAddAuth, planAddPackage } from '../workspace/add.js';
 import { planEnvSync } from '../workspace/env.js';
 import { doctor } from '../workspace/doctor.js';
 import { checkUpgrade } from '../workspace/upgrade.js';
@@ -14,10 +14,11 @@ export const workspaceHelp = `convex-monorepo <command> [options]
 
 Manage an existing Convex monorepo from its root or any subdirectory.
 
-  add                       Choose an app or authentication interactively
+  add                       Choose an app, shared package, or authentication
   add app [name]            Add an application
     --framework <name>      next, vite, tanstack-start, or expo
     --example <name>        none or messages (defaults to workspace example)
+  add package [name]        Add a blank shared TypeScript package
   add auth [clerk]          Add Clerk authentication
   doctor [--json]           Check workspace configuration and setup
   env sync [--app name]     Copy public Convex URLs to frontend env files
@@ -33,8 +34,9 @@ Add and env sync options:
   --help, -h               Show usage
   --version, -v            Show CLI version
 
-Without a terminal, add app requires a name and --framework. Installation
-is off unless --install or --yes is passed. Existing files are never forced.
+Without a terminal, add app requires a name and --framework; add package
+requires a name. Installation is off unless --install or --yes is passed.
+Existing files are never forced.
 `;
 
 type CommandKind =
@@ -42,6 +44,7 @@ type CommandKind =
   | 'add'
   | 'add-app'
   | 'add-auth'
+  | 'add-package'
   | 'doctor'
   | 'env-sync'
   | 'upgrade';
@@ -96,11 +99,18 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
       command = 'add-app';
       maximum = 3;
       allowed = [...addFlags, 'framework', 'example'];
+    } else if (second === 'package') {
+      command = 'add-package';
+      maximum = 3;
+      allowed = addFlags;
     } else if (second === 'auth') {
       command = 'add-auth';
       maximum = 3;
       allowed = addFlags;
-    } else throw new Error('Use add app [name] or add auth [clerk].');
+    } else
+      throw new Error(
+        'Use add app [name], add package [name], or add auth [clerk].',
+      );
   } else if (first === 'doctor') {
     command = 'doctor';
     maximum = 1;
@@ -157,7 +167,10 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     yes: !!values.yes,
     dryRun: !!values['dry-run'],
     json: !!values.json,
-    ...(command === 'add-app' && third !== undefined ? { name: third } : {}),
+    ...((command === 'add-app' || command === 'add-package') &&
+    third !== undefined
+      ? { name: third }
+      : {}),
     ...(command === 'add-auth' && third === 'clerk' ? { provider: third } : {}),
     ...(values.framework !== undefined
       ? { framework: values.framework as Framework }
@@ -197,17 +210,31 @@ export async function runWorkspace(
   if (options.command === 'add') {
     if (!interactive)
       throw new Error(
-        'Choose add app <name> --framework <name> or add auth clerk when prompts are disabled.',
+        'Choose add app <name> --framework <name>, add package <name>, or add auth clerk when prompts are disabled.',
       );
     options.command = answer(
       await prompts.select({
         message: 'What would you like to add?',
         options: [
           { value: 'add-app' as const, label: 'Application' },
+          { value: 'add-package' as const, label: 'Shared package' },
           { value: 'add-auth' as const, label: 'Clerk authentication' },
         ],
       }),
     );
+  }
+  if (options.command === 'add-package') {
+    if (!options.name && interactive)
+      options.name = answer(
+        await prompts.text({
+          message: 'Package name?',
+          validate: (value) => validateProjectName(value ?? ''),
+        }),
+      );
+    if (!options.name)
+      throw new Error(
+        'Without prompts, use add package <name>. A package name is required.',
+      );
   }
   if (options.command === 'add-app') {
     if (!options.name && interactive)
@@ -293,7 +320,9 @@ export async function runWorkspace(
               ? { example: options.example }
               : {}),
           })
-        : await planAddAuth(workspace, 'clerk');
+        : options.command === 'add-package'
+          ? await planAddPackage(workspace, { name: options.name! })
+          : await planAddAuth(workspace, 'clerk');
   console.log(
     options.dryRun ? 'Dry run. Planned changes:' : 'Planned changes:',
   );

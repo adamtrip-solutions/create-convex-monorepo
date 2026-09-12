@@ -5,7 +5,12 @@ import { generateProject, normalizeOptions } from '../generator/index.js';
 import type { Auth, Example, Framework, AppSpec } from '../generator/types.js';
 import { readText, type Workspace } from './project.js';
 import type { ChangePlan } from './changes.js';
-import { equivalentGeneratedFile } from '../generator/format.js';
+import {
+  equivalentGeneratedFile,
+  formatGeneratedFile,
+} from '../generator/format.js';
+import { validateProjectName } from '../generator/options.js';
+import { versions } from '../templates/versions.js';
 import { readBackendEnvironment } from './env.js';
 import {
   deploymentUrl,
@@ -229,6 +234,10 @@ export async function planAddApp(
   const app = normalized.apps[0]!;
   if (workspace.config.apps.some((existing) => existing.name === app.name))
     throw new Error(`Application ${app.name} already exists.`);
+  if (workspace.config.packages?.some((pkg) => pkg.name === app.name))
+    throw new Error(
+      `Application name "${app.name}" is already used by a shared package.`,
+    );
   const plan = initialPlan(workspace);
   await verifyWorkspace(workspace, plan);
   const dir = `apps/${app.name}`;
@@ -348,6 +357,131 @@ export async function planAddApp(
     plan.notes.push(
       `Add the Clerk keys listed in apps/${app.name}/.env.clerk.example.`,
     );
+  return plan;
+}
+
+export async function planAddPackage(
+  workspace: Workspace,
+  options: { name: string },
+): Promise<ChangePlan> {
+  const { name } = options;
+  const error = validateProjectName(name);
+  if (error) throw new Error(`Invalid package name "${name}". ${error}`);
+  if (['backend', 'typescript-config', 'eslint-config'].includes(name))
+    throw new Error(`Package name "${name}" is reserved for a shared package.`);
+  if (workspace.config.apps.some((app) => app.name === name))
+    throw new Error(
+      `Package name "${name}" is already used by an application.`,
+    );
+  if (workspace.config.packages?.some((pkg) => pkg.name === name))
+    throw new Error(`Package ${name} already exists in convex-monorepo.json.`);
+  const plan = initialPlan(workspace);
+  await verifyWorkspace(workspace, plan);
+  const dir = `packages/${name}`;
+  plan.absentPaths = [dir];
+  await readText(workspace.root, `${dir}/package.json`);
+  try {
+    await lstat(join(workspace.root, dir));
+    throw new Error(`Package path ${dir} already exists.`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const scope = workspace.config.name;
+  const packageName = `@${scope}/${name}`;
+  const files = {
+    'package.json': json({
+      name: packageName,
+      version: '0.0.0',
+      private: true,
+      type: 'module',
+      exports: { '.': './src/index.ts' },
+      scripts: { typecheck: 'tsc --noEmit', lint: 'eslint .' },
+      devDependencies: {
+        typescript: versions.typescript,
+        eslint: versions.eslint,
+        [`@${scope}/eslint-config`]: 'workspace:*',
+        [`@${scope}/typescript-config`]: 'workspace:*',
+      },
+    }),
+    'tsconfig.json': json({
+      extends: `@${scope}/typescript-config/base.json`,
+      include: ['src'],
+    }),
+    'eslint.config.js': `export { default } from '@${scope}/eslint-config';\n`,
+    'src/index.ts': `// Replace this export with your shared code.\nexport const packageName = '${packageName}';\n`,
+  };
+  for (const [file, contents] of Object.entries(files)) {
+    const path = `${dir}/${file}`;
+    plan.changes.push({
+      path,
+      before: null,
+      after: await formatGeneratedFile(path, contents),
+    });
+  }
+  const nextApps = workspace.config.apps.filter(
+    (app) => app.framework === 'next',
+  );
+  if (nextApps.length) {
+    const generated = await render(
+      workspace,
+      workspace.config.apps,
+      workspace.config.example,
+      workspace.config.auth,
+    );
+    for (const app of nextApps) {
+      const path = `apps/${app.name}/next.config.ts`;
+      const before = await guardedRead(workspace, plan, path);
+      const baseline = generated.get(path)!;
+      let current = null;
+      if (before !== null) {
+        try {
+          current = await formatGeneratedFile(path, before);
+        } catch {
+          // Invalid configs need a manual edit as well.
+        }
+      }
+      const arrayPattern = /transpilePackages:\s*\[([^\]]*)\]/;
+      const array = current?.match(arrayPattern);
+      if (
+        array &&
+        /^(?:\s*'[^']*'\s*(?:,\s*'[^']*'\s*)*,?)?\s*$/.test(array[1]!) &&
+        (await equivalentGeneratedFile(
+          path,
+          current,
+          baseline.replace(arrayPattern, () => array[0]),
+        ))
+      ) {
+        const entries: string[] = array[1]!.match(/'[^']*'/g) ?? [];
+        if (entries.includes(`'${packageName}'`)) continue;
+        entries.push(`'${packageName}'`);
+        const after = await formatGeneratedFile(
+          path,
+          current!.replace(
+            arrayPattern,
+            () => `transpilePackages: [${entries.join(', ')}]`,
+          ),
+        );
+        plan.changes.push({
+          path,
+          before,
+          after: retainNewlines(after, before),
+        });
+      } else {
+        plan.notes.push(
+          `${path} is customized. Add '${packageName}' to transpilePackages before importing it.`,
+        );
+      }
+    }
+  }
+  await metadata(workspace, plan, {
+    packages: [
+      ...((workspace.rawConfig.packages as unknown[] | undefined) ?? []),
+      { name },
+    ],
+  });
+  plan.notes.push(
+    `Add "${packageName}": "workspace:*" to each app that should import it, then run pnpm install.`,
+  );
   return plan;
 }
 

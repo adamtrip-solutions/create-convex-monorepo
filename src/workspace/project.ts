@@ -1,6 +1,6 @@
 import { lstat, readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { normalizeOptions } from '../generator/options.js';
+import { normalizeOptions, validateProjectName } from '../generator/options.js';
 import type { AppSpec, Auth, Example } from '../generator/types.js';
 
 export interface WorkspaceApp extends AppSpec {
@@ -13,6 +13,7 @@ export interface WorkspaceConfig {
   packageManager: 'pnpm';
   monorepo: 'turbo';
   apps: WorkspaceApp[];
+  packages?: Array<{ name: string }>;
   auth: Auth;
   example: Example;
 }
@@ -111,6 +112,23 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     throw new Error(
       'Invalid convex-monorepo.json. Expected a named pnpm/Turborepo workspace with applications and a supported auth provider.',
     );
+  if (value.packages !== undefined && !Array.isArray(value.packages))
+    throw new Error(
+      'Invalid packages list in convex-monorepo.json. Expected an array.',
+    );
+  const packages = ((value.packages as unknown[] | undefined) ?? []).map(
+    (pkg) => {
+      if (
+        !isRecord(pkg) ||
+        typeof pkg.name !== 'string' ||
+        validateProjectName(pkg.name)
+      )
+        throw new Error(
+          'Invalid package in convex-monorepo.json. Expected an object with a valid package name.',
+        );
+      return { name: pkg.name };
+    },
+  );
   const apps: WorkspaceApp[] = value.apps.map((app: unknown) => {
     if (
       !isRecord(app) ||
@@ -150,6 +168,7 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     packageManager: 'pnpm',
     monorepo: 'turbo',
     apps,
+    packages,
     auth: options.auth,
     example: options.example,
   };

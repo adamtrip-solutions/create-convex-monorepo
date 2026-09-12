@@ -86,6 +86,11 @@ try {
         app.framework,
         '--no-install',
       ]);
+    const beforePackage = await snapshot();
+    command(['add', 'package', 'shared', '--dry-run']);
+    if ((await snapshot()) !== beforePackage)
+      throw new Error('Package dry-run changed workspace files');
+    command(['add', 'package', 'shared', '--no-install']);
     if (example !== 'none' && auth === 'clerk')
       command(['add', 'auth', 'clerk', '--no-install']);
     command(['env', 'sync']);
@@ -98,6 +103,48 @@ try {
     await readFile(join(project, 'convex-monorepo.json'), 'utf8'),
   );
   for (const app of config.apps) {
+    if (workspaceCommands) {
+      const packagePath = join(project, 'apps', app.name, 'package.json');
+      const manifest = JSON.parse(await readFile(packagePath, 'utf8'));
+      manifest.dependencies['@fixture/shared'] = 'workspace:*';
+      await writeFile(
+        packagePath,
+        await format(JSON.stringify(manifest), { parser: 'json' }),
+      );
+      await writeFile(
+        join(project, 'apps', app.name, 'src/shared.type-test.ts'),
+        "import { packageName } from '@fixture/shared';\nexport const shared: string = packageName;\n",
+      );
+      const entryPath = join(
+        project,
+        'apps',
+        app.name,
+        {
+          next: 'src/app/page.tsx',
+          vite: 'src/main.tsx',
+          'tanstack-start': 'src/routes/index.tsx',
+          expo: 'App.tsx',
+        }[app.framework],
+      );
+      const entry = await readFile(entryPath, 'utf8');
+      const sharedElement =
+        app.framework === 'expo'
+          ? '<SharedText>{packageName}</SharedText>'
+          : '<p>{packageName}</p>';
+      if (!entry.includes('</Providers>'))
+        throw new Error(`Missing Providers element in ${entryPath}`);
+      await writeFile(
+        entryPath,
+        await format(
+          "import { packageName } from '@fixture/shared';\n" +
+            (app.framework === 'expo'
+              ? "import { Text as SharedText } from 'react-native';\n"
+              : '') +
+            entry.replace('</Providers>', `${sharedElement}</Providers>`),
+          { parser: 'typescript', singleQuote: true, trailingComma: 'all' },
+        ),
+      );
+    }
     if (example === 'none') {
       // Test-only contract: keep empty-API assertions out of the user's starter
       // so adding their first function does not break a generated test.

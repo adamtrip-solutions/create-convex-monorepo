@@ -26,7 +26,7 @@ export type {
   FileChange,
   ApplySettings,
 } from './workspace/changes.js';
-export { planAddApp, planAddAuth } from './workspace/add.js';
+export { planAddApp, planAddAuth, planAddPackage } from './workspace/add.js';
 export { planEnvSync } from './workspace/env.js';
 export { doctor } from './workspace/doctor.js';
 export type { DoctorResult, DoctorIssue } from './workspace/doctor.js';
