@@ -17,6 +17,11 @@ const actions = [
   { value: 'env', label: 'Sync frontend Convex URLs', args: ['env', 'sync'] },
   {
     value: 'upgrade',
+    label: 'Update dependencies to the tested baseline',
+    args: ['upgrade'],
+  },
+  {
+    value: 'check',
     label: 'Check for CLI updates',
     args: ['upgrade', '--check'],
   },

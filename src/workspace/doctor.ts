@@ -235,7 +235,7 @@ export async function doctor(
     issue(
       'package-manager-baseline',
       'The root packageManager differs from this CLI’s tested pnpm version.',
-      `Review packageManager against pnpm@${versions.pnpm}.`,
+      'Run npx create-convex-monorepo@latest upgrade, then pnpm install.',
       'warning',
     );
   }
@@ -460,7 +460,7 @@ export async function doctor(
         issue(
           'dependency-baseline',
           `${directory || 'root'} resolves ${name}@${installed}, outside this CLI’s tested baseline.`,
-          `Review compatibility with the tested ${name}@${baselines[name]} baseline.`,
+          'Run npx create-convex-monorepo@latest upgrade, then pnpm install.',
           'warning',
         );
       }
