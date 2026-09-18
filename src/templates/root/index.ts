@@ -45,6 +45,19 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
       ),
     );
     scripts['convex:auth-keys'] = 'node scripts/convex-auth-keys.mjs';
+    if (options.oauth?.length) {
+      await ctx.write(
+        'scripts/convex-auth-site.mjs',
+        await readFile(
+          new URL(
+            '../../../assets/setup/convex-auth-site.mjs',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      );
+      scripts['convex:auth-site'] = 'node scripts/convex-auth-site.mjs';
+    }
   }
   for (const app of options.apps)
     scripts[`dev:${app.name}`] = workspaceScript(
@@ -128,6 +141,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     monorepo: 'turbo',
     apps: options.apps,
     auth: options.auth,
+    ...(options.oauth?.length ? { oauth: options.oauth } : {}),
     example: options.example,
   });
   await ctx.json('packages/typescript-config/package.json', {
@@ -228,7 +242,12 @@ ${options.example === 'messages' ? 'The backend checks identity and uses an owne
     : options.auth === 'workos'
       ? workosSetup(scope, options.example === 'messages', manager)
       : options.auth === 'convex-auth'
-        ? convexAuthSetup(scope, options.example === 'messages', manager)
+        ? convexAuthSetup(
+            scope,
+            options.example === 'messages',
+            manager,
+            options.oauth,
+          )
         : options.example === 'none'
           ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run ${run('convex:dev')} to regenerate the shared API.\n`
           : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.

@@ -28,6 +28,8 @@ export const versions = {
   reactRouterTypesDom: '19.2.7',
   tanstackStart: '1.168.50',
   expo: '57.0.21',
+  expoWebBrowser: '57.0.3',
+  expoLinking: '57.0.10',
   reactNative: '0.86.3',
   clerkNext: '7.9.1',
   clerkReact: '6.15.1',

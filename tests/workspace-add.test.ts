@@ -1821,6 +1821,139 @@ it('rejects a customized pre-Astro URL helper before writing an app', async () =
   ).rejects.toThrow('restore the generated setup helper');
   expect(await snapshot(workspace.root)).toEqual(before);
 });
+
+it.each([
+  { example: 'none', manager: 'pnpm', framework: 'astro' },
+  { example: 'messages', manager: 'pnpm', framework: 'astro' },
+  { example: 'none', manager: 'bun', framework: 'astro' },
+  { example: 'messages', manager: 'bun', framework: 'astro' },
+  { example: 'none', manager: 'pnpm', framework: 'next' },
+  { example: 'messages', manager: 'pnpm', framework: 'next' },
+  { example: 'none', manager: 'bun', framework: 'next' },
+  { example: 'messages', manager: 'bun', framework: 'next' },
+  { example: 'none', manager: 'pnpm', framework: 'react-router' },
+  { example: 'messages', manager: 'pnpm', framework: 'react-router' },
+  { example: 'none', manager: 'bun', framework: 'react-router' },
+  { example: 'messages', manager: 'bun', framework: 'react-router' },
+] as const)(
+  'adds Google OAuth with Convex Auth to a $example $manager $framework workspace',
+  async ({ example, manager, framework }) => {
+    const workspace = await fixture(example, 'none', framework, manager);
+    await applyPlan(
+      await planAddAuth(workspace, 'convex-auth', { oauth: 'google' }),
+    );
+    const files = await snapshot(workspace.root);
+    expect(JSON.parse(files['convex-monorepo.json']!)).toMatchObject({
+      version: 1,
+      auth: 'convex-auth',
+      oauth: ['google'],
+    });
+    expect(files['packages/backend/convex/auth.ts']).toContain(
+      'providers: [Password, Google]',
+    );
+    expect(files['apps/web/src/auth-controls.tsx']).toContain(
+      "authenticateOAuth('google'",
+    );
+    expect(files['apps/web/src/auth-controls.tsx']).not.toContain(
+      "authenticateOAuth('github'",
+    );
+    expect(files['CONVEX_AUTH_SETUP.md']).toContain('AUTH_GOOGLE_ID');
+    expect(files['CONVEX_AUTH_SETUP.md']).toContain(`${manager} install`);
+    expect(files['CONVEX_AUTH_SETUP.md']).toContain(
+      `${manager === 'bun' ? 'bun run' : 'pnpm'} convex:auth-site`,
+    );
+    if (manager === 'bun')
+      expect(files['CONVEX_AUTH_SETUP.md']).not.toContain('pnpm');
+    expect(files['scripts/convex-auth-site.mjs']).toBeDefined();
+    const reloaded = await loadWorkspace(workspace.root);
+    expect(reloaded.config.oauth).toEqual(['google']);
+    await applyPlan(
+      await planAddApp(reloaded, { name: 'admin', framework: 'vite' }),
+    );
+    expect(
+      await readFile(
+        join(workspace.root, 'apps/admin/src/auth-controls.tsx'),
+        'utf8',
+      ),
+    ).toContain("authenticateOAuth('google'");
+  },
+);
+it.each(['clerk', 'convex-auth', 'workos'] as const)(
+  'rejects explicit OAuth in an already configured %s workspace without writes',
+  async (auth) => {
+    const workspace = await fixture('none', auth);
+    const before = await snapshot(workspace.root);
+    for (const oauth of ['google', '', []])
+      await expect(
+        planAddAuth(workspace, 'convex-auth', { oauth }),
+      ).rejects.toThrow('requires manual edits');
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+it.each(['clerk', 'workos'] as const)(
+  'rejects OAuth on %s installation and unknown providers without writes',
+  async (provider) => {
+    const workspace = await fixture('none');
+    const before = await snapshot(workspace.root);
+    await expect(
+      planAddAuth(workspace, provider, { oauth: 'google' }),
+    ).rejects.toThrow('--oauth requires');
+    await expect(
+      planAddAuth(workspace, 'convex-auth', { oauth: 'other' }),
+    ).rejects.toThrow('Unknown OAuth provider');
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it('extends native OAuth redirects when adding an Expo app', async () => {
+  let workspace = await fixture('none');
+  await applyPlan(
+    await planAddAuth(workspace, 'convex-auth', { oauth: 'google' }),
+  );
+  workspace = await loadWorkspace(workspace.root);
+  await applyPlan(
+    await planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
+  );
+  const files = await snapshot(workspace.root);
+  expect(files['packages/backend/convex/auth.ts']).toContain(
+    'ccm-sample-mobile://auth',
+  );
+  expect(files['apps/mobile/src/auth-controls.tsx']).toContain(
+    "scheme: 'ccm-sample-mobile'",
+  );
+  expect(JSON.parse(files['apps/mobile/app.json']!).expo.scheme).toBe(
+    'ccm-sample-mobile',
+  );
+  expect(JSON.parse(files['convex-monorepo.json']!).oauth).toEqual(['google']);
+});
+it('includes all native return URLs when adding OAuth to multiple Expo apps', async () => {
+  let workspace = await fixture('none', 'none', 'expo');
+  await applyPlan(
+    await planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
+  );
+  workspace = await loadWorkspace(workspace.root);
+  await applyPlan(
+    await planAddAuth(workspace, 'convex-auth', { oauth: 'github' }),
+  );
+  const auth = await readFile(
+    join(workspace.root, 'packages/backend/convex/auth.ts'),
+    'utf8',
+  );
+  expect(auth).toContain('ccm-sample-web://auth');
+  expect(auth).toContain('ccm-sample-mobile://auth');
+});
+it('rejects customized Expo schemes before adding OAuth without writes', async () => {
+  const workspace = await fixture('none', 'none', 'expo');
+  const path = join(workspace.root, 'apps/web/app.json');
+  const app = JSON.parse(await readFile(path, 'utf8'));
+  app.expo.scheme = 'custom';
+  await writeFile(path, JSON.stringify(app));
+  const before = await snapshot(workspace.root);
+  await expect(
+    planAddAuth(workspace, 'convex-auth', { oauth: 'google' }),
+  ).rejects.toThrow('configure OAuth manually for your custom scheme');
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
 describe.each<Example>(['none', 'messages'])(
   'add WorkOS with %s content',
   (example) => {

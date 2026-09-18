@@ -123,13 +123,18 @@ describe('workspace doctor', () => {
         await put(
           workspace.root,
           `apps/web/${filename}`,
-          `${prefix}_JWT_PRIVATE_KEY=never-expose-private\n${prefix}_JWKS=never-expose-jwks\n`,
+          `${prefix}_JWT_PRIVATE_KEY=never-expose-private\n${prefix}_JWKS=never-expose-jwks\n${prefix}_AUTH_GITHUB_SECRET=never-expose-github\n${prefix}_AUTH_GOOGLE_SECRET=never-expose-google\n`,
         );
         const report = await doctor(workspace);
         expect(
           report.issues.filter((issue) => issue.code === 'public-secret'),
         ).toEqual(
-          ['JWT_PRIVATE_KEY', 'JWKS'].map((secret) => ({
+          [
+            'JWT_PRIVATE_KEY',
+            'JWKS',
+            'AUTH_GITHUB_SECRET',
+            'AUTH_GOOGLE_SECRET',
+          ].map((secret) => ({
             code: 'public-secret',
             severity: 'error',
             message: `apps/web exposes ${secret} through a public environment variable.`,
@@ -141,6 +146,154 @@ describe('workspace doctor', () => {
       }
     },
   );
+  it('warns about missing OAuth SITE_URL guidance without requiring local deployment secrets', async () => {
+    const workspace = await fixture('web:next', 'convex-auth');
+    workspace.config.oauth = ['github', 'google'];
+    const setupFiles = [
+      'packages/backend/.env.convex-auth.example',
+      'README.md',
+      'CONVEX_AUTH_SETUP.md',
+    ];
+    for (const path of setupFiles)
+      await put(workspace.root, path, 'Callback origin: CONVEX_SITE_URL\n');
+    const before = await snapshot(workspace.root);
+    const missing = await doctor(workspace);
+    expect(
+      missing.issues.filter((issue) => issue.code.startsWith('oauth-')),
+    ).toEqual([
+      {
+        code: 'oauth-site-url-guidance',
+        severity: 'warning',
+        message:
+          'OAuth is recorded in metadata but the setup files do not mention SITE_URL.',
+        fix: 'Document the required SITE_URL deployment setting in README.md, CONVEX_AUTH_SETUP.md, or packages/backend/.env.convex-auth.example.',
+      },
+    ]);
+    expect(await snapshot(workspace.root)).toEqual(before);
+    for (const path of setupFiles) {
+      await put(
+        workspace.root,
+        path,
+        'Set SITE_URL on the Convex deployment.\n',
+      );
+      const report = await doctor(workspace);
+      expect(
+        report.issues.filter((issue) => issue.code.startsWith('oauth-')),
+      ).toEqual([]);
+      expect(
+        report.issues.filter((issue) => issue.code === 'auth-env-missing'),
+      ).toEqual([]);
+      expect(report.checks).toContain(
+        'OAuth SITE_URL setup guidance exists; deployment settings were not checked.',
+      );
+      await put(workspace.root, path, 'Callback origin: CONVEX_SITE_URL\n');
+    }
+    delete workspace.config.oauth;
+    expect(
+      (await doctor(workspace)).issues.filter((issue) =>
+        issue.code.startsWith('oauth-'),
+      ),
+    ).toEqual([]);
+  });
+  it('requires OAuth browser dependencies only in OAuth-enabled Expo apps', async () => {
+    const workspace = await fixture('web:next,mobile:expo', 'convex-auth');
+    workspace.config.oauth = ['google'];
+    const path = join(workspace.root, 'apps/mobile/package.json');
+    const pkg = JSON.parse(await readFile(path, 'utf8'));
+    delete pkg.dependencies['expo-web-browser'];
+    delete pkg.dependencies['expo-linking'];
+    await writeFile(path, JSON.stringify(pkg));
+    const oauthDependencies = (await doctor(workspace)).issues.filter((issue) =>
+      /expo-web-browser|expo-linking/.test(issue.message),
+    );
+    expect(oauthDependencies).toEqual(
+      ['expo-web-browser', 'expo-linking'].map((name) => ({
+        code: 'dependency-missing',
+        severity: 'error',
+        message: `apps/mobile does not declare ${name}.`,
+        fix: 'Restore the required dependency and run pnpm install.',
+      })),
+    );
+    delete workspace.config.oauth;
+    expect(
+      (await doctor(workspace)).issues.filter((issue) =>
+        /expo-web-browser|expo-linking/.test(issue.message),
+      ),
+    ).toEqual([]);
+  });
+  it.each([
+    undefined,
+    '',
+    '123invalid',
+    'app://',
+    'has space',
+    [],
+    ['valid', ''],
+    42,
+  ])('reports an invalid OAuth Expo scheme %j', async (scheme) => {
+    const workspace = await fixture('mobile:expo', 'convex-auth');
+    workspace.config.oauth = ['github'];
+    await put(
+      workspace.root,
+      'apps/mobile/app.json',
+      JSON.stringify({ expo: { scheme } }),
+    );
+    const report = await doctor(workspace);
+    expect(
+      report.issues.filter((issue) => issue.code === 'expo-oauth-scheme'),
+    ).toEqual([
+      {
+        code: 'expo-oauth-scheme',
+        severity: 'error',
+        message:
+          'apps/mobile/app.json has no valid expo.scheme for OAuth redirects.',
+        fix: 'Set expo.scheme to a nonempty URI scheme, use it in the OAuth redirectTo URL, and rebuild the development app.',
+      },
+    ]);
+    delete workspace.config.oauth;
+    expect(
+      (await doctor(workspace)).issues.filter(
+        (issue) => issue.code === 'expo-oauth-scheme',
+      ),
+    ).toEqual([]);
+  });
+  it.each(['my-app', ['my-app', 'other.app+oauth']])(
+    'accepts a valid OAuth Expo scheme %j',
+    async (scheme) => {
+      const workspace = await fixture('mobile:expo', 'convex-auth');
+      workspace.config.oauth = ['github'];
+      await put(
+        workspace.root,
+        'apps/mobile/app.json',
+        JSON.stringify({ expo: { scheme } }),
+      );
+      const report = await doctor(workspace);
+      expect(
+        report.issues.filter((issue) => issue.code === 'expo-oauth-scheme'),
+      ).toEqual([]);
+      expect(
+        report.checks.some((check) =>
+          check.includes('declares an OAuth redirect scheme'),
+        ),
+      ).toBe(true);
+    },
+  );
+  it('reports missing or malformed OAuth Expo app configuration without exposing its contents', async () => {
+    const workspace = await fixture('mobile:expo', 'convex-auth');
+    workspace.config.oauth = ['google'];
+    await rm(join(workspace.root, 'apps/mobile/app.json'));
+    expect(
+      (await doctor(workspace)).issues.filter(
+        (issue) => issue.code === 'expo-oauth-scheme',
+      ),
+    ).toHaveLength(1);
+    await put(workspace.root, 'apps/mobile/app.json', '{never-expose-config');
+    const report = await doctor(workspace);
+    expect(
+      report.issues.filter((issue) => issue.code === 'expo-oauth-scheme'),
+    ).toHaveLength(1);
+    expect(JSON.stringify(report)).not.toContain('never-expose-config');
+  });
   it('requires SecureStore only in Convex Auth Expo apps', async () => {
     const workspace = await fixture(
       'web:next,spa:vite,start:tanstack-start,mobile:expo',

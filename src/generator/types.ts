@@ -6,6 +6,7 @@ export type Framework =
   | 'expo'
   | 'astro';
 export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos';
+export type OAuthProvider = 'github' | 'google';
 export type PackageManagerId = 'pnpm' | 'bun';
 export type Example = 'none' | 'messages';
 export interface AppSpec {
@@ -16,6 +17,7 @@ export interface ProjectOptions {
   name: string;
   apps: AppSpec[];
   auth: Auth;
+  oauth?: OAuthProvider[];
   example: Example;
   packageManager: PackageManagerId;
   install: boolean;

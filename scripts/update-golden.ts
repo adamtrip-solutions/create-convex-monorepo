@@ -52,6 +52,13 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
       apps: 'astro,react-router',
       auth: 'convex-auth',
     },
+    ...['messages', 'none'].map((example) => ({
+      label: `Astro + React Router + Convex Auth OAuth (${example})`,
+      apps: 'astro,react-router',
+      auth: 'convex-auth',
+      oauth: 'github,google',
+      example,
+    })),
     { label: 'Astro + Expo + Clerk', apps: 'astro,expo', auth: 'clerk' },
     {
       label: 'Astro + Next + Convex Auth (blank)',
