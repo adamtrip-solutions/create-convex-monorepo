@@ -78,6 +78,12 @@ jobs:
             auth: clerk
           - apps: vite,tanstack-start
             auth: clerk
+          - apps: next,vite,tanstack-start
+            auth: workos
+            example: messages
+          - apps: next,vite,tanstack-start
+            auth: workos
+            example: none
           - apps: next,expo
             auth: convex-auth
           - apps: vite,tanstack-start
@@ -138,6 +144,14 @@ jobs:
             auth: clerk
             example: none
             workspaceCommands: '1'
+          - apps: next,vite,tanstack-start
+            auth: workos
+            example: messages
+            packageManager: bun
+          - apps: next,vite,tanstack-start
+            auth: workos
+            example: none
+            packageManager: bun
     env:
       CCM_PACKAGE_MANAGER: ${{ matrix.packageManager || 'pnpm' }}
       CCM_WORKSPACE_COMMANDS: ${{ matrix.workspaceCommands || '0' }}

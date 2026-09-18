@@ -4,7 +4,7 @@ export type Framework =
   | 'tanstack-start'
   | 'react-router'
   | 'expo';
-export type Auth = 'none' | 'clerk' | 'convex-auth';
+export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos';
 export type PackageManagerId = 'pnpm' | 'bun';
 export type Example = 'none' | 'messages';
 export interface AppSpec {

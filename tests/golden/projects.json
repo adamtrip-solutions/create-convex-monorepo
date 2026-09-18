@@ -312,5 +312,103 @@
     "example": "none",
     "expected": [["web", "react-router", "VITE", "@convex-dev/auth"]],
     "packageManager": "bun"
+  },
+  {
+    "label": "next + WorkOS (messages)",
+    "apps": "next",
+    "auth": "workos",
+    "example": "messages",
+    "expected": [["web", "next", "NEXT_PUBLIC", "@workos-inc/authkit-nextjs"]]
+  },
+  {
+    "label": "next + WorkOS (none)",
+    "apps": "next",
+    "auth": "workos",
+    "example": "none",
+    "expected": [["web", "next", "NEXT_PUBLIC", "@workos-inc/authkit-nextjs"]]
+  },
+  {
+    "label": "vite + WorkOS (messages)",
+    "apps": "vite",
+    "auth": "workos",
+    "example": "messages",
+    "expected": [["web", "vite", "VITE", "@workos-inc/authkit-react"]]
+  },
+  {
+    "label": "vite + WorkOS (none)",
+    "apps": "vite",
+    "auth": "workos",
+    "example": "none",
+    "expected": [["web", "vite", "VITE", "@workos-inc/authkit-react"]]
+  },
+  {
+    "label": "tanstack-start + WorkOS (messages)",
+    "apps": "tanstack-start",
+    "auth": "workos",
+    "example": "messages",
+    "expected": [
+      ["web", "tanstack-start", "VITE", "@workos/authkit-tanstack-react-start"]
+    ]
+  },
+  {
+    "label": "tanstack-start + WorkOS (none)",
+    "apps": "tanstack-start",
+    "auth": "workos",
+    "example": "none",
+    "expected": [
+      ["web", "tanstack-start", "VITE", "@workos/authkit-tanstack-react-start"]
+    ]
+  },
+  {
+    "label": "Bun next + WorkOS (messages)",
+    "apps": "next",
+    "auth": "workos",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [["web", "next", "NEXT_PUBLIC", "@workos-inc/authkit-nextjs"]]
+  },
+  {
+    "label": "Bun next + WorkOS (none)",
+    "apps": "next",
+    "auth": "workos",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [["web", "next", "NEXT_PUBLIC", "@workos-inc/authkit-nextjs"]]
+  },
+  {
+    "label": "Bun vite + WorkOS (messages)",
+    "apps": "vite",
+    "auth": "workos",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [["web", "vite", "VITE", "@workos-inc/authkit-react"]]
+  },
+  {
+    "label": "Bun vite + WorkOS (none)",
+    "apps": "vite",
+    "auth": "workos",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [["web", "vite", "VITE", "@workos-inc/authkit-react"]]
+  },
+  {
+    "label": "Bun tanstack-start + WorkOS (messages)",
+    "apps": "tanstack-start",
+    "auth": "workos",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "tanstack-start", "VITE", "@workos/authkit-tanstack-react-start"]
+    ]
+  },
+  {
+    "label": "Bun tanstack-start + WorkOS (none)",
+    "apps": "tanstack-start",
+    "auth": "workos",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "tanstack-start", "VITE", "@workos/authkit-tanstack-react-start"]
+    ]
   }
 ]
