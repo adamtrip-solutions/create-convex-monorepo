@@ -17,6 +17,7 @@ interface Golden {
   auth: string;
   example?: string;
   oauth?: string;
+  packageManager?: 'pnpm' | 'bun';
   expected: [string, string, string, string | null][];
 }
 const scenarios: Golden[] = JSON.parse(
@@ -50,6 +51,7 @@ describe('generated project golden matrix', () => {
     try {
       const root = await generateProject(
         {
+          packageManager: scenario.packageManager ?? 'pnpm',
           name: 'golden-app',
           apps: scenario.apps,
           auth: scenario.auth,
@@ -60,6 +62,8 @@ describe('generated project golden matrix', () => {
         },
         { cwd },
       );
+      const manager = scenario.packageManager ?? 'pnpm';
+      const run = manager === 'bun' ? 'bun run' : 'pnpm';
       const read = (path: string) => readFile(join(root, path), 'utf8');
       const json = async <T>(path: string): Promise<T> =>
         JSON.parse(await read(path));
@@ -75,11 +79,11 @@ describe('generated project golden matrix', () => {
           ),
         );
         expect(await read('README.md')).toContain(
-          'pnpm convex:auth-keys --prod',
+          `${run} convex:auth-keys --prod`,
         );
         expect(
           await read('packages/backend/.env.convex-auth.example'),
-        ).toContain('pnpm convex:auth-keys');
+        ).toContain(`${run} convex:auth-keys`);
       } else {
         expect(manifest.scripts).not.toHaveProperty('convex:auth-keys');
         expect(await readdir(join(root, 'scripts'))).not.toContain(
@@ -99,17 +103,30 @@ describe('generated project golden matrix', () => {
       expect(manifest).toMatchObject({
         name: 'golden-app',
         private: true,
-        packageManager: `pnpm@${versions.pnpm}`,
+        packageManager: `${manager}@${versions[manager]}`,
         scripts: {
           dev: `turbo run dev --ui=stream --concurrency=${config.apps.length + 2}`,
           build: 'turbo run build',
           typecheck: 'turbo run typecheck',
           lint: 'turbo run lint',
-          'convex:dev': 'pnpm --filter @golden-app/backend dev',
+          'convex:dev': `${run} --filter @golden-app/backend dev`,
         },
       });
-      expect(await read('pnpm-workspace.yaml')).toContain("'apps/*'");
-      expect(await read('pnpm-workspace.yaml')).toContain("'packages/*'");
+      expect(config.packageManager).toBe(manager);
+      if (manager === 'bun') {
+        expect(manifest.workspaces).toEqual(['apps/*', 'packages/*']);
+        expect(await readdir(root)).not.toContain('pnpm-workspace.yaml');
+        expect(await read('.gitignore')).not.toContain('bun.lock');
+        const readme = await read('README.md');
+        expect(readme).toContain('bun install');
+        expect(readme).toContain('bun run dev');
+        expect(readme).not.toContain('pnpm');
+        expect(readme.match(/## Install and run/g)).toHaveLength(1);
+        expect(readme).not.toContain('## Development');
+      } else {
+        expect(await read('pnpm-workspace.yaml')).toContain("'apps/*'");
+        expect(await read('pnpm-workspace.yaml')).toContain("'packages/*'");
+      }
       expect((await readdir(join(root, 'packages'))).sort()).toEqual([
         'backend',
         'eslint-config',
@@ -247,7 +264,7 @@ describe('generated project golden matrix', () => {
           );
         }
         expect(manifest.scripts?.[`dev:${name}`]).toBe(
-          `pnpm --filter @golden-app/${name} dev`,
+          `${run} --filter @golden-app/${name} dev`,
         );
         expect(await read(`${dir}/.env.example`)).toContain(
           `${prefix}_CONVEX_URL=\n`,

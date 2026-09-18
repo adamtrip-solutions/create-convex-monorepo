@@ -116,6 +116,84 @@
     "expected": [["web", "vite", "VITE", "@convex-dev/auth"]]
   },
   {
+    "label": "Bun all four + none (messages)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "none",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Bun all four + none (none)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "none",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Bun all four + clerk (messages)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "clerk",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@clerk/nextjs"],
+      ["admin", "vite", "VITE", "@clerk/react"],
+      ["app", "tanstack-start", "VITE", "@clerk/tanstack-react-start"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@clerk/expo"]
+    ]
+  },
+  {
+    "label": "Bun all four + clerk (none)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "clerk",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@clerk/nextjs"],
+      ["admin", "vite", "VITE", "@clerk/react"],
+      ["app", "tanstack-start", "VITE", "@clerk/tanstack-react-start"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@clerk/expo"]
+    ]
+  },
+  {
+    "label": "Bun all four + convex-auth (messages)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Bun all four + convex-auth (none)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
     "label": "Convex Auth OAuth github,google all frameworks messages",
     "apps": "next,vite,tanstack-start,expo",
     "auth": "convex-auth",
@@ -192,5 +270,89 @@
       ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
       ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
     ]
+  },
+  {
+    "label": "Convex Auth OAuth github,google all frameworks messages (bun)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "example": "messages",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Convex Auth OAuth github all frameworks messages (bun)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "github",
+    "example": "messages",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Convex Auth OAuth google all frameworks messages (bun)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "google",
+    "example": "messages",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Convex Auth OAuth github,google all frameworks none (bun)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "example": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Convex Auth OAuth github all frameworks none (bun)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "github",
+    "example": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Convex Auth OAuth google all frameworks none (bun)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "google",
+    "example": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ],
+    "packageManager": "bun"
   }
 ]

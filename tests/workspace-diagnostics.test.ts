@@ -24,11 +24,22 @@ afterEach(async () => {
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
-async function fixture(apps = 'web:next,mobile:expo', auth = 'none') {
+async function fixture(
+  apps = 'web:next,mobile:expo',
+  auth = 'none',
+  packageManager: 'pnpm' | 'bun' = 'pnpm',
+) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-doctor-'));
   roots.push(cwd);
   const root = await generateProject(
-    { name: 'diagnostics', apps, auth, install: false, git: false },
+    {
+      name: 'diagnostics',
+      apps,
+      auth,
+      packageManager,
+      install: false,
+      git: false,
+    },
     { cwd },
   );
   return loadWorkspace(root);
@@ -864,4 +875,43 @@ describe('upgrade check', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await rejected;
   });
+});
+
+it('checks bun lockfiles, version pins, layout, and setup commands', async () => {
+  const workspace = await fixture('web:vite', 'none', 'bun');
+  let report = await doctor(workspace);
+  expect(report.checks).toContain(
+    `Tested package manager: bun@${versions.bun}.`,
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({
+      code: 'lockfile-missing',
+      message: 'bun.lock is missing.',
+    }),
+  );
+  expect(report.issues.map((issue) => issue.fix).join('\n')).toContain(
+    'bun run convex:setup',
+  );
+  expect(JSON.stringify(report)).not.toContain('pnpm');
+  await put(workspace.root, 'bun.lock', '{}');
+  const manifest = JSON.parse(
+    await readFile(join(workspace.root, 'package.json'), 'utf8'),
+  );
+  manifest.packageManager = 'bun@1.0.0';
+  manifest.workspaces = ['apps/*'];
+  await put(workspace.root, 'package.json', JSON.stringify(manifest));
+  report = await doctor(workspace);
+  expect(report.checks).toContain('bun.lock exists.');
+  expect(report.issues.some((issue) => issue.code === 'lockfile-missing')).toBe(
+    false,
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({
+      code: 'package-manager-baseline',
+      fix: 'Run npx create-convex-monorepo@latest upgrade, then bun install.',
+    }),
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({ code: 'workspace-package-excluded' }),
+  );
 });

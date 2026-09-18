@@ -1,6 +1,6 @@
 # create-convex-monorepo
 
-A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, or a combination, with optional Clerk or Convex Auth authentication.
+A TypeScript CLI that generates pnpm or bun workspaces. Turborepo runs multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, or a combination, with optional Clerk or Convex Auth authentication.
 
 The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Choose blank apps or a messages example. The example includes a query and mutation, plus compile-time assertions for the shared API's argument and return types.
 
@@ -10,7 +10,7 @@ Convex already generates an API from your backend functions. Sharing that API be
 
 ## Usage
 
-Requires Node.js 22.12 or newer and pnpm for the generated workspace.
+Requires Node.js 22.12 or newer and pnpm or bun for the generated workspace.
 
 ```sh
 pnpm create convex-monorepo@latest
@@ -22,7 +22,7 @@ Or use npx:
 npx create-convex-monorepo@latest
 ```
 
-Both commands run the same CLI. You can also install it globally with `npm install --global create-convex-monorepo` and run `create-convex-monorepo` directly. Running through npx does not change the generated workspace's package manager, which is pnpm.
+Both commands run the same CLI. You can also install it globally with `npm install --global create-convex-monorepo` and run `create-convex-monorepo` directly. Running through npx does not change the generated workspace's package manager. The default is pnpm; select bun with `--package-manager bun` or the interactive prompt.
 
 Contributors can run the checkout with `pnpm dev`; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -70,19 +70,19 @@ To explicitly generate a new project, use `create <project-name>`. This also let
 npx create-convex-monorepo@latest create doctor --apps vite --no-install --no-git
 ```
 
-| Command           | Behavior                                                                                                                                                  |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `add app`         | Creates an app using the existing backend and auth, updates root scripts and metadata, and links the public backend URL when configured.                  |
-| `add package`     | Creates a blank shared TypeScript package under `packages/<name>` and records it in metadata.                                                             |
-| `add auth`        | Adds Clerk or Convex Auth to generated app providers and the backend auth configuration. Customized files that need replacement cause a conflict.         |
-| `env sync`        | Links only the public backend URL, using each framework's variable prefix. Supports `--app` and `--dry-run`.                                              |
-| `doctor`          | Checks workspace configuration, installed dependencies, environment settings, and shared API types. Supports `--json`; errors exit with status 1.         |
-| `upgrade`         | Updates existing exact dependency pins and the pnpm version to the running CLI's tested baseline. Keeps newer pins and rejects non-exact customizations.  |
-| `upgrade --check` | Compares generator versions with npm's latest stable release and reports the running CLI's tested dependency baseline through `--json`. Makes no changes. |
+| Command           | Behavior                                                                                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add app`         | Creates an app using the existing backend and auth, updates root scripts and metadata, and links the public backend URL when configured.                                     |
+| `add package`     | Creates a blank shared TypeScript package under `packages/<name>` and records it in metadata.                                                                                |
+| `add auth`        | Adds Clerk or Convex Auth to generated app providers and the backend auth configuration. Customized files that need replacement cause a conflict.                            |
+| `env sync`        | Links only the public backend URL, using each framework's variable prefix. Supports `--app` and `--dry-run`.                                                                 |
+| `doctor`          | Checks workspace configuration, installed dependencies, environment settings, and shared API types. Supports `--json`; errors exit with status 1.                            |
+| `upgrade`         | Updates existing exact dependency pins and the recorded package-manager version to the running CLI's tested baseline. Keeps newer pins and rejects non-exact customizations. |
+| `upgrade --check` | Compares generator versions with npm's latest stable release and reports the running CLI's tested dependency baseline through `--json`. Makes no changes.                    |
 
 The `add app`, `add package`, `add auth`, and `upgrade` commands support `--dry-run`, `--install`, `--no-install`, and `--yes`. Without prompts, provide the app name and framework for `add app`, the package name for `add package`, or `clerk` or `convex-auth` for `add auth`. Dependency installation defaults to off. `--yes` enables installation unless `--no-install` is set, and never overrides conflicts. A dry run shows file paths without printing environment values or installing dependencies.
 
-Existing workspaces with metadata version 1, including projects created with 0.2.1, are supported. Preserve `convex-monorepo.json`; the CLI reads it rather than guessing which directories belong to your project. Per-app starter choices are recorded there when they differ from the original selection. Shared packages added by the CLI are recorded in the optional `packages` list as `{ "name": "shared" }` entries.
+Existing pnpm workspaces with metadata version 1, including projects created with 0.2.1, are supported. Bun workspaces also use metadata version 1. Preserve `convex-monorepo.json`; the CLI reads it rather than guessing which directories belong to your project. Per-app starter choices are recorded there when they differ from the original selection. Shared packages added by the CLI are recorded in the optional `packages` list as `{ "name": "shared" }` entries.
 
 ### Changes and conflicts
 
@@ -104,7 +104,7 @@ With a terminal attached, the CLI asks for missing choices:
 
 ```text
 Project name?           my-app
-Package manager?        pnpm
+Package manager?        pnpm / bun (default: pnpm)
 Application framework?  Next.js
 Application name?       web
 Add another frontend?   Yes
@@ -135,7 +135,7 @@ pnpm create convex-monorepo@latest my-app --apps app:tanstack-start,dashboard:ne
 | `--auth`                            | `none`, the default, `clerk`, or `convex-auth`                     |
 | `--oauth`                           | Optional comma list `github,google`; requires `--auth convex-auth` |
 | `--example`                         | `messages`, the default, or `none` for blank projects              |
-| `--package-manager`                 | `pnpm`; other managers are rejected in v0.1                        |
+| `--package-manager`                 | `pnpm`, the default, or `bun`; npm and yarn are rejected           |
 | `--install`, `--no-install`         | Enable or skip dependency installation                             |
 | `--init-convex`, `--no-init-convex` | Initialize Convex and link URLs; enables installation              |
 | `--git`, `--no-git`                 | Enable or skip `git init`; no commit is created                    |
@@ -143,6 +143,28 @@ pnpm create convex-monorepo@latest my-app --apps app:tanstack-start,dashboard:ne
 | `--help`, `--version`               | Show usage or the generator version                                |
 
 Without a terminal, prompts are disabled and install/git default to off unless explicitly enabled or `--yes` is passed. Explicit negative flags override `--yes`. Convex initialization defaults to off when prompts are skipped, including with `--yes`; request it explicitly with `--init-convex`. That flag still lets Convex prompt for an account or deployment, and conflicts with `--no-install`. The default app is Next.js. Project and app names must be lowercase letters, digits, and hyphens, at most 100 characters, with no path separators or reserved device names.
+
+## Bun workspaces
+
+Select bun in the "Package manager?" prompt or pass the flag:
+
+```sh
+npx create-convex-monorepo@latest my-app --apps next,expo --package-manager bun --install --no-git
+cd my-app
+bun run convex:setup
+bun run dev
+bun run typecheck
+bun run lint
+bun run build
+```
+
+If installation was skipped, run `bun install` first. Use `bun run convex:link`, `bun run convex:dev`, and, for Convex Auth, `bun run convex:auth-keys`. The pnpm script examples in this README use `bun run <script>` in bun workspaces. Run backend binaries from the root with `bun run --cwd packages/backend convex <command>`.
+
+Bun workspaces put `apps/*` and `packages/*` in the root manifest's `workspaces` list and pin bun in `packageManager`. They keep Turborepo and `workspace:*` dependencies. Commit `bun.lock`; no `pnpm-workspace.yaml` is generated. Existing-workspace commands read the recorded manager, including when invoked through npx or pnpm. `--install` uses that manager, and upgrade updates its version pin. This does not migrate existing pnpm workspaces.
+
+Keep Node.js 22.12+ installed for the CLI and framework tools. Bun's dependency lifecycle policy differs from pnpm's; the template trusts only esbuild, sharp, and unrs-resolver, matching the pnpm template's build allowlist. Review scripts before trusting additional dependencies. Expo keeps its default Metro configuration; JavaScript export does not verify native Xcode or Gradle builds. See [bun and Expo findings](docs/research.md#bun-workspaces).
+
+Metadata stays at version 1. Older CLI releases that validate the manager as pnpm-only reject bun workspaces; use a CLI release with bun support to manage them.
 
 ## Blank projects
 
@@ -187,7 +209,7 @@ my-app/
 │   ├── typescript-config/
 │   └── eslint-config/
 ├── convex-monorepo.json
-├── pnpm-workspace.yaml
+├── pnpm-workspace.yaml                 # pnpm only
 ├── turbo.json
 └── package.json
 ```
@@ -266,6 +288,8 @@ Keep Password sign-in and add either or both providers:
 pnpm create convex-monorepo@latest my-app --apps next,expo --auth convex-auth --oauth github,google
 npx create-convex-monorepo@latest add auth convex-auth --oauth google --install
 ```
+
+OAuth supports both package managers. The examples below use pnpm. For bun workspaces, use `bun install`, replace `pnpm <script>` with `bun run <script>`, and replace `pnpm --filter @my-app/backend exec convex` with `bun run --cwd packages/backend convex`. Generated setup instructions use the selected manager.
 
 The interactive OAuth multiselect defaults to none. `--oauth` is valid only with Convex Auth; unknown providers fail before generation. Both starters and all four frameworks support it. Metadata version 1 records the selected providers in an optional `oauth` array. `add auth` accepts this flag only on a no-auth workspace. Adding OAuth to a workspace with authentication already configured requires the manual edits below.
 

@@ -140,6 +140,47 @@ describe('OAuth SITE_URL setup', () => {
     });
   });
 
+  it.each([
+    {
+      metadata: { packageManager: 'bun' },
+      manifest: {},
+      command: 'bun run',
+      manager: 'bun',
+    },
+    {
+      metadata: {},
+      manifest: { packageManager: 'bun@1.4.2' },
+      command: 'bun run',
+      manager: 'bun',
+    },
+    {
+      metadata: { packageManager: 'pnpm' },
+      manifest: { packageManager: 'bun@1.4.2' },
+      command: 'pnpm',
+      manager: 'pnpm',
+    },
+  ])(
+    'uses $command for standalone setup guidance',
+    async ({ metadata, manifest, command, manager }) => {
+      const { root, script } = await fixture();
+      await writeFile(
+        join(root, 'convex-monorepo.json'),
+        JSON.stringify(metadata),
+      );
+      await writeFile(join(root, 'package.json'), JSON.stringify(manifest));
+      await expect(run(process.execPath, [script])).rejects.toMatchObject({
+        code: 1,
+        stderr: `Usage: ${command} convex:auth-site <site-url> [--prod].\n`,
+      });
+      await expect(
+        run(process.execPath, [script, 'https://app.example.com']),
+      ).rejects.toMatchObject({
+        code: 1,
+        stderr: `Convex is not installed. Run ${manager} install, then ${command} convex:auth-site <site-url>.\n`,
+      });
+    },
+  );
+
   it('reports CLI failure without printing deployment output or changing signing keys', async () => {
     const { script, backend } = await fixture(
       "console.log('private-output'); console.error('private-error'); process.exit(7);",

@@ -1,4 +1,5 @@
 import type { AuthAdapter, ProjectOptions } from '../../../generator/types.js';
+import { scriptCommand } from '../../../package-manager/index.js';
 import { versions as v } from '../../../templates/versions.js';
 import { platform } from '../shared.js';
 import { writeConvexAuthProviders } from './providers.js';
@@ -49,14 +50,14 @@ export async function getOwner(ctx: QueryCtx | MutationCtx): Promise<string> {
     }
     await ctx.write(
       'packages/backend/.env.convex-auth.example',
-      `# Run pnpm convex:setup, then pnpm convex:auth-keys to set the signing keys.
-# Use pnpm convex:auth-keys --prod for production. The script never stores keys locally.
+      `# Run ${scriptCommand(ctx.options.packageManager, 'convex:setup')}, then ${scriptCommand(ctx.options.packageManager, 'convex:auth-keys')} to set the signing keys.
+# Use ${scriptCommand(ctx.options.packageManager, 'convex:auth-keys')} --prod for production. The script never stores keys locally.
 # Never put JWT_PRIVATE_KEY, JWKS, or SITE_URL in frontend env files.
 # JWT_PRIVATE_KEY and JWKS are required for sign-in. See README.md for setup.
 # JWT_PRIVATE_KEY=<generated RSA private key>
 # JWKS=<generated public JSON Web Key Set>
 # SITE_URL=http://localhost:3000
-${ctx.options.oauth?.length ? `# SITE_URL is required for OAuth. Run pnpm convex:auth-site <site-url>.\n${ctx.options.oauth.map((provider) => `# AUTH_${provider.toUpperCase()}_ID=<client ID>\n# AUTH_${provider.toUpperCase()}_SECRET=<client secret>`).join('\n')}\n# Set OAuth credentials only on the Convex deployment, never in frontend env files.` : '# SITE_URL is optional for Password-only sign-in; it is used for OAuth and email redirects.'}
+${ctx.options.oauth?.length ? `# SITE_URL is required for OAuth. Run ${scriptCommand(ctx.options.packageManager, 'convex:auth-site')} <site-url>.\n${ctx.options.oauth.map((provider) => `# AUTH_${provider.toUpperCase()}_ID=<client ID>\n# AUTH_${provider.toUpperCase()}_SECRET=<client secret>`).join('\n')}\n# Set OAuth credentials only on the Convex deployment, never in frontend env files.` : '# SITE_URL is optional for Password-only sign-in; it is used for OAuth and email redirects.'}
 # CONVEX_SITE_URL is supplied by Convex and used by convex/auth.config.ts.
 `,
     );

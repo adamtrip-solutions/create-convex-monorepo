@@ -59,8 +59,12 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
   const name = raw.name ?? 'my-app';
   const error = validateProjectName(name);
   if (error) throw new Error(`Invalid project name "${name}". ${error}`);
-  if (raw.packageManager !== undefined && raw.packageManager !== 'pnpm')
-    throw new Error('Only pnpm is supported in v0.1.');
+  if (
+    raw.packageManager !== undefined &&
+    raw.packageManager !== 'pnpm' &&
+    raw.packageManager !== 'bun'
+  )
+    throw new Error('Unsupported package manager. Choose pnpm or bun.');
   const initConvex = raw.initConvex ?? false;
   if (initConvex && raw.install === false)
     throw new Error(
@@ -130,7 +134,7 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     auth: auth as Auth,
     ...(oauth.length ? { oauth } : {}),
     example,
-    packageManager: 'pnpm',
+    packageManager: raw.packageManager ?? 'pnpm',
     install: raw.install ?? (initConvex || raw.yes || false),
     initConvex,
     git: raw.git ?? raw.yes ?? false,

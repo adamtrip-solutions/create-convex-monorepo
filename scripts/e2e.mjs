@@ -4,33 +4,51 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import spawn from 'cross-spawn';
 import { format } from 'prettier';
-import { generateProject, normalizeOptions } from '../dist/index.js';
+import { normalizeOptions } from '../dist/index.js';
 
 const apps =
   process.env.CCM_APPS ?? 'next,admin:vite,portal:tanstack-start,expo';
 const auth = process.env.CCM_AUTH ?? 'none';
 const oauth = process.env.CCM_OAUTH || undefined;
 const example = process.env.CCM_EXAMPLE ?? 'messages';
+const packageManager = process.env.CCM_PACKAGE_MANAGER ?? 'pnpm';
 const workspaceCommands = process.env.CCM_WORKSPACE_COMMANDS === '1';
 const selections = normalizeOptions({
   apps,
   auth,
   example,
   ...(oauth ? { oauth } : {}),
+  packageManager,
 }).apps;
 const directory = await mkdtemp(join(tmpdir(), 'ccm-e2e-'));
-const project = await generateProject(
-  {
-    name: 'fixture',
-    apps: workspaceCommands ? selections.slice(0, 1) : apps,
-    auth: workspaceCommands && auth === 'clerk' ? 'none' : auth,
+const project = join(directory, 'fixture');
+const creation = spawn.sync(
+  process.execPath,
+  [
+    fileURLToPath(new URL('../dist/cli/index.js', import.meta.url)),
+    'create',
+    'fixture',
+    '--apps',
+    (workspaceCommands ? selections.slice(0, 1) : selections)
+      .map((app) => `${app.name}:${app.framework}`)
+      .join(','),
+    '--auth',
+    workspaceCommands && auth === 'clerk' ? 'none' : auth,
+    '--example',
     example,
-    ...(oauth ? { oauth } : {}),
-  },
-  { cwd: directory },
+    ...(oauth ? ['--oauth', oauth] : []),
+    '--package-manager',
+    packageManager,
+    '--no-git',
+    '--install',
+  ],
+  { cwd: directory, stdio: 'inherit', timeout: 600_000 },
 );
+if (creation.error) throw creation.error;
+if (creation.status !== 0)
+  throw new Error(`Creation failed; fixture retained at ${project}`);
 function run(args) {
-  const result = spawn.sync('pnpm', args, {
+  const result = spawn.sync(packageManager, args, {
     cwd: project,
     stdio: 'inherit',
     shell: false,
@@ -44,7 +62,9 @@ function run(args) {
   });
   if (result.error) throw result.error;
   if (result.status !== 0)
-    throw new Error(`pnpm ${args.join(' ')} exited ${result.status}`);
+    throw new Error(
+      `${packageManager} ${args.join(' ')} exited ${result.status}`,
+    );
 }
 function command(args) {
   const result = spawn.sync(
@@ -62,15 +82,30 @@ function command(args) {
 }
 async function snapshot() {
   const files = {};
-  for (const file of await readdir(project, { recursive: true })) {
-    try {
-      files[file] = await readFile(join(project, file), 'utf8');
-    } catch (error) {
-      if (error.code !== 'EISDIR') throw error;
+  async function visit(directory, prefix = '') {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (
+        [
+          'node_modules',
+          '.git',
+          '.turbo',
+          '.next',
+          '.expo',
+          '.output',
+          'dist',
+        ].includes(entry.name)
+      )
+        continue;
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await visit(join(directory, entry.name), path);
+      else if (entry.isFile())
+        files[path] = await readFile(join(directory, entry.name), 'utf8');
     }
   }
+  await visit(project);
   return JSON.stringify(files);
 }
+
 try {
   if (workspaceCommands) {
     await writeFile(
@@ -203,12 +238,17 @@ export type MissingModule = typeof api.notAModule;
       lines.join('\n') + '\n',
     );
   }
-  run(['install', '--no-frozen-lockfile']);
-  run(['format:check']);
+  if (workspaceCommands)
+    run(
+      packageManager === 'bun'
+        ? ['install']
+        : ['install', '--no-frozen-lockfile'],
+    );
+  run(['run', 'format:check']);
   if (workspaceCommands) command(['doctor', '--json']);
-  run(['typecheck']);
-  run(['lint']);
-  run(['build']);
+  run(['run', 'typecheck']);
+  run(['run', 'lint']);
+  run(['run', 'build']);
   for (const app of config.apps) {
     const output = join(
       project,
@@ -236,7 +276,7 @@ export type MissingModule = typeof api.notAModule;
     }
   }
   console.log(
-    `PASS ${workspaceCommands ? 'workspace commands' : 'generated'} ${apps} / ${auth} / ${example}`,
+    `PASS ${workspaceCommands ? 'workspace commands' : 'generated'} ${apps} / ${auth} / ${example} / ${packageManager}`,
   );
 } catch (error) {
   console.error(`Fixture retained at ${project}`);

@@ -7,7 +7,7 @@ import {
   validateProjectName,
 } from '../generator/options.js';
 import type { Example, Framework } from '../generator/types.js';
-import { pnpm } from '../package-manager/index.js';
+import { packageManagers } from '../package-manager/index.js';
 import { loadWorkspace } from '../workspace/project.js';
 import { applyPlan } from '../workspace/changes.js';
 import { planAddApp, planAddAuth, planAddPackage } from '../workspace/add.js';
@@ -412,10 +412,13 @@ export async function runWorkspace(
   await applyPlan(plan, signal ? { signal } : {});
   if (options.command !== 'env-sync' && install && plan.changes.length) {
     try {
-      await pnpm.install(workspace.root, signal);
+      await packageManagers[workspace.config.packageManager].install(
+        workspace.root,
+        signal,
+      );
     } catch (error) {
       throw new Error(
-        `Workspace files were updated, but dependency installation failed. Run pnpm install from the workspace root to retry. ${error instanceof Error ? error.message : String(error)}`,
+        `Workspace files were updated, but dependency installation failed. Run ${workspace.config.packageManager} install from the workspace root to retry. ${error instanceof Error ? error.message : String(error)}`,
         { cause: error },
       );
     }
