@@ -1,6 +1,14 @@
 /** Shared runtime helpers, also copied into generated projects as plain JavaScript. */
 export function publicVariable(framework: string): string;
-export function deploymentUrl(value: string | undefined): string;
+export function detectPackageManager(root: string): Promise<'pnpm' | 'bun'>;
+export function packageScriptCommand(
+  manager: 'pnpm' | 'bun',
+  script: string,
+): string;
+export function deploymentUrl(
+  value: string | undefined,
+  manager?: 'pnpm' | 'bun',
+): string;
 export function linkEnvironment(
   contents: string,
   variable: string,

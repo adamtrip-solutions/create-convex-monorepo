@@ -31,7 +31,10 @@ export async function planEnvSync(
       : workspace.config.apps.filter((app) => app.name === options.app);
   if (!apps.length) throw new Error(`Unknown application: ${options.app}.`);
   const backend = await readBackendEnvironment(workspace);
-  const url = deploymentUrl(backend.values.CONVEX_URL);
+  const url = deploymentUrl(
+    backend.values.CONVEX_URL,
+    workspace.config.packageManager,
+  );
   const plan: ChangePlan = {
     root: workspace.root,
     changes: [],

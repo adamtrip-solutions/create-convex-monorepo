@@ -27,11 +27,16 @@ afterEach(async () => {
       .map((dir) => rm(dir, { recursive: true, force: true })),
   );
 });
-async function fixture() {
+async function fixture(packageManager: 'pnpm' | 'bun' = 'pnpm') {
   const dir = await mkdtemp(join(tmpdir(), 'ccm-workspace-core-'));
   directories.push(dir);
   const root = await generateProject(
-    { name: 'fixture', apps: 'next,vite,tanstack-start,expo', example: 'none' },
+    {
+      name: 'fixture',
+      apps: 'next,vite,tanstack-start,expo',
+      example: 'none',
+      packageManager,
+    },
     { cwd: dir },
   );
   return loadWorkspace(root);
@@ -310,4 +315,11 @@ describe('environment sync', () => {
     await expect(planEnvSync(ws)).rejects.toThrow('Missing application');
     expect(await readText(ws.root, 'apps/web/.env.local')).toBeNull();
   });
+});
+
+it('uses bun setup guidance when env sync needs a deployment', async () => {
+  const workspace = await fixture('bun');
+  await expect(planEnvSync(workspace)).rejects.toThrow(
+    'Run bun run convex:setup first.',
+  );
 });
