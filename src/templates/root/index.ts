@@ -45,6 +45,19 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
       ),
     );
     scripts['convex:auth-keys'] = 'node scripts/convex-auth-keys.mjs';
+    if (options.oauth?.length) {
+      await ctx.write(
+        'scripts/convex-auth-site.mjs',
+        await readFile(
+          new URL(
+            '../../../assets/setup/convex-auth-site.mjs',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      );
+      scripts['convex:auth-site'] = 'node scripts/convex-auth-site.mjs';
+    }
   }
   if (options.auth === 'better-auth') {
     await ctx.write(
@@ -137,6 +150,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     monorepo: 'turbo',
     apps: options.apps,
     auth: options.auth,
+    ...(options.oauth?.length ? { oauth: options.oauth } : {}),
     example: options.example,
   });
   await ctx.json('packages/typescript-config/package.json', {
@@ -240,7 +254,12 @@ ${options.example === 'messages' ? 'The backend checks identity and uses an owne
     : options.auth === 'workos'
       ? workosSetup(scope, options.example === 'messages', manager)
       : options.auth === 'convex-auth'
-        ? convexAuthSetup(scope, options.example === 'messages', manager)
+        ? convexAuthSetup(
+            scope,
+            options.example === 'messages',
+            manager,
+            options.oauth,
+          )
         : options.auth === 'better-auth'
           ? betterAuthSetup(options)
           : options.example === 'none'

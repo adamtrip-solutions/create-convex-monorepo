@@ -10,6 +10,7 @@ const apps =
   process.env.CCM_APPS ??
   'next,admin:vite,portal:tanstack-start,router:react-router,expo';
 const auth = process.env.CCM_AUTH ?? 'none';
+const oauth = process.env.CCM_OAUTH || undefined;
 const example = process.env.CCM_EXAMPLE ?? 'messages';
 const packageManager = process.env.CCM_PACKAGE_MANAGER ?? 'pnpm';
 const workspaceCommands = process.env.CCM_WORKSPACE_COMMANDS === '1';
@@ -17,6 +18,7 @@ const selections = normalizeOptions({
   apps,
   auth,
   example,
+  ...(oauth ? { oauth } : {}),
   packageManager,
 }).apps;
 const directory = await mkdtemp(join(tmpdir(), 'ccm-e2e-'));
@@ -35,6 +37,7 @@ const creation = spawn.sync(
     workspaceCommands && auth === 'clerk' ? 'none' : auth,
     '--example',
     example,
+    ...(oauth ? ['--oauth', oauth] : []),
     '--package-manager',
     packageManager,
     '--no-git',

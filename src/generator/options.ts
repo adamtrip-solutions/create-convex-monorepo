@@ -1,10 +1,17 @@
 import { workosBindings } from '../integrations/auth/workos/index.js';
-import type { AppSpec, Auth, Framework, ProjectOptions } from './types.js';
+import type {
+  AppSpec,
+  Auth,
+  Framework,
+  OAuthProvider,
+  ProjectOptions,
+} from './types.js';
 
 export interface RawOptions {
   name?: string;
   apps?: string | AppSpec[];
   auth?: string;
+  oauth?: string | readonly string[];
   example?: string;
   packageManager?: string;
   install?: boolean;
@@ -19,6 +26,26 @@ export const frameworks: readonly Framework[] = [
   'react-router',
   'expo',
 ];
+export const oauthProviders: readonly OAuthProvider[] = ['github', 'google'];
+export function normalizeOAuthProviders(
+  raw: string | readonly string[] | undefined,
+  auth: string,
+): OAuthProvider[] {
+  if (raw === undefined) return [];
+  if (auth !== 'convex-auth')
+    throw new Error(
+      '--oauth requires --auth convex-auth or add auth convex-auth.',
+    );
+  const entries =
+    typeof raw === 'string' ? raw.split(',').map((entry) => entry.trim()) : raw;
+  for (const provider of entries) {
+    if (!oauthProviders.includes(provider as OAuthProvider))
+      throw new Error(
+        `Unknown OAuth provider "${provider}". Choose github or google.`,
+      );
+  }
+  return oauthProviders.filter((provider) => entries.includes(provider));
+}
 const reserved = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9]|node_modules)$/i;
 export function validateProjectName(name: string): string | undefined {
   if (
@@ -59,6 +86,7 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     throw new Error(
       `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, workos, or better-auth.`,
     );
+  const oauth = normalizeOAuthProviders(raw.oauth, auth);
   const used = new Set<string>();
   const input = raw.apps ?? 'next';
   const entries =
@@ -119,6 +147,7 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     name,
     apps,
     auth: auth as Auth,
+    ...(oauth.length ? { oauth } : {}),
     example,
     packageManager: raw.packageManager ?? 'pnpm',
     install: raw.install ?? (initConvex || raw.yes || false),

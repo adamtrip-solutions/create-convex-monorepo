@@ -8,6 +8,7 @@ export type {
   AuthAdapter,
   Framework,
   Auth,
+  OAuthProvider,
   Example,
 } from './generator/types.js';
 
