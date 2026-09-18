@@ -4,6 +4,9 @@ import {
   api as betterAuthApi,
   components as betterAuthComponents,
 } from './.generated/better-auth/packages/backend/convex/_generated/api';
+
+import workosSchema from './.generated/workos/packages/backend/convex/schema';
+import { api as workosApi } from './.generated/workos/packages/backend/convex/_generated/api';
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
 import noneSchema from './.generated/none/packages/backend/convex/schema';
@@ -243,4 +246,44 @@ test('Better Auth backend rejects expired and deleted component sessions', async
     ).rejects.toThrow('Unauthenticated');
   }
   expect(await t.run((ctx) => ctx.db.query('messages').take(1))).toEqual([]);
+});
+
+const workosModules = import.meta.glob(
+  './.generated/workos/packages/backend/convex/**/*.{js,ts}',
+);
+
+test('WorkOS backend rejects unauthenticated reads and writes', async () => {
+  const t = convexTest(workosSchema, workosModules);
+  await expect(t.query(workosApi.messages.list, {})).rejects.toThrow('Sign in');
+  await expect(
+    t.mutation(workosApi.messages.send, { body: 'no' }),
+  ).rejects.toThrow('Sign in');
+});
+
+test('WorkOS subjects own messages across sessions and isolate other users', async () => {
+  const t = convexTest(workosSchema, workosModules);
+  const alice = t.withIdentity({
+    subject: 'user_alice',
+    issuer: 'https://api.workos.com',
+    sid: 'session_one',
+  });
+  const returningAlice = t.withIdentity({
+    subject: 'user_alice',
+    issuer: 'https://api.workos.com',
+    sid: 'session_two',
+  });
+  const bob = t.withIdentity({
+    subject: 'user_bob',
+    issuer: 'https://api.workos.com',
+    sid: 'session_three',
+  });
+  await alice.mutation(workosApi.messages.send, { body: 'alice private' });
+  expect(await bob.query(workosApi.messages.list, {})).toEqual([]);
+  await bob.mutation(workosApi.messages.send, { body: 'bob private' });
+  expect(await returningAlice.query(workosApi.messages.list, {})).toMatchObject(
+    [{ body: 'alice private', owner: 'user_alice' }],
+  );
+  expect(await bob.query(workosApi.messages.list, {})).toMatchObject([
+    { body: 'bob private', owner: 'user_bob' },
+  ]);
 });

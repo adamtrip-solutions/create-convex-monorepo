@@ -1,3 +1,4 @@
+import { scriptCommand, workspaceScript } from '../package-manager/index.js';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parsers } from 'prettier/plugins/typescript';
@@ -30,27 +31,42 @@ import {
 } from '../../assets/setup/convex-setup.mjs';
 
 async function verifyWorkspace(workspace: Workspace, plan: ChangePlan) {
-  const yaml = await guardedRead(workspace, plan, 'pnpm-workspace.yaml');
-  // Support the generated workspace layout, including comments and unrelated
-  // pnpm settings. Refuse aliases, inline lists, exclusions and custom globs.
-  const section = yaml?.match(
-    /^packages:\s*(?:#.*)?\n((?:[ \t]+[^\n]*\n|\s*\n)*)/m,
-  )?.[1];
-  const patterns = section
-    ?.split('\n')
-    .map((line) => line.replace(/\s+#.*$/, '').trim())
-    .filter((line) => line && !line.startsWith('#'))
-    .map((line) => /^-\s+['"]?(apps\/\*|packages\/\*)['"]?$/.exec(line)?.[1]);
-  if (
-    (yaml?.match(/^packages:/gm)?.length ?? 0) !== 1 ||
-    !patterns ||
-    patterns.length !== 2 ||
-    !patterns.includes('apps/*') ||
-    !patterns.includes('packages/*')
-  )
-    throw new Error(
-      'Unsupported pnpm-workspace.yaml packages configuration. Expected apps/* and packages/* without exclusions or other globs.',
-    );
+  if (workspace.config.packageManager === 'bun') {
+    const contents = await guardedRead(workspace, plan, 'package.json');
+    const manifest = object(JSON.parse(contents ?? '{}'), 'package.json');
+    const patterns = manifest.workspaces;
+    if (
+      !Array.isArray(patterns) ||
+      patterns.length !== 2 ||
+      !patterns.includes('apps/*') ||
+      !patterns.includes('packages/*')
+    )
+      throw new Error(
+        'Unsupported package.json workspaces configuration. Expected apps/* and packages/* without exclusions or other globs.',
+      );
+  } else {
+    const yaml = await guardedRead(workspace, plan, 'pnpm-workspace.yaml');
+    // Support the generated workspace layout, including comments and unrelated
+    // pnpm settings. Refuse aliases, inline lists, exclusions and custom globs.
+    const section = yaml?.match(
+      /^packages:\s*(?:#.*)?\n((?:[ \t]+[^\n]*\n|\s*\n)*)/m,
+    )?.[1];
+    const patterns = section
+      ?.split('\n')
+      .map((line) => line.replace(/\s+#.*$/, '').trim())
+      .filter((line) => line && !line.startsWith('#'))
+      .map((line) => /^-\s+['"]?(apps\/\*|packages\/\*)['"]?$/.exec(line)?.[1]);
+    if (
+      (yaml?.match(/^packages:/gm)?.length ?? 0) !== 1 ||
+      !patterns ||
+      patterns.length !== 2 ||
+      !patterns.includes('apps/*') ||
+      !patterns.includes('packages/*')
+    )
+      throw new Error(
+        'Unsupported pnpm-workspace.yaml packages configuration. Expected apps/* and packages/* without exclusions or other globs.',
+      );
+  }
   for (const name of ['backend', 'typescript-config', 'eslint-config']) {
     const path = `packages/${name}/package.json`;
     const contents = await guardedRead(workspace, plan, path);
@@ -164,6 +180,7 @@ export async function planAddApp(
     apps: [{ name: options.name, framework: options.framework }],
     example,
     auth: workspace.config.auth,
+    packageManager: workspace.config.packageManager,
   });
   const app = normalized.apps[0]!;
   if (workspace.config.apps.some((existing) => existing.name === app.name))
@@ -226,7 +243,7 @@ export async function planAddApp(
   if (example === 'messages') await verifyMessages(workspace, plan, generated);
   if (workspace.config.auth !== 'none') {
     const files =
-      workspace.config.auth === 'clerk'
+      workspace.config.auth === 'clerk' || workspace.config.auth === 'workos'
         ? ['auth.config.ts']
         : [
             'auth.config.ts',
@@ -241,7 +258,9 @@ export async function planAddApp(
         ? 'Clerk'
         : workspace.config.auth === 'better-auth'
           ? 'Better Auth'
-          : 'Convex Auth';
+          : workspace.config.auth === 'workos'
+            ? 'WorkOS AuthKit'
+            : 'Convex Auth';
     for (const name of files) {
       const path = `packages/backend/convex/${name}`;
       const contents = await guardedRead(workspace, plan, path);
@@ -265,7 +284,12 @@ export async function planAddApp(
   const script = `dev:${app.name}`;
   if (Object.hasOwn(scripts, script))
     throw new Error(`Root script ${script} already exists.`);
-  scripts[script] = `pnpm --filter @${workspace.config.name}/${app.name} dev`;
+  scripts[script] = workspaceScript(
+    workspace.config.packageManager,
+    workspace.config.name,
+    app.name,
+    'dev',
+  );
   const previousDev = `turbo run dev --ui=stream --concurrency=${workspace.config.apps.length + 2}`;
   if (scripts.dev !== previousDev)
     throw new Error(
@@ -291,7 +315,7 @@ export async function planAddApp(
       mode: 0o600,
     });
     plan.notes.push(
-      `Will link the public Convex URL into ${dir}/.env.local. Run pnpm install before starting the app.`,
+      `Will link the public Convex URL into ${dir}/.env.local. Run ${workspace.config.packageManager} install before starting the app.`,
     );
     if (
       app.framework === 'expo' &&
@@ -302,7 +326,7 @@ export async function planAddApp(
       );
   } else {
     plan.notes.push(
-      `Run pnpm install, then pnpm convex:setup or pnpm convex:link to configure ${dir}/.env.local.`,
+      `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:setup')} or ${scriptCommand(workspace.config.packageManager, 'convex:link')} to configure ${dir}/.env.local.`,
     );
   }
   if (workspace.config.auth === 'clerk')
@@ -312,6 +336,10 @@ export async function planAddApp(
   if (workspace.config.auth === 'better-auth')
     plan.notes.push(
       `Set the public CONVEX_SITE_URL listed in apps/${app.name}/.env.better-auth.example. Add this app's origin or Expo scheme to deployment BETTER_AUTH_TRUSTED_ORIGINS, then follow the Better Auth setup instructions.`,
+    );
+  if (workspace.config.auth === 'workos')
+    plan.notes.push(
+      `Add the WorkOS settings listed in apps/${app.name}/.env.workos.example.`,
     );
   return plan;
 }
@@ -436,7 +464,7 @@ export async function planAddPackage(
     ],
   });
   plan.notes.push(
-    `Add "${packageName}": "workspace:*" to each app that should import it, then run pnpm install.`,
+    `Add "${packageName}": "workspace:*" to each app that should import it, then run ${workspace.config.packageManager} install.`,
   );
   return plan;
 }
@@ -681,17 +709,20 @@ export async function planAddAuth(
   if (
     provider !== 'clerk' &&
     provider !== 'convex-auth' &&
-    provider !== 'better-auth'
+    provider !== 'better-auth' &&
+    provider !== 'workos'
   )
     throw new Error(
-      'Choose add auth clerk, add auth convex-auth, or add auth better-auth.',
+      'Choose add auth clerk, add auth convex-auth, add auth workos, or add auth better-auth.',
     );
   const label = (auth: Exclude<Auth, 'none'>) =>
     auth === 'clerk'
       ? 'Clerk'
       : auth === 'better-auth'
         ? 'Better Auth'
-        : 'Convex Auth';
+        : auth === 'workos'
+          ? 'WorkOS'
+          : 'Convex Auth';
   if (workspace.config.auth !== 'none' && workspace.config.auth !== provider)
     throw new Error(
       `${label(workspace.config.auth)} is already configured. Switching authentication providers requires a manual migration.`,
@@ -702,20 +733,37 @@ export async function planAddAuth(
     return plan;
   }
   await verifyWorkspace(workspace, plan);
-  const first = workspace.config.apps[0]!;
+  normalizeOptions({
+    name: workspace.config.name,
+    apps: workspace.config.apps,
+    example: workspace.config.example,
+    auth: provider,
+  });
+  if (provider === 'workos') {
+    for (const app of workspace.config.apps) {
+      if (app.framework !== 'next') continue;
+      for (const location of ['src/middleware.ts', 'middleware.ts']) {
+        const path = `apps/${app.name}/${location}`;
+        if ((await guardedRead(workspace, plan, path)) !== null)
+          throw new Error(
+            `Conflict in ${path}: manually migrate this middleware to apps/${app.name}/src/proxy.ts and integrate WorkOS AuthKit with authkitProxy. Next.js 16 cannot use both middleware.ts and proxy.ts. No files were changed.`,
+          );
+      }
+    }
+  }
   const backendBefore = await render(
     workspace,
-    [first],
+    workspace.config.apps,
     workspace.config.example,
     'none',
   );
   const backendAfter = await render(
     workspace,
-    [first],
+    workspace.config.apps,
     workspace.config.example,
     provider,
   );
-  if (provider === 'clerk' && workspace.config.example === 'messages')
+  if (provider !== 'convex-auth' && workspace.config.example === 'messages')
     await verifyMessages(workspace, plan, backendBefore);
   async function patchFiles(
     before: Files,
@@ -766,11 +814,11 @@ export async function planAddAuth(
     }
   }
   await patchFiles(backendBefore, backendAfter, (path) =>
-    (provider === 'clerk'
+    (provider === 'clerk' || provider === 'workos'
       ? [
           'packages/backend/convex/access.ts',
           'packages/backend/convex/auth.config.ts',
-          'packages/backend/.env.clerk.example',
+          `packages/backend/.env.${provider}.example`,
         ]
       : provider === 'better-auth'
         ? [
@@ -840,15 +888,86 @@ export async function planAddAuth(
         `Add !.env.${provider}.example to your customized .gitignore so the backend environment example can be committed.`,
       );
     plan.notes.push(
-      provider === 'better-auth'
-        ? 'Generated types refresh on the next pnpm convex:dev or convex codegen. Sign-in needs pnpm convex:better-auth-env.'
-        : 'Generated types refresh on the next pnpm convex:dev or convex codegen. Sign-in needs pnpm convex:auth-keys.',
+      `Generated types refresh on the next ${scriptCommand(workspace.config.packageManager, 'convex:dev')} or convex codegen. Sign-in needs ${scriptCommand(workspace.config.packageManager, provider === 'better-auth' ? 'convex:better-auth-env' : 'convex:auth-keys')}.`,
     );
+  }
+  if (provider === 'workos') {
+    const path = 'turbo.json';
+    const current = await guardedRead(workspace, plan, path);
+    if (current === null) throw new Error('Missing turbo.json.');
+    const config = object(JSON.parse(current), path);
+    const tasks = { ...object(config.tasks, path) };
+    const beforeTasks = object(
+      object(JSON.parse(backendBefore.get(path)!), path).tasks,
+      path,
+    );
+    const afterTasks = object(
+      object(JSON.parse(backendAfter.get(path)!), path).tasks,
+      path,
+    );
+    let changed = false;
+    for (const name of ['dev', 'build']) {
+      const previous = object(beforeTasks[name], path).passThroughEnv;
+      const target = object(afterTasks[name], path).passThroughEnv;
+      if (tasks[name] === undefined)
+        throw new Error(
+          `Conflict in ${path}: tasks.${name} is missing. No files were changed.`,
+        );
+      const task = object(tasks[name], path);
+      const existing = task.passThroughEnv;
+      if (
+        !Array.isArray(previous) ||
+        !Array.isArray(target) ||
+        (existing !== undefined &&
+          (!Array.isArray(existing) ||
+            existing.some((value) => typeof value !== 'string')))
+      )
+        throw new Error(
+          `Conflict in ${path}: tasks.${name}.passThroughEnv must be a string array. No files were changed.`,
+        );
+      const additions = target.filter((value) => !previous.includes(value));
+      const values = [...((existing as string[] | undefined) ?? [])];
+      for (const value of additions) {
+        if (!values.includes(value)) {
+          values.push(value);
+          changed = true;
+        }
+      }
+      tasks[name] = { ...task, passThroughEnv: values };
+    }
+    if (changed)
+      plan.changes.push({
+        path,
+        before: current,
+        after: retainNewlines(json({ ...config, tasks }), current),
+      });
+    const ignorePath = '.gitignore';
+    const ignore = await guardedRead(workspace, plan, ignorePath);
+    if (ignore === null) throw new Error('Missing .gitignore.');
+    if (!ignore.split(/\r?\n/).includes('!.env.workos.example'))
+      plan.changes.push({
+        path: ignorePath,
+        before: ignore,
+        after: retainNewlines(
+          `${ignore.replace(/\r?\n/g, '\n')}${ignore.endsWith('\n') || ignore.length === 0 ? '' : '\n'}!.env.workos.example\n`,
+          ignore,
+        ),
+      });
   }
   for (const app of workspace.config.apps) {
     const example = app.example ?? workspace.config.example;
-    const baseline = await render(workspace, [app], example, 'none');
-    const target = await render(workspace, [app], example, provider);
+    const baseline = await render(
+      workspace,
+      workspace.config.apps,
+      example,
+      'none',
+    );
+    const target = await render(
+      workspace,
+      workspace.config.apps,
+      example,
+      provider,
+    );
     await patchFiles(baseline, target, (path) =>
       path.startsWith(`apps/${app.name}/`),
     );
@@ -864,15 +983,18 @@ export async function planAddAuth(
       : backendAfter;
   const readme = setupFiles.get('README.md')!;
   const start = readme.indexOf(`## ${label(provider)} setup`);
-  const nextHeading = readme.indexOf('\n## ', start + 1);
-  const end = nextHeading < 0 ? readme.length : nextHeading;
-  const setup = `${readme.slice(start, end).trim()}\n\nRun pnpm install after applying this change.${workspace.config.example === 'messages' ? ' Existing public messages have no owner and will not appear in authenticated accounts. This command does not migrate stored data.' : ''}\n`;
+  const end = readme.indexOf('\n## Shared backend types', start);
+  if (start === -1 || end === -1)
+    throw new Error('Generated authentication setup instructions are missing.');
+  const setup = `${readme.slice(start, end).trim()}\n\nRun ${workspace.config.packageManager} install after applying this change.${workspace.config.example === 'messages' ? ' Existing public messages have no owner and will not appear in authenticated accounts. This command does not migrate stored data.' : ''}\n`;
   const setupPath =
     provider === 'clerk'
       ? 'CLERK_SETUP.md'
-      : provider === 'better-auth'
-        ? 'BETTER_AUTH_SETUP.md'
-        : 'CONVEX_AUTH_SETUP.md';
+      : provider === 'workos'
+        ? 'WORKOS_SETUP.md'
+        : provider === 'better-auth'
+          ? 'BETTER_AUTH_SETUP.md'
+          : 'CONVEX_AUTH_SETUP.md';
   const existing = await guardedRead(workspace, plan, setupPath);
   if (existing !== null && existing !== setup)
     throw new Error(
@@ -883,10 +1005,12 @@ export async function planAddAuth(
   await metadata(workspace, plan, { auth: provider });
   plan.notes.push(
     provider === 'clerk'
-      ? 'Run pnpm install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.'
-      : provider === 'better-auth'
-        ? 'Run pnpm install, then pnpm convex:better-auth-env, and follow BETTER_AUTH_SETUP.md.'
-        : 'Run pnpm install, then pnpm convex:auth-keys, and follow CONVEX_AUTH_SETUP.md.',
+      ? `Run ${workspace.config.packageManager} install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.`
+      : provider === 'workos'
+        ? `Run ${workspace.config.packageManager} install and follow WORKOS_SETUP.md to configure AuthKit and the Convex issuer.`
+        : provider === 'better-auth'
+          ? `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:better-auth-env')}, and follow BETTER_AUTH_SETUP.md.`
+          : `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}, and follow CONVEX_AUTH_SETUP.md.`,
   );
   return plan;
 }

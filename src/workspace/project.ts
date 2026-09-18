@@ -10,7 +10,7 @@ export interface WorkspaceConfig {
   version: 1;
   generator: string;
   name: string;
-  packageManager: 'pnpm';
+  packageManager: 'pnpm' | 'bun';
   monorepo: 'turbo';
   apps: WorkspaceApp[];
   packages?: Array<{ name: string }>;
@@ -97,6 +97,10 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     throw new Error(
       'Unsupported convex-monorepo.json version. This CLI supports version 1.',
     );
+  if (value.packageManager !== 'pnpm' && value.packageManager !== 'bun')
+    throw new Error(
+      `Unsupported package manager in convex-monorepo.json: ${String(value.packageManager)}. Choose pnpm or bun.`,
+    );
   if (
     typeof value.name !== 'string' ||
     typeof value.generator !== 'string' ||
@@ -104,15 +108,14 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(
       value.generator,
     ) ||
-    value.packageManager !== 'pnpm' ||
     value.monorepo !== 'turbo' ||
     !Array.isArray(value.apps) ||
-    !['none', 'clerk', 'convex-auth', 'better-auth'].includes(
+    !['none', 'clerk', 'convex-auth', 'workos', 'better-auth'].includes(
       String(value.auth),
     )
   )
     throw new Error(
-      'Invalid convex-monorepo.json. Expected a named pnpm/Turborepo workspace with applications and a supported auth provider.',
+      'Invalid convex-monorepo.json. Expected a named pnpm or bun/Turborepo workspace with applications and a supported auth provider.',
     );
   if (value.packages !== undefined && !Array.isArray(value.packages))
     throw new Error(
@@ -167,7 +170,7 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     version: 1,
     generator: value.generator,
     name: options.name,
-    packageManager: 'pnpm',
+    packageManager: value.packageManager,
     monorepo: 'turbo',
     apps,
     packages,

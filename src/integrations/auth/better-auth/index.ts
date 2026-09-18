@@ -1,5 +1,6 @@
 import type { AuthAdapter } from '../../../generator/types.js';
 import { versions as v } from '../../../templates/versions.js';
+import { scriptCommand } from '../../../package-manager/index.js';
 import { platform } from '../shared.js';
 import { writeBetterAuthProviders } from './providers.js';
 import { authControls } from './controls.js';
@@ -87,7 +88,7 @@ export async function getOwner(ctx: QueryCtx | MutationCtx): Promise<string> {
     }
     await ctx.write(
       'packages/backend/.env.better-auth.example',
-      `# Set deployment variables with pnpm convex:better-auth-env --site-url http://localhost:3000.
+      `# Set deployment variables with ${scriptCommand(ctx.options.packageManager, 'convex:better-auth-env')} --site-url http://localhost:3000.
 # Required deployment settings: BETTER_AUTH_SECRET and SITE_URL.
 # BETTER_AUTH_TRUSTED_ORIGINS is a comma-separated list of additional app origins and native schemes.
 # CONVEX_SITE_URL is supplied by Convex. Never copy BETTER_AUTH_SECRET into a frontend.

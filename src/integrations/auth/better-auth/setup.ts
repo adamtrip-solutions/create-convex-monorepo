@@ -1,6 +1,8 @@
 import type { ProjectOptions } from '../../../generator/types.js';
+import { scriptCommand } from '../../../package-manager/index.js';
 
 export function betterAuthSetup(options: ProjectOptions): string {
+  const run = (script: string) => scriptCommand(options.packageManager, script);
   const origins = options.apps.map((app, index) =>
     app.framework === 'expo'
       ? `ccm-${options.name}-${app.name}://`
@@ -17,9 +19,9 @@ This starter uses the official Convex Better Auth component with email and passw
 From the workspace root:
 
 \`\`\`sh
-pnpm convex:setup
-pnpm convex:better-auth-env --site-url ${site}${extra ? ` --trusted-origins ${extra}` : ''}
-pnpm convex:setup
+${run('convex:setup')}
+${run('convex:better-auth-env')} --site-url ${site}${extra ? ` --trusted-origins ${extra}` : ''}
+${run('convex:setup')}
 \`\`\`
 
 The first setup selects a deployment. If its push stops because auth variables are missing, run the environment command and retry setup. The script generates a random 32-byte BETTER_AUTH_SECRET and sets it, SITE_URL, and BETTER_AUTH_TRUSTED_ORIGINS through the installed Convex CLI in packages/backend. It never stores or prints the secret. A failed update can leave some variables set; rerun the same command to finish. Each run replaces the secret and the trusted origins list, so existing sessions may need to sign in again.
@@ -30,9 +32,9 @@ Append each app's .env.better-auth.example to its .env.local. Set its public CON
 
 Convex supplies the server-side CONVEX_SITE_URL. BETTER_AUTH_SECRET stays on the deployment and must never have a NEXT_PUBLIC_, VITE_, or EXPO_PUBLIC_ prefix. The component creates its own signing keys; no manual JWKS setting is required.
 
-Expo uses expo-secure-store to persist sessions on native devices. Build a development client with pnpm ios or pnpm android so the configured ccm-${options.name}-<app> scheme is available. Add each scheme to the deployment's trusted origins. A phone needs reachable deployment URLs. Its localhost refers to the phone itself. Web clients use the cross-domain plugin; native clients use the Expo plugin.
+Expo uses expo-secure-store to persist sessions on native devices. Build a development client with ${run('ios')} or ${run('android')} so the configured ccm-${options.name}-<app> scheme is available. Add each scheme to the deployment's trusted origins. A phone needs reachable deployment URLs. Its localhost refers to the phone itself. Web clients use the cross-domain plugin; native clients use the Expo plugin.
 
-${options.example === 'messages' ? "Messages use the Better Auth user ID returned by authComponent.getAuthUser(ctx) as their owner. Sessions for the same account share messages; different users cannot read one another's messages." : 'The blank starter has no application tables. Use authComponent.getAuthUser(ctx) and enforce authorization in protected functions you add.'} Auth tables live inside the component, so the application schema stays unchanged. Run pnpm convex:dev after changing backend modules to refresh generated types.
+${options.example === 'messages' ? "Messages use the Better Auth user ID returned by authComponent.getAuthUser(ctx) as their owner. Sessions for the same account share messages; different users cannot read one another's messages." : 'The blank starter has no application tables. Use authComponent.getAuthUser(ctx) and enforce authorization in protected functions you add.'} Auth tables live inside the component, so the application schema stays unchanged. Run ${run('convex:dev')} after changing backend modules to refresh generated types.
 
 See the [official React setup](https://labs.convex.dev/better-auth/framework-guides/react) and [Expo setup](https://labs.convex.dev/better-auth/framework-guides/expo). Provider replacement is not supported.
 `;

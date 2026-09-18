@@ -17,16 +17,25 @@ it('normalizes example selection and rejects unsupported examples', () => {
   );
 });
 
-describe.each(['none', 'clerk', 'convex-auth'])(
+describe.each(['none', 'clerk', 'convex-auth', 'workos', 'better-auth'])(
   'blank projects with %s auth',
   (auth) => {
-    it.each([
-      'next',
-      'vite',
-      'tanstack-start',
-      'expo',
-      'next,admin:vite,portal:tanstack-start,expo',
-    ])('generates %s without demo code', async (apps) => {
+    it.each(
+      auth === 'workos'
+        ? [
+            'next',
+            'vite',
+            'tanstack-start',
+            'next,admin:vite,portal:tanstack-start',
+          ]
+        : [
+            'next',
+            'vite',
+            'tanstack-start',
+            'expo',
+            'next,admin:vite,portal:tanstack-start,expo',
+          ],
+    )('generates %s without demo code', async (apps) => {
       const cwd = await mkdtemp(join(tmpdir(), 'ccm-blank-'));
       try {
         const root = await generateProject(
@@ -50,7 +59,7 @@ describe.each(['none', 'clerk', 'convex-auth'])(
         const generated = await read(
           'packages/backend/convex/_generated/api.d.ts',
         );
-        if (auth === 'convex-auth') {
+        if (auth === 'convex-auth' || auth === 'better-auth') {
           expect(generated).toContain('auth: typeof auth');
           expect(generated).toContain('http: typeof http');
         } else {
@@ -83,7 +92,11 @@ describe.each(['none', 'clerk', 'convex-auth'])(
               ? 'ConvexProviderWithClerk'
               : auth === 'convex-auth'
                 ? 'ConvexAuthProvider'
-                : 'ConvexProvider',
+                : auth === 'better-auth'
+                  ? 'ConvexBetterAuthProvider'
+                  : auth === 'workos'
+                    ? 'ConvexProviderWithAuth'
+                    : 'ConvexProvider',
           );
         }
         expect(files.includes('packages/backend/convex/auth.config.ts')).toBe(
@@ -93,8 +106,12 @@ describe.each(['none', 'clerk', 'convex-auth'])(
         expect(readme).not.toMatch(
           /message board|owner index|convex-api.type-test/,
         );
-        if (auth === 'convex-auth') {
-          expect(readme).toContain('## Convex Auth setup');
+        if (auth === 'convex-auth' || auth === 'better-auth') {
+          expect(readme).toContain(
+            auth === 'better-auth'
+              ? '## Better Auth setup'
+              : '## Convex Auth setup',
+          );
           expect(readme).not.toContain('API starts empty');
         } else {
           expect(readme).toContain('API starts empty');
