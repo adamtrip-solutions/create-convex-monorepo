@@ -5,6 +5,7 @@ export type Framework =
   | 'react-router'
   | 'expo';
 export type Auth = 'none' | 'clerk' | 'convex-auth';
+export type PackageManagerId = 'pnpm' | 'bun';
 export type Example = 'none' | 'messages';
 export interface AppSpec {
   name: string;
@@ -15,7 +16,7 @@ export interface ProjectOptions {
   apps: AppSpec[];
   auth: Auth;
   example: Example;
-  packageManager: 'pnpm';
+  packageManager: PackageManagerId;
   install: boolean;
   initConvex: boolean;
   git: boolean;

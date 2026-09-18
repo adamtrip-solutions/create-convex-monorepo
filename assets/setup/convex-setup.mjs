@@ -1,5 +1,6 @@
 // @ts-check
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve, relative, sep } from 'node:path';
@@ -57,11 +58,50 @@ async function readOptional(file) {
   }
 }
 
-/** @param {string | undefined} value */
-export function deploymentUrl(value) {
+/** @param {string} root @returns {Promise<'pnpm' | 'bun'>} */
+export async function detectPackageManager(root) {
+  root = resolve(root);
+  /** @type {Array<'pnpm' | 'bun' | undefined>} */
+  const managers = [];
+  for (const name of ['convex-monorepo.json', 'package.json']) {
+    const file = join(root, name);
+    await safeFile(root, file);
+    const contents = await readOptional(file);
+    const metadata = contents ? JSON.parse(contents) : {};
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+      throw new Error(`Invalid package manager metadata in ${name}.`);
+    const value = metadata.packageManager;
+    if (value === undefined) {
+      managers.push(undefined);
+      continue;
+    }
+    const match =
+      typeof value === 'string'
+        ? value.match(
+            name === 'package.json'
+              ? /^(pnpm|bun)(?:@[^\s]+)?$/
+              : /^(pnpm|bun)$/,
+          )
+        : null;
+    if (!match)
+      throw new Error(
+        `Unsupported package manager in ${name}. Expected pnpm or bun.`,
+      );
+    managers.push(/** @type {'pnpm' | 'bun'} */ (match[1]));
+  }
+  return managers[0] ?? managers[1] ?? 'pnpm';
+}
+
+/** @param {'pnpm' | 'bun'} manager @param {string} script */
+export function packageScriptCommand(manager, script) {
+  return `${manager}${manager === 'bun' ? ' run' : ''} ${script}`;
+}
+
+/** @param {string | undefined} value @param {'pnpm' | 'bun'} [manager] */
+export function deploymentUrl(value, manager = 'pnpm') {
   if (!value)
     throw new Error(
-      'CONVEX_URL is missing from packages/backend/.env.local or .env. Run pnpm convex:setup first.',
+      `CONVEX_URL is missing from packages/backend/.env.local or .env. Run ${packageScriptCommand(manager, 'convex:setup')} first.`,
     );
   let url;
   try {
@@ -100,6 +140,7 @@ export function linkEnvironment(contents, variable, url) {
 export async function linkFrontends(root, signal) {
   signal?.throwIfAborted();
   root = resolve(root);
+  const manager = await detectPackageManager(root);
   const configFile = join(root, 'convex-monorepo.json');
   await safeFile(root, configFile);
   /** @type {unknown} */
@@ -120,7 +161,7 @@ export async function linkFrontends(root, signal) {
     await safeFile(root, file);
     backend = { ...backend, ...parseEnv(await readOptional(file)) };
   }
-  const url = deploymentUrl(backend.CONVEX_URL);
+  const url = deploymentUrl(backend.CONVEX_URL, manager);
   /** @type {Array<{ file: string, before: string, after: string, name: string }>} */
   const updates = [];
   const names = new Set();
@@ -162,7 +203,7 @@ export async function linkFrontends(root, signal) {
     await safeFile(root, update.file);
     if ((await readOptional(update.file)) !== update.before)
       throw new Error(
-        `Environment changed while linking ${update.name}. Run pnpm convex:link again.`,
+        `Environment changed while linking ${update.name}. Run ${packageScriptCommand(manager, 'convex:link')} again.`,
       );
     signal?.throwIfAborted();
     if (update.after !== update.before)
@@ -183,6 +224,9 @@ export async function linkFrontends(root, signal) {
 
 /** @param {string} root @param {AbortSignal} [signal] */
 export async function initializeConvex(root, signal) {
+  signal?.throwIfAborted();
+  const manager = await detectPackageManager(root);
+  signal?.throwIfAborted();
   const backend = join(root, 'packages/backend');
   const require = createRequire(join(backend, 'package.json'));
   let cli;
@@ -190,7 +234,7 @@ export async function initializeConvex(root, signal) {
     cli = join(dirname(require.resolve('convex/package.json')), 'bin/main.js');
   } catch {
     throw new Error(
-      'Convex is not installed. Run pnpm install, then pnpm convex:setup.',
+      `Convex is not installed. Run ${manager} install, then ${packageScriptCommand(manager, 'convex:setup')}.`,
     );
   }
   console.log('Initializing Convex. Complete the Convex CLI prompts below.');
@@ -213,7 +257,7 @@ export async function initializeConvex(root, signal) {
           ? resolve(undefined)
           : reject(
               new Error(
-                `Convex setup stopped (${interrupted ?? `exit ${code}`}). Project files are preserved; frontend URLs were not changed. Resolve the error above and run pnpm convex:setup again. For Clerk, configure CLERK_JWT_ISSUER_DOMAIN on the deployment as described in README.md.`,
+                `Convex setup stopped (${interrupted ?? `exit ${code}`}). Project files are preserved; frontend URLs were not changed. Resolve the error above and run ${packageScriptCommand(manager, 'convex:setup')} again. For Clerk, configure CLERK_JWT_ISSUER_DOMAIN on the deployment as described in README.md.`,
               ),
             ),
     );
@@ -224,7 +268,7 @@ export async function initializeConvex(root, signal) {
 
 if (
   process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const controller = new AbortController();
   const interrupt = () =>
@@ -233,9 +277,12 @@ if (
   process.once('SIGTERM', interrupt);
   try {
     const args = process.argv.slice(2);
-    if (args.length && !(args.length === 1 && args[0] === '--link-only'))
-      throw new Error('Usage: pnpm convex:setup or pnpm convex:link');
     const root = fileURLToPath(new URL('../', import.meta.url));
+    const manager = await detectPackageManager(root);
+    if (args.length && !(args.length === 1 && args[0] === '--link-only'))
+      throw new Error(
+        `Usage: ${packageScriptCommand(manager, 'convex:setup')} or ${packageScriptCommand(manager, 'convex:link')}`,
+      );
     if (args[0] === '--link-only') await linkFrontends(root, controller.signal);
     else await initializeConvex(root, controller.signal);
     controller.signal.throwIfAborted();

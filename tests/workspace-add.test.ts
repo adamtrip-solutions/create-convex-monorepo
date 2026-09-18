@@ -40,12 +40,14 @@ async function fixture(
   example: Example = 'messages',
   auth: Auth = 'none',
   framework: Framework = 'next',
+  packageManager: 'pnpm' | 'bun' = 'pnpm',
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-add-test-'));
   temporary.push(cwd);
   const root = await generateProject(
     {
       name: 'sample',
+      packageManager,
       apps: [{ name: 'web', framework }],
       example,
       auth,
@@ -130,31 +132,41 @@ it.each(['react-router', 'expo'] as const)(
   },
 );
 
-it.each(['comment', 'mapping', 'extra case', 'invalid syntax'])(
-  'preserves a setup helper with a custom %s and explains how to update it',
-  async (customization) => {
-    const workspace = await fixture('none');
-    const path = 'scripts/convex-setup.mjs';
-    const older = await olderSetupHelper();
-    const customized =
-      customization === 'comment'
-        ? `${older}\n// Keep our custom setup.\n`
-        : customization === 'mapping'
-          ? older.replace('VITE_CONVEX_URL', 'CUSTOM_CONVEX_URL')
-          : customization === 'extra case'
-            ? older.replace("case 'vite':", "case 'custom':\n    case 'vite':")
-            : `${older}\nsyntax error!\n`;
-    await writeFile(join(workspace.root, path), customized);
-    const plan = await planAddApp(workspace, {
-      name: 'router',
-      framework: 'react-router',
-    });
-    expect(plan.changes.some((change) => change.path === path)).toBe(false);
-    expect(plan.notes).toContain(
-      `${path} is missing or customized. Copy the current helper from a fresh project or update its framework map to support react-router before running pnpm convex:setup or pnpm convex:link.`,
+describe.each(['pnpm', 'bun'] as const)(
+  '%s setup helper guidance',
+  (manager) => {
+    it.each(['comment', 'mapping', 'extra case', 'invalid syntax'])(
+      'preserves a setup helper with a custom %s and explains how to update it',
+      async (customization) => {
+        const workspace = await fixture('none', 'none', 'vite', manager);
+        const path = 'scripts/convex-setup.mjs';
+        const older = await olderSetupHelper();
+        const customized =
+          customization === 'comment'
+            ? `${older}\n// Keep our custom setup.\n`
+            : customization === 'mapping'
+              ? older.replace('VITE_CONVEX_URL', 'CUSTOM_CONVEX_URL')
+              : customization === 'extra case'
+                ? older.replace(
+                    "case 'vite':",
+                    "case 'custom':\n    case 'vite':",
+                  )
+                : `${older}\nsyntax error!\n`;
+        await writeFile(join(workspace.root, path), customized);
+        const plan = await planAddApp(workspace, {
+          name: 'router',
+          framework: 'react-router',
+        });
+        expect(plan.changes.some((change) => change.path === path)).toBe(false);
+        expect(plan.notes).toContain(
+          `${path} is missing or customized. Copy the current helper from a fresh project or update its framework map to support react-router before running ${manager === 'bun' ? 'bun run' : 'pnpm'} convex:setup or ${manager === 'bun' ? 'bun run' : 'pnpm'} convex:link.`,
+        );
+        await applyPlan(plan);
+        expect(await readFile(join(workspace.root, path), 'utf8')).toBe(
+          customized,
+        );
+      },
     );
-    await applyPlan(plan);
-    expect(await readFile(join(workspace.root, path), 'utf8')).toBe(customized);
   },
 );
 
@@ -1722,3 +1734,89 @@ it('respects per-app blank overrides when adding Convex Auth', async () => {
   );
   expect(files['apps/web/src/messages.tsx']).toContain('api.messages');
 });
+
+describe.each<Example>(['none', 'messages'])(
+  'bun workspace with %s starter',
+  (example) => {
+    it.each(['next', 'react-router'] as const)(
+      'adds %s and packages with bun commands and preserves metadata',
+      async (framework) => {
+        let workspace = await fixture(example, 'none', 'vite', 'bun');
+        const appPlan = await planAddApp(workspace, {
+          name: 'added',
+          framework,
+        });
+        expect(appPlan.notes.join('\n')).toContain('bun install');
+        expect(appPlan.notes.join('\n')).toContain('bun run convex:setup');
+        await applyPlan(appPlan);
+        workspace = await loadWorkspace(workspace.root);
+        expect(workspace.config).toMatchObject({
+          version: 1,
+          packageManager: 'bun',
+        });
+        const manifest = JSON.parse(
+          await readFile(join(workspace.root, 'package.json'), 'utf8'),
+        );
+        expect(manifest.scripts['dev:added']).toBe(
+          'bun run --filter @sample/added dev',
+        );
+        const packagePlan = await planAddPackage(workspace, { name: 'shared' });
+        expect(packagePlan.notes).toContain(
+          'Add "@sample/shared": "workspace:*" to each app that should import it, then run bun install.',
+        );
+        await applyPlan(packagePlan);
+        expect(
+          (await loadWorkspace(workspace.root)).config.packageManager,
+        ).toBe('bun');
+      },
+    );
+    it.each([
+      ['clerk', 'vite'],
+      ['convex-auth', 'vite'],
+      ['clerk', 'react-router'],
+      ['convex-auth', 'react-router'],
+    ] as const)(
+      'adds %s to %s with bun setup guidance',
+      async (provider, framework) => {
+        const workspace = await fixture(example, 'none', framework, 'bun');
+        const plan = await planAddAuth(workspace, provider);
+        const guide = plan.changes.find((change) =>
+          change.path.endsWith('_SETUP.md'),
+        )!.after;
+        expect(guide).toContain('bun install');
+        expect(guide).not.toContain('pnpm');
+        expect(plan.notes.join('\n')).toContain('bun install');
+        if (provider === 'convex-auth')
+          expect(plan.notes.join('\n')).toContain('bun run convex:auth-keys');
+        await applyPlan(plan);
+        expect((await loadWorkspace(workspace.root)).config).toMatchObject({
+          auth: provider,
+          packageManager: 'bun',
+        });
+      },
+    );
+    it('rejects a customized bun workspace layout before writing', async () => {
+      const workspace = await fixture(example, 'none', 'vite', 'bun');
+      const path = join(workspace.root, 'package.json');
+      const manifest = JSON.parse(await readFile(path, 'utf8'));
+      manifest.workspaces = ['apps/*'];
+      await writeFile(path, JSON.stringify(manifest));
+      const before = await snapshot(workspace.root);
+      await expect(
+        planAddPackage(workspace, { name: 'shared' }),
+      ).rejects.toThrow('Unsupported package.json workspaces');
+      expect(await snapshot(workspace.root)).toEqual(before);
+    });
+  },
+);
+it.each(['npm', 'yarn', 'unknown'])(
+  'rejects unsupported metadata manager %s',
+  async (packageManager) => {
+    const workspace = await fixture('none', 'none', 'vite', 'bun');
+    expect(() =>
+      parseWorkspaceConfig({ ...workspace.rawConfig, packageManager }),
+    ).toThrow(
+      `Unsupported package manager in convex-monorepo.json: ${packageManager}`,
+    );
+  },
+);

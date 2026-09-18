@@ -1,3 +1,4 @@
+import { scriptCommand } from '../package-manager/index.js';
 import { readdir, readFile, realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -249,16 +250,19 @@ export async function doctor(
       'The root package name does not match convex-monorepo.json.',
       'Align the root package name with the workspace metadata.',
     );
-  if (rootManifest.packageManager !== `pnpm@${versions.pnpm}`) {
+  if (
+    rootManifest.packageManager !==
+    `${config.packageManager}@${versions[config.packageManager]}`
+  ) {
     issue(
       'package-manager-baseline',
-      'The root packageManager differs from this CLI’s tested pnpm version.',
-      'Run npx create-convex-monorepo@latest upgrade, then pnpm install.',
+      `The root packageManager differs from this CLI’s tested ${config.packageManager} version (${versions[config.packageManager]}).`,
+      `Run npx create-convex-monorepo@latest upgrade, then ${config.packageManager} install.`,
       'warning',
     );
   }
   for (const path of [
-    'pnpm-workspace.yaml',
+    ...(config.packageManager === 'pnpm' ? ['pnpm-workspace.yaml'] : []),
     'turbo.json',
     'packages/backend/convex/tsconfig.json',
     'packages/backend/convex/schema.ts',
@@ -270,7 +274,39 @@ export async function doctor(
         'Restore the workspace configuration file.',
       );
   }
-  const workspaceYaml = await text('pnpm-workspace.yaml');
+  const lockfile =
+    config.packageManager === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml';
+  if ((await text(lockfile)) === null)
+    issue(
+      'lockfile-missing',
+      `${lockfile} is missing.`,
+      `Run ${config.packageManager} install and commit ${lockfile}.`,
+      'warning',
+    );
+  else result.checks.push(`${lockfile} exists.`);
+  result.checks.push(
+    `Tested package manager: ${config.packageManager}@${versions[config.packageManager]}.`,
+  );
+  if (config.packageManager === 'bun') {
+    const patterns = rootManifest.workspaces;
+    if (
+      !Array.isArray(patterns) ||
+      patterns.length !== 2 ||
+      !patterns.includes('apps/*') ||
+      !patterns.includes('packages/*')
+    )
+      issue(
+        'workspace-package-excluded',
+        'package.json workspaces must include apps/* and packages/*.',
+        'Restore the generated workspaces list in package.json.',
+      );
+    else
+      result.checks.push(
+        'The bun workspaces list includes all recorded apps and shared packages.',
+      );
+  }
+  const workspaceYaml =
+    config.packageManager === 'pnpm' ? await text('pnpm-workspace.yaml') : null;
   if (workspaceYaml !== null) {
     const layout = workspacePatterns(workspaceYaml);
     if (layout.unsupported)
@@ -418,7 +454,7 @@ export async function doctor(
       issue(
         'backend-declarations',
         `The backend ${key} declaration is missing or unsafe.`,
-        `Run pnpm --filter ${backendName || './packages/backend'} exec convex codegen after reviewing the deployment configuration.`,
+        `Run ${config.packageManager === 'bun' ? 'bun run --cwd packages/backend convex codegen' : `pnpm --filter ${backendName || './packages/backend'} exec convex codegen`} after reviewing the deployment configuration.`,
       );
     } else
       result.checks.push(`Backend ${key} declaration exists (${expected}).`);
@@ -440,7 +476,7 @@ export async function doctor(
     issue(
       'backend-url',
       'The backend CONVEX_URL is missing or invalid.',
-      'Run pnpm convex:setup to configure the backend deployment.',
+      `Run ${scriptCommand(config.packageManager, 'convex:setup')} to configure the backend deployment.`,
     );
   else result.checks.push('Backend CONVEX_URL is a valid HTTP(S) origin.');
   const resolved = new Map<string, Map<string, string>>();
@@ -461,7 +497,7 @@ export async function doctor(
         issue(
           'dependency-missing',
           `${directory || 'root'} does not declare ${name}.`,
-          'Restore the required dependency and run pnpm install.',
+          `Restore the required dependency and run ${config.packageManager} install.`,
         );
         continue;
       }
@@ -470,7 +506,7 @@ export async function doctor(
         issue(
           'dependency-uninstalled',
           `${name} cannot be resolved from ${directory || 'root'}.`,
-          'Run pnpm install from the workspace root.',
+          `Run ${config.packageManager} install from the workspace root.`,
         );
         continue;
       }
@@ -482,14 +518,14 @@ export async function doctor(
         issue(
           'dependency-version',
           `${directory || 'root'} resolves ${name}@${installed}, which differs from its declared version.`,
-          'Run pnpm install and review the lockfile.',
+          `Run ${config.packageManager} install and review the lockfile.`,
         );
       }
       if (baselines[name] && baselines[name] !== installed) {
         issue(
           'dependency-baseline',
           `${directory || 'root'} resolves ${name}@${installed}, outside this CLI’s tested baseline.`,
-          'Run npx create-convex-monorepo@latest upgrade, then pnpm install.',
+          `Run npx create-convex-monorepo@latest upgrade, then ${config.packageManager} install.`,
           'warning',
         );
       }
@@ -573,7 +609,7 @@ export async function doctor(
       issue(
         'app-url',
         `${directory} has a missing or invalid ${key}.`,
-        'Run pnpm convex:link after configuring the backend.',
+        `Run ${scriptCommand(config.packageManager, 'convex:link')} after configuring the backend.`,
       );
     else if (
       validUrl(backendUrl) &&
@@ -582,7 +618,7 @@ export async function doctor(
       issue(
         'app-url-mismatch',
         `${directory} ${key} does not match the backend deployment URL.`,
-        'Run pnpm convex:link, then restart the app.',
+        `Run ${scriptCommand(config.packageManager, 'convex:link')}, then restart the app.`,
       );
     } else if (validUrl(backendUrl))
       result.checks.push(`${directory} uses the backend deployment URL.`);
@@ -674,7 +710,7 @@ export async function doctor(
       issue(
         'dependency-incompatible',
         `Workspace packages resolve different ${name} versions.`,
-        `Align ${name} versions across packages and run pnpm install.`,
+        `Align ${name} versions across packages and run ${config.packageManager} install.`,
       );
   }
   if (config.auth === 'clerk')

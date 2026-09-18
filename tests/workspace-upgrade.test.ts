@@ -18,12 +18,16 @@ afterEach(async () => {
       .map((path) => rm(path, { recursive: true, force: true })),
   );
 });
-async function fixture(auth: 'clerk' | 'convex-auth' = 'clerk') {
+async function fixture(
+  auth: 'clerk' | 'convex-auth' = 'clerk',
+  packageManager: 'pnpm' | 'bun' = 'pnpm',
+) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-upgrade-test-'));
   temporary.push(cwd);
   const root = await generateProject(
     {
       name: 'sample',
+      packageManager,
       apps: 'web:next,mobile:expo',
       auth,
       example: 'messages',
@@ -441,7 +445,9 @@ it('refuses unsupported package managers explicitly', async () => {
   const workspace = await fixture();
   // Exercise the planner's runtime guard independently of metadata validation.
   Object.assign(workspace.config, { packageManager: 'npm' });
-  await expect(planUpgrade(workspace)).rejects.toThrow('Only pnpm workspaces');
+  await expect(planUpgrade(workspace)).rejects.toThrow(
+    'Only pnpm or bun workspaces',
+  );
 });
 
 it.each([
@@ -602,3 +608,32 @@ it('upgrades Convex Auth and Auth.js pins from generated manifest baselines', as
     (await planUpgrade(await loadWorkspace(workspace.root))).changes,
   ).toEqual([]);
 });
+
+it.each(['1.0.0', '99.0.0', 'latest', 'pnpm@1.0.0'])(
+  'handles bun version pin %s',
+  async (version) => {
+    const workspace = await fixture('clerk', 'bun');
+    const pin = version.startsWith('pnpm') ? version : `bun@${version}`;
+    await edit(workspace.root, 'package.json', (pkg) => {
+      pkg.packageManager = pin;
+    });
+    if (version === 'latest' || version.startsWith('pnpm')) {
+      await expect(planUpgrade(workspace)).rejects.toThrow(
+        'Conflicting dependency pins',
+      );
+      return;
+    }
+    const plan = await planUpgrade(workspace);
+    await applyPlan(plan);
+    const manifest = JSON.parse(
+      await readFile(join(workspace.root, 'package.json'), 'utf8'),
+    );
+    expect(manifest.packageManager).toBe(
+      version === '99.0.0' ? pin : `bun@${versions.bun}`,
+    );
+    if (version === '1.0.0')
+      expect(plan.notes).toContain(
+        'Run bun install to update the lockfile, then run doctor.',
+      );
+  },
+);
