@@ -27,11 +27,19 @@ afterEach(async () => {
       .map((dir) => rm(dir, { recursive: true, force: true })),
   );
 });
-async function fixture(apps = 'next,vite,tanstack-start,expo') {
+async function fixture(
+  packageManager: 'pnpm' | 'bun' = 'pnpm',
+  apps = 'next,vite,tanstack-start,expo,router:react-router,island:astro',
+) {
   const dir = await mkdtemp(join(tmpdir(), 'ccm-workspace-core-'));
   directories.push(dir);
   const root = await generateProject(
-    { name: 'fixture', apps, example: 'none' },
+    {
+      name: 'fixture',
+      apps,
+      example: 'none',
+      packageManager,
+    },
     { cwd: dir },
   );
   return loadWorkspace(root);
@@ -234,7 +242,7 @@ describe('workspace transactions', () => {
 });
 
 describe('environment sync', () => {
-  it('links only public URLs for all four frameworks, preserves settings, and is idempotent', async () => {
+  it('links only public URLs for all five frameworks, preserves settings, and is idempotent', async () => {
     const ws = await fixture();
     await writeFile(
       join(ws.root, 'packages/backend/.env'),
@@ -256,10 +264,15 @@ describe('environment sync', () => {
     for (const app of ws.config.apps) {
       const env = await readText(ws.root, `apps/${app.name}/.env.local`);
       expect(env).toContain('https://current.convex.cloud');
+      if (app.framework === 'react-router')
+        expect(env).toContain('VITE_CONVEX_URL=');
       expect(env).not.toContain('private-never-print');
     }
     expect(await readText(ws.root, 'apps/web/.env.local')).toContain(
       'OTHER="first\nsecond"',
+    );
+    expect(await readText(ws.root, 'apps/island/.env.local')).toBe(
+      'PUBLIC_CONVEX_URL=https://current.convex.cloud\n',
     );
     expect((await planEnvSync(ws)).changes).toEqual([]);
   });
@@ -312,8 +325,15 @@ describe('environment sync', () => {
   });
 });
 
+it('uses bun setup guidance when env sync needs a deployment', async () => {
+  const workspace = await fixture('bun');
+  await expect(planEnvSync(workspace)).rejects.toThrow(
+    'Run bun run convex:setup first.',
+  );
+});
+
 it('syncs the Nuxt runtime URL with dry run and idempotency', async () => {
-  const ws = await fixture('next,portal:nuxt');
+  const ws = await fixture('pnpm', 'next,portal:nuxt');
   await writeFile(
     join(ws.root, 'packages/backend/.env.local'),
     'CONVEX_URL=https://nuxt.convex.cloud\nCONVEX_DEPLOY_KEY=never-copy\n',

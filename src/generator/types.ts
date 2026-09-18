@@ -1,5 +1,14 @@
-export type Framework = 'next' | 'vite' | 'tanstack-start' | 'expo' | 'nuxt';
-export type Auth = 'none' | 'clerk' | 'convex-auth';
+export type Framework =
+  | 'next'
+  | 'vite'
+  | 'tanstack-start'
+  | 'react-router'
+  | 'expo'
+  | 'astro'
+  | 'nuxt';
+export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos';
+export type OAuthProvider = 'github' | 'google';
+export type PackageManagerId = 'pnpm' | 'bun';
 export type Example = 'none' | 'messages';
 export interface AppSpec {
   name: string;
@@ -9,8 +18,9 @@ export interface ProjectOptions {
   name: string;
   apps: AppSpec[];
   auth: Auth;
+  oauth?: OAuthProvider[];
   example: Example;
-  packageManager: 'pnpm';
+  packageManager: PackageManagerId;
   install: boolean;
   initConvex: boolean;
   git: boolean;

@@ -1,8 +1,13 @@
 import * as prompts from '@clack/prompts';
 import { parseArgs } from 'node:util';
-import { frameworks, validateProjectName } from '../generator/options.js';
+import {
+  frameworks,
+  normalizeOAuthProviders,
+  oauthProviders,
+  validateProjectName,
+} from '../generator/options.js';
 import type { Example, Framework } from '../generator/types.js';
-import { pnpm } from '../package-manager/index.js';
+import { packageManagers } from '../package-manager/index.js';
 import { loadWorkspace } from '../workspace/project.js';
 import { applyPlan } from '../workspace/changes.js';
 import { planAddApp, planAddAuth, planAddPackage } from '../workspace/add.js';
@@ -16,10 +21,11 @@ Manage an existing Convex monorepo from its root or any subdirectory.
 
   add                       Choose an app, shared package, or authentication
   add app [name]            Add an application
-    --framework <name>      next, vite, tanstack-start, expo, or nuxt
+    --framework <name>      next, vite, tanstack-start, react-router, expo, astro, or nuxt
     --example <name>        none or messages (defaults to workspace example)
   add package [name]        Add a blank shared TypeScript package
-  add auth [clerk|convex-auth]  Add authentication
+  add auth [clerk|convex-auth|workos]  Add authentication
+    --oauth <providers>     github,google (Convex Auth only)
   doctor [--json]           Check workspace configuration and setup
   env sync [--app name]     Copy public Convex URLs to frontend env files
   upgrade                  Update exact dependency pins to the tested baseline
@@ -36,7 +42,7 @@ Add, upgrade, and env sync options:
   --version, -v            Show CLI version
 
 Without a terminal, add app requires a name and --framework; add package
-requires a name; add auth requires clerk or convex-auth. Installation is off unless --install or --yes is passed.
+requires a name; add auth requires clerk, convex-auth, or workos. Installation is off unless --install or --yes is passed.
 Existing files are never forced.
 `;
 
@@ -56,7 +62,8 @@ export interface WorkspaceCommand {
   name?: string;
   framework?: Framework;
   example?: Example;
-  provider?: 'clerk' | 'convex-auth';
+  provider?: 'clerk' | 'convex-auth' | 'workos';
+  oauth?: string | readonly string[];
   app?: string;
   install?: boolean;
   yes: boolean;
@@ -74,6 +81,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
       version: { type: 'boolean', short: 'v' },
       framework: { type: 'string' },
       example: { type: 'string' },
+      oauth: { type: 'string' },
       app: { type: 'string' },
       install: { type: 'boolean' },
       'no-install': { type: 'boolean' },
@@ -108,10 +116,10 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     } else if (second === 'auth') {
       command = 'add-auth';
       maximum = 3;
-      allowed = addFlags;
+      allowed = [...addFlags, 'oauth'];
     } else
       throw new Error(
-        'Use add app [name], add package [name], or add auth [clerk|convex-auth].',
+        'Use add app [name], add package [name], or add auth [clerk|convex-auth|workos].',
       );
   } else if (first === 'doctor') {
     command = 'doctor';
@@ -158,9 +166,14 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     command === 'add-auth' &&
     third !== undefined &&
     third !== 'clerk' &&
-    third !== 'convex-auth'
+    third !== 'convex-auth' &&
+    third !== 'workos'
   )
-    throw new Error('Choose add auth clerk or add auth convex-auth.');
+    throw new Error(
+      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
+    );
+  if (values.oauth !== undefined && third !== undefined)
+    normalizeOAuthProviders(values.oauth, third);
   return {
     command,
     help: !!values.help || (command === 'help' && !values.version),
@@ -173,7 +186,8 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     third !== undefined
       ? { name: third }
       : {}),
-    ...(command === 'add-auth' && (third === 'clerk' || third === 'convex-auth')
+    ...(command === 'add-auth' &&
+    (third === 'clerk' || third === 'convex-auth' || third === 'workos')
       ? { provider: third }
       : {}),
     ...(values.framework !== undefined
@@ -182,6 +196,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     ...(values.example !== undefined
       ? { example: values.example as Example }
       : {}),
+    ...(values.oauth !== undefined ? { oauth: values.oauth } : {}),
     ...(values.app !== undefined ? { app: values.app } : {}),
     ...(values.install || values['no-install']
       ? { install: !values['no-install'] }
@@ -214,7 +229,7 @@ export async function runWorkspace(
   if (options.command === 'add') {
     if (!interactive)
       throw new Error(
-        'Choose add app <name> --framework <name>, add package <name>, or add auth <clerk|convex-auth> when prompts are disabled.',
+        'Choose add app <name> --framework <name>, add package <name>, or add auth <clerk|convex-auth|workos> when prompts are disabled.',
       );
     options.command = answer(
       await prompts.select({
@@ -252,16 +267,21 @@ export async function runWorkspace(
       options.framework = answer(
         await prompts.select({
           message: 'Application framework?',
-          options: frameworks.map((value) => ({ value, label: value })),
+          options: frameworks.map((value) => ({
+            value,
+            label: value === 'astro' ? 'Astro + React island' : value,
+          })),
         }),
       );
     if (!options.name || !options.framework)
       throw new Error(
-        'Without prompts, use add app <name> --framework <next|vite|tanstack-start|expo|nuxt>.',
+        'Without prompts, use add app <name> --framework <next|vite|tanstack-start|react-router|expo|astro|nuxt>.',
       );
   }
   if (options.command === 'add-auth' && !options.provider && !interactive)
-    throw new Error('Without prompts, use add auth <clerk|convex-auth>.');
+    throw new Error(
+      'Without prompts, use add auth <clerk|convex-auth|workos>.',
+    );
   signal?.throwIfAborted();
   const workspace = await loadWorkspace(process.cwd());
   if (options.command === 'add-auth' && !options.provider) {
@@ -273,10 +293,31 @@ export async function runWorkspace(
               options: [
                 { value: 'clerk' as const, label: 'Clerk' },
                 { value: 'convex-auth' as const, label: 'Convex Auth' },
+                { value: 'workos' as const, label: 'WorkOS AuthKit' },
               ],
             }),
           )
         : workspace.config.auth;
+  }
+  if (
+    options.command === 'add-auth' &&
+    options.provider === 'convex-auth' &&
+    workspace.config.auth === 'none' &&
+    options.oauth === undefined &&
+    interactive
+  ) {
+    const selected = answer(
+      await prompts.multiselect({
+        message: 'OAuth providers?',
+        options: oauthProviders.map((value) => ({
+          value,
+          label: value === 'github' ? 'GitHub' : 'Google',
+        })),
+        initialValues: [],
+        required: false,
+      }),
+    );
+    if (selected.length) options.oauth = selected;
   }
   if (
     options.command === 'add-app' &&
@@ -344,7 +385,11 @@ export async function runWorkspace(
             })
           : options.command === 'add-package'
             ? await planAddPackage(workspace, { name: options.name! })
-            : await planAddAuth(workspace, options.provider!);
+            : options.oauth !== undefined
+              ? await planAddAuth(workspace, options.provider!, {
+                  oauth: options.oauth,
+                })
+              : await planAddAuth(workspace, options.provider!);
   console.log(
     options.dryRun ? 'Dry run. Planned changes:' : 'Planned changes:',
   );
@@ -377,10 +422,13 @@ export async function runWorkspace(
   await applyPlan(plan, signal ? { signal } : {});
   if (options.command !== 'env-sync' && install && plan.changes.length) {
     try {
-      await pnpm.install(workspace.root, signal);
+      await packageManagers[workspace.config.packageManager].install(
+        workspace.root,
+        signal,
+      );
     } catch (error) {
       throw new Error(
-        `Workspace files were updated, but dependency installation failed. Run pnpm install from the workspace root to retry. ${error instanceof Error ? error.message : String(error)}`,
+        `Workspace files were updated, but dependency installation failed. Run ${workspace.config.packageManager} install from the workspace root to retry. ${error instanceof Error ? error.message : String(error)}`,
         { cause: error },
       );
     }

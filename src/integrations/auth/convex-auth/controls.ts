@@ -1,9 +1,21 @@
-export function authControls(native: boolean): string {
+import type { OAuthProvider } from '../../../generator/types.js';
+
+export function authControls(
+  native: boolean,
+  oauth: readonly OAuthProvider[] = [],
+  scheme = '',
+): string {
   return `'use client';
 import { useState } from 'react';
 import { useConvexAuth } from 'convex/react';
 import { useAuthActions } from '@convex-dev/auth/react';
 ${native ? "import { Button, ScrollView, Text, TextInput, View } from 'react-native';" : ''}
+${
+  native && oauth.length
+    ? `import * as Linking from 'expo-linking';
+import { openAuthSessionAsync } from 'expo-web-browser';`
+    : ''
+}
 
 export function AuthControls() {
   const { isAuthenticated } = useConvexAuth();
@@ -22,6 +34,31 @@ export function AuthControls() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not sign in. Try again.');
     } finally { setPending(false); }
+  }
+  ${
+    oauth.length
+      ? `async function authenticateOAuth(provider: ${oauth.map((provider) => `'${provider}'`).join(' | ')}) {
+    if (pending) return;
+    setPending(true); setError(null);
+    try {
+      ${
+        native
+          ? `const redirectTo = Linking.createURL('auth', { scheme: '${scheme}' });
+      const { redirect } = await signIn(provider, { redirectTo });
+      if (!redirect) throw new Error('The provider did not return a sign-in URL.');
+      const result = await openAuthSessionAsync(redirect.toString(), redirectTo);
+      if (result.type === 'success') {
+        const code = new URL(result.url).searchParams.get('code');
+        if (!code) throw new Error('The sign-in response did not include a code.');
+        await signIn(provider, { code });
+      }`
+          : `await signIn(provider);`
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not sign in. Try again.');
+    } finally { setPending(false); }
+  }`
+      : ''
   }
   async function logout() {
     if (pending) return;
@@ -43,6 +80,7 @@ export function AuthControls() {
       <TextInput accessibilityLabel="Password" placeholder="Password" secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete={flow === 'signUp' ? 'new-password' : 'current-password'} value={password} onChangeText={setPassword} editable={!pending} style={{ borderWidth: 1, padding: 12, marginVertical: 12 }} />
       <Button title={pending ? 'Please wait…' : flow === 'signIn' ? 'Sign in' : 'Sign up'} disabled={pending || !email.trim() || !password} onPress={() => { void authenticate(); }} />
       <Button title={flow === 'signIn' ? 'Sign up instead' : 'Sign in instead'} disabled={pending} onPress={toggleFlow} />
+      ${oauth.map((provider) => `<Button title="Sign in with ${provider === 'github' ? 'GitHub' : 'Google'}" disabled={pending} onPress={() => { void authenticateOAuth('${provider}'); }} />`).join('\n')}
     </View>}
     {error && <Text accessibilityRole="alert">{error}</Text>}
   </ScrollView>;`
@@ -53,6 +91,7 @@ export function AuthControls() {
       <label>Password <input name="password" type="password" autoComplete={flow === 'signUp' ? 'new-password' : 'current-password'} required minLength={flow === 'signUp' ? 8 : undefined} value={password} disabled={pending} onChange={(event) => setPassword(event.target.value)} /></label>
       <button type="submit" disabled={pending}>{pending ? 'Please wait…' : flow === 'signIn' ? 'Sign in' : 'Sign up'}</button>
       <button type="button" disabled={pending} onClick={toggleFlow}>{flow === 'signIn' ? 'Sign up instead' : 'Sign in instead'}</button>
+      ${oauth.map((provider) => `<button type="button" disabled={pending} onClick={() => { void authenticateOAuth('${provider}'); }}>Sign in with ${provider === 'github' ? 'GitHub' : 'Google'}</button>`).join('\n')}
     </form>}
     {error && <p role="alert">{error}</p>}
   </div>;`

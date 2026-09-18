@@ -78,21 +78,53 @@ describe('options', () => {
   it.each([
     { apps: 'next,' },
     { apps: 'x:next,x:vite' },
-    { apps: 'astro' },
+    { apps: 'unsupported' },
     { apps: 'backend:next' },
     { apps: 'eslint-config:vite' },
     { apps: [] },
     { auth: 'custom' },
     { packageManager: 'npm' },
+    { packageManager: 'yarn' },
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
-  it.each(['none', 'clerk', 'convex-auth'])(
+  it.each(['none', 'clerk', 'convex-auth', 'workos'])(
     'accepts %s auth through CLI options',
     (auth) => {
       expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(
         auth,
       );
+    },
+  );
+  it.each(['react-router', 'web:react-router'])(
+    'accepts %s through CLI options',
+    (apps) => {
+      expect(normalizeOptions(parseCommand(['--apps', apps]).raw).apps).toEqual(
+        [{ name: 'web', framework: 'react-router' }],
+      );
+      expect(selectTemplate('react-router').id).toBe('react-router');
+    },
+  );
+  it.each(['pnpm', 'bun'])(
+    'accepts %s through the package-manager flag',
+    (manager) => {
+      expect(
+        normalizeOptions(parseCommand(['--package-manager', manager]).raw)
+          .packageManager,
+      ).toBe(manager);
+    },
+  );
+  it('defaults to pnpm', () => {
+    expect(normalizeOptions({}).packageManager).toBe('pnpm');
+  });
+  it.each(['npm', 'yarn'])(
+    'rejects %s before creating files',
+    async (manager) => {
+      const cwd = await temp();
+      await expect(
+        generateProject({ name: 'invalid', packageManager: manager }, { cwd }),
+      ).rejects.toThrow('Choose pnpm or bun');
+      expect(await readdir(cwd)).toEqual([]);
     },
   );
   it('selects framework adapters', () =>
@@ -150,6 +182,30 @@ describe('context', () => {
   });
 });
 describe('generation safety', () => {
+  it.each(['react-router', 'next,router:react-router'])(
+    'rejects unsupported WorkOS apps %s during normalization and before writing output',
+    async (apps) => {
+      const cwd = await temp();
+      const raw = { name: 'unsupported', apps, auth: 'workos' };
+      expect(() => normalizeOptions(raw)).toThrow(/framework "react-router"/);
+      await expect(generateProject(raw, { cwd })).rejects.toThrow(
+        /Choose next, vite, tanstack-start/,
+      );
+      expect(await readdir(cwd)).toEqual([]);
+    },
+  );
+
+  it.each(['expo', 'next,expo', 'expo,vite', 'tanstack-start,mobile:expo'])(
+    'rejects unsupported WorkOS apps %s before writing output',
+    async (apps) => {
+      const cwd = await temp();
+      await expect(
+        generateProject({ name: 'unsupported', apps, auth: 'workos' }, { cwd }),
+      ).rejects.toThrow(/expo/i);
+      expect(await readdir(cwd)).toEqual([]);
+    },
+  );
+
   it('refuses nonempty directories without modifying files', async () => {
     const cwd = await temp();
     await mkdir(join(cwd, 'existing'));
@@ -284,6 +340,63 @@ describe('setup recovery and cancellation', () => {
   });
 });
 
+it.each(['none', 'clerk', 'convex-auth'])(
+  'selects Astro with every framework and %s auth',
+  (auth) => {
+    const raw = parseCommand([
+      '--apps',
+      'astro,next,vite,tanstack-start,expo,router:react-router,island:astro',
+      '--auth',
+      auth,
+    ]).raw;
+    expect(normalizeOptions(raw).apps).toEqual([
+      { name: 'web', framework: 'astro' },
+      { name: 'app', framework: 'next' },
+      { name: 'admin', framework: 'vite' },
+      { name: 'app-2', framework: 'tanstack-start' },
+      { name: 'mobile', framework: 'expo' },
+      { name: 'router', framework: 'react-router' },
+      { name: 'island', framework: 'astro' },
+    ]);
+    expect(selectTemplate('astro').label).toBe('Astro + React island');
+  },
+);
+it('installs bun projects with the selected package manager', async () => {
+  const install = vi
+    .spyOn(packageManager.bun, 'install')
+    .mockResolvedValueOnce();
+  const other = vi
+    .spyOn(packageManager.pnpm, 'install')
+    .mockResolvedValueOnce();
+  const root = await generateProject(
+    { name: 'bun-install', apps: 'vite', packageManager: 'bun', install: true },
+    { cwd: await temp() },
+  );
+  expect(install).toHaveBeenCalledWith(root, undefined);
+  expect(other).not.toHaveBeenCalled();
+});
+
+// Unsupported combinations must fail in normalization, before generation writes.
+it.each(['pnpm', 'bun'])(
+  'rejects WorkOS with static Astro before writing a %s project',
+  async (packageManager) => {
+    const options = {
+      name: 'unsupported',
+      apps: 'astro',
+      auth: 'workos',
+      packageManager,
+    };
+    expect(() => normalizeOptions(options)).toThrow(
+      'The Astro template uses static output',
+    );
+    const cwd = await temp();
+    await expect(generateProject(options, { cwd })).rejects.toThrow(
+      'is not supported by this generator for framework "astro"',
+    );
+    expect(await readdir(cwd)).toEqual([]);
+  },
+);
+
 describe('Nuxt options', () => {
   it.each(['nuxt', 'nuxt,next', 'web:next,portal:nuxt'])(
     'accepts %s with auth none',
@@ -296,7 +409,7 @@ describe('Nuxt options', () => {
       expect(selectTemplate('nuxt').id).toBe('nuxt');
     },
   );
-  it.each(['clerk', 'convex-auth'])(
+  it.each(['clerk', 'convex-auth', 'workos'])(
     'rejects Nuxt with %s before creating files',
     async (auth) => {
       const cwd = await temp();
@@ -312,3 +425,46 @@ describe('Nuxt options', () => {
     },
   );
 });
+
+describe.each(['pnpm', 'bun'] as const)(
+  'Nuxt integration with %s',
+  (packageManager) => {
+    it('coexists with every framework without authentication', () => {
+      const options = normalizeOptions({
+        apps: 'next,vite,tanstack-start,expo,router:react-router,island:astro,portal:nuxt',
+        auth: 'none',
+        packageManager,
+      });
+      expect(options.apps.map((app) => app.framework)).toEqual([
+        'next',
+        'vite',
+        'tanstack-start',
+        'expo',
+        'react-router',
+        'astro',
+        'nuxt',
+      ]);
+      expect(options.packageManager).toBe(packageManager);
+    });
+    it.each(['github', 'google', 'github,google'])(
+      'rejects Convex Auth OAuth %s before creating files',
+      async (oauth) => {
+        const cwd = await temp();
+        const options = {
+          name: 'unsupported-oauth',
+          apps: 'next,portal:nuxt',
+          auth: 'convex-auth',
+          oauth,
+          packageManager,
+        };
+        expect(() => normalizeOptions(options)).toThrow(
+          'Nuxt supports only auth none',
+        );
+        await expect(generateProject(options, { cwd })).rejects.toThrow(
+          'Nuxt supports only auth none',
+        );
+        expect(await readdir(cwd)).toEqual([]);
+      },
+    );
+  },
+);

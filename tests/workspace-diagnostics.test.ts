@@ -24,11 +24,22 @@ afterEach(async () => {
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
-async function fixture(apps = 'web:next,mobile:expo', auth = 'none') {
+async function fixture(
+  apps = 'web:next,mobile:expo',
+  auth = 'none',
+  packageManager: 'pnpm' | 'bun' = 'pnpm',
+) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-doctor-'));
   roots.push(cwd);
   const root = await generateProject(
-    { name: 'diagnostics', apps, auth, install: false, git: false },
+    {
+      name: 'diagnostics',
+      apps,
+      auth,
+      packageManager,
+      install: false,
+      git: false,
+    },
     { cwd },
   );
   return loadWorkspace(root);
@@ -52,7 +63,54 @@ async function snapshot(root: string): Promise<Record<string, string>> {
 }
 
 describe('workspace doctor', () => {
-  it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'NUXT_PUBLIC'])(
+  it.each([
+    'react-router',
+    '@react-router/node',
+    '@react-router/serve',
+    '@react-router/dev',
+    'isbot',
+    '@clerk/react-router',
+  ])('reports missing React Router dependency %s', async (dependency) => {
+    const workspace = await fixture('web:react-router', 'clerk');
+    const path = join(workspace.root, 'apps/web/package.json');
+    const pkg = JSON.parse(await readFile(path, 'utf8'));
+    delete pkg.dependencies[dependency];
+    delete pkg.devDependencies[dependency];
+    await writeFile(path, JSON.stringify(pkg));
+    const report = await doctor(workspace);
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'dependency-missing',
+        severity: 'error',
+        message: `apps/web does not declare ${dependency}.`,
+      }),
+    );
+  });
+  it('requires the server Clerk secret for React Router without exposing values', async () => {
+    const workspace = await fixture('web:react-router', 'clerk');
+    await put(
+      workspace.root,
+      'apps/web/.env.local',
+      'VITE_CLERK_PUBLISHABLE_KEY=pk_test_placeholder\n',
+    );
+    expect((await doctor(workspace)).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'auth-env-missing',
+        message: expect.stringContaining('CLERK_SECRET_KEY'),
+      }),
+    );
+    await put(
+      workspace.root,
+      'apps/web/.env.local',
+      'VITE_CLERK_PUBLISHABLE_KEY=pk_test_placeholder\nCLERK_SECRET_KEY=never-expose-this\n',
+    );
+    const report = await doctor(workspace);
+    expect(
+      report.issues.filter((issue) => issue.code === 'auth-env-missing'),
+    ).toEqual([]);
+    expect(JSON.stringify(report)).not.toContain('never-expose-this');
+  });
+  it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'PUBLIC', 'NUXT_PUBLIC'])(
     'reports %s signing values in every app environment file without exposing them',
     async (prefix) => {
       const workspace = await fixture('web:next', 'convex-auth');
@@ -65,13 +123,18 @@ describe('workspace doctor', () => {
         await put(
           workspace.root,
           `apps/web/${filename}`,
-          `${prefix}_JWT_PRIVATE_KEY=never-expose-private\n${prefix}_JWKS=never-expose-jwks\n`,
+          `${prefix}_JWT_PRIVATE_KEY=never-expose-private\n${prefix}_JWKS=never-expose-jwks\n${prefix}_AUTH_GITHUB_SECRET=never-expose-github\n${prefix}_AUTH_GOOGLE_SECRET=never-expose-google\n`,
         );
         const report = await doctor(workspace);
         expect(
           report.issues.filter((issue) => issue.code === 'public-secret'),
         ).toEqual(
-          ['JWT_PRIVATE_KEY', 'JWKS'].map((secret) => ({
+          [
+            'JWT_PRIVATE_KEY',
+            'JWKS',
+            'AUTH_GITHUB_SECRET',
+            'AUTH_GOOGLE_SECRET',
+          ].map((secret) => ({
             code: 'public-secret',
             severity: 'error',
             message: `apps/web exposes ${secret} through a public environment variable.`,
@@ -83,6 +146,154 @@ describe('workspace doctor', () => {
       }
     },
   );
+  it('warns about missing OAuth SITE_URL guidance without requiring local deployment secrets', async () => {
+    const workspace = await fixture('web:next', 'convex-auth');
+    workspace.config.oauth = ['github', 'google'];
+    const setupFiles = [
+      'packages/backend/.env.convex-auth.example',
+      'README.md',
+      'CONVEX_AUTH_SETUP.md',
+    ];
+    for (const path of setupFiles)
+      await put(workspace.root, path, 'Callback origin: CONVEX_SITE_URL\n');
+    const before = await snapshot(workspace.root);
+    const missing = await doctor(workspace);
+    expect(
+      missing.issues.filter((issue) => issue.code.startsWith('oauth-')),
+    ).toEqual([
+      {
+        code: 'oauth-site-url-guidance',
+        severity: 'warning',
+        message:
+          'OAuth is recorded in metadata but the setup files do not mention SITE_URL.',
+        fix: 'Document the required SITE_URL deployment setting in README.md, CONVEX_AUTH_SETUP.md, or packages/backend/.env.convex-auth.example.',
+      },
+    ]);
+    expect(await snapshot(workspace.root)).toEqual(before);
+    for (const path of setupFiles) {
+      await put(
+        workspace.root,
+        path,
+        'Set SITE_URL on the Convex deployment.\n',
+      );
+      const report = await doctor(workspace);
+      expect(
+        report.issues.filter((issue) => issue.code.startsWith('oauth-')),
+      ).toEqual([]);
+      expect(
+        report.issues.filter((issue) => issue.code === 'auth-env-missing'),
+      ).toEqual([]);
+      expect(report.checks).toContain(
+        'OAuth SITE_URL setup guidance exists; deployment settings were not checked.',
+      );
+      await put(workspace.root, path, 'Callback origin: CONVEX_SITE_URL\n');
+    }
+    delete workspace.config.oauth;
+    expect(
+      (await doctor(workspace)).issues.filter((issue) =>
+        issue.code.startsWith('oauth-'),
+      ),
+    ).toEqual([]);
+  });
+  it('requires OAuth browser dependencies only in OAuth-enabled Expo apps', async () => {
+    const workspace = await fixture('web:next,mobile:expo', 'convex-auth');
+    workspace.config.oauth = ['google'];
+    const path = join(workspace.root, 'apps/mobile/package.json');
+    const pkg = JSON.parse(await readFile(path, 'utf8'));
+    delete pkg.dependencies['expo-web-browser'];
+    delete pkg.dependencies['expo-linking'];
+    await writeFile(path, JSON.stringify(pkg));
+    const oauthDependencies = (await doctor(workspace)).issues.filter((issue) =>
+      /expo-web-browser|expo-linking/.test(issue.message),
+    );
+    expect(oauthDependencies).toEqual(
+      ['expo-web-browser', 'expo-linking'].map((name) => ({
+        code: 'dependency-missing',
+        severity: 'error',
+        message: `apps/mobile does not declare ${name}.`,
+        fix: 'Restore the required dependency and run pnpm install.',
+      })),
+    );
+    delete workspace.config.oauth;
+    expect(
+      (await doctor(workspace)).issues.filter((issue) =>
+        /expo-web-browser|expo-linking/.test(issue.message),
+      ),
+    ).toEqual([]);
+  });
+  it.each([
+    undefined,
+    '',
+    '123invalid',
+    'app://',
+    'has space',
+    [],
+    ['valid', ''],
+    42,
+  ])('reports an invalid OAuth Expo scheme %j', async (scheme) => {
+    const workspace = await fixture('mobile:expo', 'convex-auth');
+    workspace.config.oauth = ['github'];
+    await put(
+      workspace.root,
+      'apps/mobile/app.json',
+      JSON.stringify({ expo: { scheme } }),
+    );
+    const report = await doctor(workspace);
+    expect(
+      report.issues.filter((issue) => issue.code === 'expo-oauth-scheme'),
+    ).toEqual([
+      {
+        code: 'expo-oauth-scheme',
+        severity: 'error',
+        message:
+          'apps/mobile/app.json has no valid expo.scheme for OAuth redirects.',
+        fix: 'Set expo.scheme to a nonempty URI scheme, use it in the OAuth redirectTo URL, and rebuild the development app.',
+      },
+    ]);
+    delete workspace.config.oauth;
+    expect(
+      (await doctor(workspace)).issues.filter(
+        (issue) => issue.code === 'expo-oauth-scheme',
+      ),
+    ).toEqual([]);
+  });
+  it.each(['my-app', ['my-app', 'other.app+oauth']])(
+    'accepts a valid OAuth Expo scheme %j',
+    async (scheme) => {
+      const workspace = await fixture('mobile:expo', 'convex-auth');
+      workspace.config.oauth = ['github'];
+      await put(
+        workspace.root,
+        'apps/mobile/app.json',
+        JSON.stringify({ expo: { scheme } }),
+      );
+      const report = await doctor(workspace);
+      expect(
+        report.issues.filter((issue) => issue.code === 'expo-oauth-scheme'),
+      ).toEqual([]);
+      expect(
+        report.checks.some((check) =>
+          check.includes('declares an OAuth redirect scheme'),
+        ),
+      ).toBe(true);
+    },
+  );
+  it('reports missing or malformed OAuth Expo app configuration without exposing its contents', async () => {
+    const workspace = await fixture('mobile:expo', 'convex-auth');
+    workspace.config.oauth = ['google'];
+    await rm(join(workspace.root, 'apps/mobile/app.json'));
+    expect(
+      (await doctor(workspace)).issues.filter(
+        (issue) => issue.code === 'expo-oauth-scheme',
+      ),
+    ).toHaveLength(1);
+    await put(workspace.root, 'apps/mobile/app.json', '{never-expose-config');
+    const report = await doctor(workspace);
+    expect(
+      report.issues.filter((issue) => issue.code === 'expo-oauth-scheme'),
+    ).toHaveLength(1);
+    expect(JSON.stringify(report)).not.toContain('never-expose-config');
+  });
   it('requires SecureStore only in Convex Auth Expo apps', async () => {
     const workspace = await fixture(
       'web:next,spa:vite,start:tanstack-start,mobile:expo',
@@ -395,7 +606,7 @@ closing secret"
       result.issues.some((issue) => issue.code === 'backend-runtime'),
     ).toBe(true);
   });
-  it('runs an in-memory type probe against installed TypeScript and detects an untyped API', async () => {
+  it('resolves app-local type libraries in the in-memory probe and detects an untyped API', async () => {
     const workspace = await fixture('web:vite');
     const require = createRequire(import.meta.url);
     // The fixture uses the real compiler through a local package entry, without an install.
@@ -422,9 +633,19 @@ closing secret"
           module: 'ESNext',
           moduleResolution: 'Bundler',
           target: 'ES2023',
-          types: [],
+          types: ['ccm-app-only-types'],
         },
       }),
+    );
+    await put(
+      workspace.root,
+      'apps/web/node_modules/ccm-app-only-types/package.json',
+      JSON.stringify({ name: 'ccm-app-only-types', types: 'index.d.ts' }),
+    );
+    await put(
+      workspace.root,
+      'apps/web/node_modules/ccm-app-only-types/index.d.ts',
+      'export {};\n',
     );
     await mkdir(join(workspace.root, 'node_modules/@diagnostics'), {
       recursive: true,
@@ -711,6 +932,170 @@ describe('upgrade check', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await rejected;
   });
+});
+
+it('checks Astro dependencies, public URL and Clerk binding without requiring a server secret', async () => {
+  const workspace = await fixture('astro', 'clerk');
+  const initial = await doctor(workspace);
+  for (const name of [
+    'astro',
+    '@astrojs/react',
+    '@astrojs/check',
+    '@clerk/astro',
+  ]) {
+    expect(initial.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'dependency-uninstalled',
+        message: `${name} cannot be resolved from apps/web.`,
+      }),
+    );
+  }
+  expect(
+    initial.issues.filter((issue) => issue.code === 'auth-env-missing'),
+  ).toEqual([
+    expect.objectContaining({
+      message: 'apps/web is missing PUBLIC_CLERK_PUBLISHABLE_KEY.',
+    }),
+  ]);
+  await put(
+    workspace.root,
+    'packages/backend/.env.local',
+    'CONVEX_URL=https://example.convex.cloud\n',
+  );
+  await put(
+    workspace.root,
+    'apps/web/.env.local',
+    'PUBLIC_CONVEX_URL=https://example.convex.cloud\nPUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder\n',
+  );
+  const configured = await doctor(workspace);
+  expect(
+    configured.issues.filter((issue) =>
+      ['app-url', 'app-url-mismatch', 'auth-env-missing'].includes(issue.code),
+    ),
+  ).toEqual([]);
+  const path = join(workspace.root, 'apps/web/package.json');
+  const pkg = JSON.parse(await readFile(path, 'utf8'));
+  delete pkg.dependencies['@clerk/astro'];
+  await writeFile(path, JSON.stringify(pkg));
+  expect((await doctor(workspace)).issues).toContainEqual(
+    expect.objectContaining({
+      code: 'dependency-missing',
+      message: 'apps/web does not declare @clerk/astro.',
+    }),
+  );
+});
+
+it('reports missing Astro Clerk integration and middleware files', async () => {
+  const workspace = await fixture('astro', 'clerk');
+  for (const file of [
+    'astro.config.mjs',
+    'auth.config.mjs',
+    'src/middleware.ts',
+  ])
+    await rm(join(workspace.root, 'apps/web', file));
+  expect(
+    (await doctor(workspace)).issues
+      .filter((issue) => issue.code === 'astro-config-missing')
+      .map((issue) => issue.message),
+  ).toEqual([
+    'apps/web/astro.config.mjs is missing.',
+    'apps/web/auth.config.mjs is missing.',
+    'apps/web/src/middleware.ts is missing.',
+  ]);
+});
+
+it.each([
+  ['next', '@workos-inc/authkit-nextjs'],
+  ['next', '@workos-inc/node'],
+  ['tanstack-start', '@workos-inc/node'],
+  ['vite', '@workos-inc/authkit-react'],
+  ['tanstack-start', '@workos/authkit-tanstack-react-start'],
+])(
+  'checks the official WorkOS dependency for %s',
+  async (framework, dependency) => {
+    const workspace = await fixture(`web:${framework}`, 'workos');
+    const path = join(workspace.root, 'apps/web/package.json');
+    const pkg = JSON.parse(await readFile(path, 'utf8'));
+    delete pkg.dependencies[dependency!];
+    await writeFile(path, JSON.stringify(pkg));
+    await rm(join(workspace.root, 'packages/backend/convex/auth.config.ts'));
+    const result = await doctor(workspace);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dependency-missing',
+          message: `apps/web does not declare ${dependency}.`,
+        }),
+        expect.objectContaining({ code: 'auth-config-missing' }),
+        expect.objectContaining({
+          code: 'auth-env-missing',
+          message: expect.stringContaining('WORKOS_CLIENT_ID'),
+        }),
+      ]),
+    );
+  },
+);
+
+it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'])(
+  'reports public WorkOS secrets with %s without exposing values',
+  async (prefix) => {
+    const workspace = await fixture('web:next', 'workos');
+    await put(
+      workspace.root,
+      'apps/web/.env.production',
+      `${prefix}_WORKOS_API_KEY=private-api\n${prefix}_WORKOS_COOKIE_PASSWORD=private-cookie\n`,
+    );
+    const result = await doctor(workspace);
+    const issues = result.issues.filter(
+      (issue) => issue.code === 'public-secret',
+    );
+    expect(issues).toHaveLength(2);
+    expect(issues.map((issue) => issue.message)).toEqual([
+      'apps/web exposes WORKOS_API_KEY through a public environment variable.',
+      'apps/web exposes WORKOS_COOKIE_PASSWORD through a public environment variable.',
+    ]);
+    expect(JSON.stringify(result)).not.toContain('private-api');
+    expect(JSON.stringify(result)).not.toContain('private-cookie');
+  },
+);
+
+it('checks bun lockfiles, version pins, layout, and setup commands', async () => {
+  const workspace = await fixture('web:vite', 'none', 'bun');
+  let report = await doctor(workspace);
+  expect(report.checks).toContain(
+    `Tested package manager: bun@${versions.bun}.`,
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({
+      code: 'lockfile-missing',
+      message: 'bun.lock is missing.',
+    }),
+  );
+  expect(report.issues.map((issue) => issue.fix).join('\n')).toContain(
+    'bun run convex:setup',
+  );
+  expect(JSON.stringify(report)).not.toContain('pnpm');
+  await put(workspace.root, 'bun.lock', '{}');
+  const manifest = JSON.parse(
+    await readFile(join(workspace.root, 'package.json'), 'utf8'),
+  );
+  manifest.packageManager = 'bun@1.0.0';
+  manifest.workspaces = ['apps/*'];
+  await put(workspace.root, 'package.json', JSON.stringify(manifest));
+  report = await doctor(workspace);
+  expect(report.checks).toContain('bun.lock exists.');
+  expect(report.issues.some((issue) => issue.code === 'lockfile-missing')).toBe(
+    false,
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({
+      code: 'package-manager-baseline',
+      fix: 'Run npx create-convex-monorepo@latest upgrade, then bun install.',
+    }),
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({ code: 'workspace-package-excluded' }),
+  );
 });
 
 it('checks Nuxt URL and Vue dependencies without requiring React', async () => {

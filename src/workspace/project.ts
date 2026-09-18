@@ -1,7 +1,12 @@
 import { lstat, readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { normalizeOptions, validateProjectName } from '../generator/options.js';
-import type { AppSpec, Auth, Example } from '../generator/types.js';
+import type {
+  AppSpec,
+  Auth,
+  Example,
+  OAuthProvider,
+} from '../generator/types.js';
 
 export interface WorkspaceApp extends AppSpec {
   example?: Example;
@@ -10,11 +15,12 @@ export interface WorkspaceConfig {
   version: 1;
   generator: string;
   name: string;
-  packageManager: 'pnpm';
+  packageManager: 'pnpm' | 'bun';
   monorepo: 'turbo';
   apps: WorkspaceApp[];
   packages?: Array<{ name: string }>;
   auth: Auth;
+  oauth?: OAuthProvider[];
   example: Example;
 }
 export interface Workspace {
@@ -97,6 +103,10 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     throw new Error(
       'Unsupported convex-monorepo.json version. This CLI supports version 1.',
     );
+  if (value.packageManager !== 'pnpm' && value.packageManager !== 'bun')
+    throw new Error(
+      `Unsupported package manager in convex-monorepo.json: ${String(value.packageManager)}. Choose pnpm or bun.`,
+    );
   if (
     typeof value.name !== 'string' ||
     typeof value.generator !== 'string' ||
@@ -104,13 +114,20 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(
       value.generator,
     ) ||
-    value.packageManager !== 'pnpm' ||
     value.monorepo !== 'turbo' ||
     !Array.isArray(value.apps) ||
-    !['none', 'clerk', 'convex-auth'].includes(String(value.auth))
+    !['none', 'clerk', 'convex-auth', 'workos'].includes(String(value.auth))
   )
     throw new Error(
-      'Invalid convex-monorepo.json. Expected a named pnpm/Turborepo workspace with applications and a supported auth provider.',
+      'Invalid convex-monorepo.json. Expected a named pnpm or bun/Turborepo workspace with applications and a supported auth provider.',
+    );
+  if (
+    value.oauth !== undefined &&
+    (!Array.isArray(value.oauth) ||
+      value.oauth.some((provider: unknown) => typeof provider !== 'string'))
+  )
+    throw new Error(
+      'Invalid oauth list in convex-monorepo.json. Expected an array of provider names.',
     );
   if (value.packages !== undefined && !Array.isArray(value.packages))
     throw new Error(
@@ -159,17 +176,19 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     name: value.name,
     apps,
     auth: String(value.auth),
+    ...(value.oauth === undefined ? {} : { oauth: value.oauth as string[] }),
     ...(value.example === undefined ? {} : { example: String(value.example) }),
   });
   return {
     version: 1,
     generator: value.generator,
     name: options.name,
-    packageManager: 'pnpm',
+    packageManager: value.packageManager,
     monorepo: 'turbo',
     apps,
     packages,
     auth: options.auth,
+    ...(options.oauth ? { oauth: options.oauth } : {}),
     example: options.example,
   };
 }

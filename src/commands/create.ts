@@ -4,24 +4,27 @@ import { generateProject } from '../generator/index.js';
 import {
   frameworks,
   normalizeOptions,
+  oauthProviders,
   validateProjectName,
   type RawOptions,
 } from '../generator/options.js';
+import { scriptCommand } from '../package-manager/index.js';
 import type { AppSpec } from '../generator/types.js';
 
 export const help = `create-convex-monorepo [project-name] [options]
 
-Generate a pnpm + Turborepo workspace sharing one Convex backend.
+Generate a pnpm or bun + Turborepo workspace sharing one Convex backend.
 
 Use create <project-name> to explicitly create a project, including names such
 as add or doctor. Inside an existing workspace, running without arguments opens
 the management menu. Commands: add app, add auth clerk, doctor, env sync,
 upgrade --check. No global or project installation is required.
 
-  --apps <list>             next,vite,tanstack-start,expo,nuxt or web:next,admin:vite
+  --apps <list>             next,vite,tanstack-start,react-router,expo,astro,nuxt or web:next,admin:vite
   --example <name>         messages (default) or none for blank apps
-  --auth <provider>         none (default), clerk, or convex-auth
-  --package-manager <name>  pnpm (v0.1)
+  --auth <provider>         none (default), clerk, convex-auth, or workos
+  --oauth <providers>       github,google (requires --auth convex-auth)
+  --package-manager <name>  pnpm (default) or bun
   --install / --no-install  Install generated dependencies
   --init-convex / --no-init-convex  Set up Convex and link URLs (requires install)
   --git / --no-git          Initialize a git repository
@@ -45,6 +48,7 @@ export function parseCommand(args: string[]): {
     options: {
       apps: { type: 'string' },
       auth: { type: 'string' },
+      oauth: { type: 'string' },
       example: { type: 'string' },
       'package-manager': { type: 'string' },
       'init-convex': { type: 'boolean' },
@@ -77,6 +81,7 @@ export function parseCommand(args: string[]): {
   if (positionals[0] !== undefined) raw.name = positionals[0];
   if (values.apps !== undefined) raw.apps = values.apps;
   if (values.auth !== undefined) raw.auth = values.auth;
+  if (values.oauth !== undefined) raw.oauth = values.oauth;
   if (values.example !== undefined) raw.example = values.example;
   if (values['package-manager'] !== undefined)
     raw.packageManager = values['package-manager'];
@@ -122,7 +127,11 @@ export async function runCreate(
       raw.packageManager = answer(
         await prompts.select({
           message: 'Package manager?',
-          options: [{ value: 'pnpm', label: 'pnpm' }],
+          initialValue: 'pnpm',
+          options: [
+            { value: 'pnpm', label: 'pnpm' },
+            { value: 'bun', label: 'bun' },
+          ],
         }),
       );
     if (!raw.apps) {
@@ -138,7 +147,9 @@ export async function runCreate(
                 next: 'Next.js',
                 vite: 'Vite + React',
                 'tanstack-start': 'TanStack Start',
+                'react-router': 'React Router v7',
                 expo: 'Expo / React Native',
+                astro: 'Astro + React island',
               }[value],
             })),
           }),
@@ -178,8 +189,21 @@ export async function runCreate(
           options: [
             { value: 'none', label: 'None' },
             { value: 'clerk', label: 'Clerk' },
+            { value: 'workos', label: 'WorkOS AuthKit' },
             { value: 'convex-auth', label: 'Convex Auth (email + password)' },
           ],
+        }),
+      );
+    if (raw.auth === 'convex-auth' && raw.oauth === undefined)
+      raw.oauth = answer(
+        await prompts.multiselect({
+          message: 'OAuth providers?',
+          options: oauthProviders.map((value) => ({
+            value,
+            label: value === 'github' ? 'GitHub' : 'Google',
+          })),
+          initialValues: [],
+          required: false,
         }),
       );
     if (raw.example === undefined)
@@ -223,7 +247,8 @@ export async function runCreate(
     ...(signal ? { signal } : {}),
     onProgress: (message) => console.log(`✓ ${message}`),
   });
+  const run = (script: string) => scriptCommand(options.packageManager, script);
   console.log(
-    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : '  pnpm install\n'}${options.initConvex ? '  pnpm dev' : '  pnpm convex:setup\n  pnpm dev'}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
+    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : `  ${options.packageManager} install\n`}${options.initConvex ? `  ${run('dev')}` : `  ${run('convex:setup')}\n  ${run('dev')}`}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'workos' ? '\nAdd WorkOS settings from .env.workos.example and complete the auth setup in README.md.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
   );
 }

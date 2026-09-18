@@ -34,6 +34,7 @@ export const nuxtTemplate: AppTemplate = {
       ctx,
       app,
       'NUXT_PUBLIC_CONVEX_URL',
+      [],
       `import config from '@${ctx.scope}/eslint-config';
 import vue from 'eslint-plugin-vue';
 import vueParser from 'vue-eslint-parser';
