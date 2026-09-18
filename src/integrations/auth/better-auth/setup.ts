@@ -14,7 +14,7 @@ export function betterAuthSetup(options: ProjectOptions): string {
   const extra = origins.filter((origin) => origin !== site).join(',');
   return `## Better Auth setup
 
-This starter uses the official Convex Better Auth component with email and password. Sign-up uses the email address as the account name. Email verification and social providers are disabled. Next.js and TanStack Start use client authentication only.
+This starter uses the official Convex Better Auth component with email and password. Sign-up uses the email address as the account name. Email verification and social providers are disabled. Next.js, TanStack Start, and React Router use client authentication only.
 
 From the workspace root:
 

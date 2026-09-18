@@ -1,4 +1,5 @@
 import { scriptCommand, workspaceScript } from '../package-manager/index.js';
+import { createHash } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parsers } from 'prettier/plugins/typescript';
@@ -119,6 +120,52 @@ async function verifyMessages(
   }
 }
 
+async function equivalentLegacySetupHelper(
+  path: string,
+  current: string | null,
+  baseline: string,
+) {
+  if (current === null) return false;
+  try {
+    const formatted = await formatGeneratedFile(path, current);
+    const mapping =
+      /export function publicVariable\(framework\) \{[\s\S]*?^\}/m;
+    const currentMapping = formatted.match(mapping)?.[0];
+    if (!currentMapping) return false;
+    const frameworks = new Set(
+      [...currentMapping.matchAll(/case '([^']+)':/g)].map((match) => match[1]),
+    );
+    // Older releases lack cases for newer frameworks. Only remove those
+    // branches from the generated map; compare all remaining code/comments.
+    const legacy = baseline.replace(mapping, (generatedMapping) =>
+      generatedMapping.replace(
+        /((?:    case '[^']+':\n)+)(      return '[^']+';\n)/g,
+        (_branch, cases: string, result: string) => {
+          const retained = cases.replace(
+            /    case '([^']+)':\n/g,
+            (line, framework: string) =>
+              frameworks.has(framework) ? line : '',
+          );
+          return retained ? retained + result : '';
+        },
+      ),
+    );
+    if (await equivalentGeneratedFile(path, current, legacy)) return true;
+    // The pre-Bun helper also predates React Router. Recognize its exact
+    // formatted body, while checking its framework map separately. Never
+    // replace user changes outside the missing framework cases.
+    return (
+      currentMapping === legacy.match(mapping)?.[0] &&
+      createHash('sha256')
+        .update(formatted.replace(mapping, ''))
+        .digest('hex') ===
+        '7cb94228bbba1afde8f8d896a8ecd40078a78922f71bd55b750f5c9694bc30ac'
+    );
+  } catch {
+    return false;
+  }
+}
+
 function mergePackage(
   currentText: string,
   beforeText: string,
@@ -208,6 +255,29 @@ export async function planAddApp(
     example,
     workspace.config.auth,
   );
+  const baseline = await render(
+    workspace,
+    workspace.config.apps,
+    workspace.config.example,
+    workspace.config.auth,
+  );
+  const setupPath = 'scripts/convex-setup.mjs';
+  const setupBefore = await guardedRead(workspace, plan, setupPath);
+  const setupAfter = generated.get(setupPath)!;
+  const setupBaseline = baseline.get(setupPath)!;
+  if (
+    (await equivalentGeneratedFile(setupPath, setupBefore, setupBaseline)) ||
+    (await equivalentGeneratedFile(setupPath, setupBefore, setupAfter)) ||
+    (await equivalentLegacySetupHelper(setupPath, setupBefore, setupBaseline))
+  ) {
+    const after = retainNewlines(setupAfter, setupBefore);
+    if (setupBefore !== after)
+      plan.changes.push({ path: setupPath, before: setupBefore, after });
+  } else {
+    plan.notes.push(
+      `${setupPath} is missing or customized. Copy the current helper from a fresh project or update its framework map to support ${app.framework} before running ${scriptCommand(workspace.config.packageManager, 'convex:setup')} or ${scriptCommand(workspace.config.packageManager, 'convex:link')}.`,
+    );
+  }
   const newPort =
     (app.framework === 'expo' ? 8081 : 3000) + workspace.config.apps.length;
   for (const existing of workspace.config.apps) {
@@ -225,7 +295,8 @@ export async function planAddApp(
     );
     if (
       existing.framework === 'vite' ||
-      existing.framework === 'tanstack-start'
+      existing.framework === 'tanstack-start' ||
+      existing.framework === 'react-router'
     ) {
       const configPath = `apps/${existing.name}/vite.config.ts`;
       const config = await guardedRead(workspace, plan, configPath);
@@ -275,6 +346,27 @@ export async function planAddApp(
   for (const [path, after] of generated) {
     if (path.startsWith(`${dir}/`))
       plan.changes.push({ path, before: null, after });
+  }
+  if (app.framework === 'react-router') {
+    const path = '.prettierignore';
+    const before = await guardedRead(workspace, plan, path);
+    const lines = (before ?? '').split(/\r?\n/);
+    const missing = ['.react-router', 'build']
+      .filter(
+        (output) =>
+          !lines.includes(`**/${output}/`) &&
+          !lines.includes(`${dir}/${output}/`),
+      )
+      .map((output) => `${dir}/${output}/`);
+    if (missing.length)
+      plan.changes.push({
+        path,
+        before,
+        after: retainNewlines(
+          `${before ?? ''}${before && !before.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`,
+          before,
+        ),
+      });
   }
   const path = 'package.json';
   const before = await guardedRead(workspace, plan, path);

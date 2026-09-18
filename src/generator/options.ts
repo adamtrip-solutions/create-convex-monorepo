@@ -1,3 +1,4 @@
+import { workosBindings } from '../integrations/auth/workos/index.js';
 import type { AppSpec, Auth, Framework, ProjectOptions } from './types.js';
 
 export interface RawOptions {
@@ -15,6 +16,7 @@ export const frameworks: readonly Framework[] = [
   'next',
   'vite',
   'tanstack-start',
+  'react-router',
   'expo',
 ];
 const reserved = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9]|node_modules)$/i;
@@ -107,10 +109,10 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     return { name: appName, framework };
   });
   if (auth === 'workos') {
-    const unsupported = apps.find((app) => app.framework === 'expo');
+    const unsupported = apps.find((app) => !workosBindings[app.framework]);
     if (unsupported)
       throw new Error(
-        `WorkOS AuthKit does not support framework "${unsupported.framework}". Choose next, vite, or tanstack-start; no official Expo / React Native AuthKit SDK is available.`,
+        `WorkOS AuthKit is not supported by this generator for framework "${unsupported.framework}". Choose ${Object.keys(workosBindings).join(', ')}.${unsupported.framework === 'expo' ? ' No official Expo / React Native AuthKit SDK is available.' : ''}`,
       );
   }
   return {

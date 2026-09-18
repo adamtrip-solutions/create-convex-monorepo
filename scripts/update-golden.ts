@@ -31,17 +31,22 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
 }
 
 for (const packageManager of ['pnpm', 'bun'] as const) {
-  for (const example of ['messages', 'none']) {
-    const label = `${packageManager === 'bun' ? 'Bun ' : ''}All four + Better Auth (${example})`;
-    if (!scenarios.some((scenario) => scenario.label === label))
-      scenarios.push({
-        label,
-        apps: 'next,vite,tanstack-start,expo',
-        auth: 'better-auth',
-        example,
-        ...(packageManager === 'bun' ? { packageManager } : {}),
-        expected: [],
-      });
+  for (const apps of [
+    'next,vite,tanstack-start,expo',
+    'next,vite,tanstack-start,react-router,expo',
+  ]) {
+    for (const example of ['messages', 'none']) {
+      const label = `${packageManager === 'bun' ? 'Bun ' : ''}All ${apps.includes('react-router') ? 'five' : 'four'} + Better Auth (${example})`;
+      if (!scenarios.some((scenario) => scenario.label === label))
+        scenarios.push({
+          label,
+          apps,
+          auth: 'better-auth',
+          example,
+          ...(packageManager === 'bun' ? { packageManager } : {}),
+          expected: [],
+        });
+    }
   }
 }
 

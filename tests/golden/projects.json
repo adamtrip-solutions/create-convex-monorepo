@@ -194,6 +194,126 @@
     ]
   },
   {
+    "label": "React Router + none (messages)",
+    "apps": "react-router",
+    "auth": "none",
+    "example": "messages",
+    "expected": [["web", "react-router", "VITE", null]]
+  },
+  {
+    "label": "React Router + none (none)",
+    "apps": "react-router",
+    "auth": "none",
+    "example": "none",
+    "expected": [["web", "react-router", "VITE", null]]
+  },
+  {
+    "label": "React Router + clerk (messages)",
+    "apps": "react-router",
+    "auth": "clerk",
+    "example": "messages",
+    "expected": [["web", "react-router", "VITE", "@clerk/react-router"]]
+  },
+  {
+    "label": "React Router + clerk (none)",
+    "apps": "react-router",
+    "auth": "clerk",
+    "example": "none",
+    "expected": [["web", "react-router", "VITE", "@clerk/react-router"]]
+  },
+  {
+    "label": "React Router + convex-auth (messages)",
+    "apps": "react-router",
+    "auth": "convex-auth",
+    "example": "messages",
+    "expected": [["web", "react-router", "VITE", "@convex-dev/auth"]]
+  },
+  {
+    "label": "React Router + convex-auth (none)",
+    "apps": "react-router",
+    "auth": "convex-auth",
+    "example": "none",
+    "expected": [["web", "react-router", "VITE", "@convex-dev/auth"]]
+  },
+  {
+    "label": "All five frameworks",
+    "apps": "next,vite,tanstack-start,expo,router:react-router",
+    "auth": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null],
+      ["router", "react-router", "VITE", null]
+    ]
+  },
+  {
+    "label": "React Router + Expo + Clerk",
+    "apps": "react-router,expo",
+    "auth": "clerk",
+    "expected": [
+      ["web", "react-router", "VITE", "@clerk/react-router"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@clerk/expo"]
+    ]
+  },
+  {
+    "label": "React Router + Vite + Convex Auth",
+    "apps": "react-router,vite",
+    "auth": "convex-auth",
+    "expected": [
+      ["web", "react-router", "VITE", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Bun React Router + none (messages)",
+    "apps": "react-router",
+    "auth": "none",
+    "example": "messages",
+    "expected": [["web", "react-router", "VITE", null]],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Bun React Router + none (none)",
+    "apps": "react-router",
+    "auth": "none",
+    "example": "none",
+    "expected": [["web", "react-router", "VITE", null]],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Bun React Router + clerk (messages)",
+    "apps": "react-router",
+    "auth": "clerk",
+    "example": "messages",
+    "expected": [["web", "react-router", "VITE", "@clerk/react-router"]],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Bun React Router + clerk (none)",
+    "apps": "react-router",
+    "auth": "clerk",
+    "example": "none",
+    "expected": [["web", "react-router", "VITE", "@clerk/react-router"]],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Bun React Router + convex-auth (messages)",
+    "apps": "react-router",
+    "auth": "convex-auth",
+    "example": "messages",
+    "expected": [["web", "react-router", "VITE", "@convex-dev/auth"]],
+    "packageManager": "bun"
+  },
+  {
+    "label": "Bun React Router + convex-auth (none)",
+    "apps": "react-router",
+    "auth": "convex-auth",
+    "example": "none",
+    "expected": [["web", "react-router", "VITE", "@convex-dev/auth"]],
+    "packageManager": "bun"
+  },
+  {
     "label": "next + WorkOS (messages)",
     "apps": "next",
     "auth": "workos",
@@ -316,6 +436,32 @@
     ]
   },
   {
+    "label": "All five + Better Auth (messages)",
+    "apps": "next,vite,tanstack-start,react-router,expo",
+    "auth": "better-auth",
+    "example": "messages",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "better-auth"],
+      ["admin", "vite", "VITE", "better-auth"],
+      ["app", "tanstack-start", "VITE", "better-auth"],
+      ["app-2", "react-router", "VITE", "better-auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "better-auth"]
+    ]
+  },
+  {
+    "label": "All five + Better Auth (none)",
+    "apps": "next,vite,tanstack-start,react-router,expo",
+    "auth": "better-auth",
+    "example": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "better-auth"],
+      ["admin", "vite", "VITE", "better-auth"],
+      ["app", "tanstack-start", "VITE", "better-auth"],
+      ["app-2", "react-router", "VITE", "better-auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "better-auth"]
+    ]
+  },
+  {
     "label": "Bun All four + Better Auth (messages)",
     "apps": "next,vite,tanstack-start,expo",
     "auth": "better-auth",
@@ -338,6 +484,34 @@
       ["web", "next", "NEXT_PUBLIC", "better-auth"],
       ["admin", "vite", "VITE", "better-auth"],
       ["app", "tanstack-start", "VITE", "better-auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "better-auth"]
+    ]
+  },
+  {
+    "label": "Bun All five + Better Auth (messages)",
+    "apps": "next,vite,tanstack-start,react-router,expo",
+    "auth": "better-auth",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "better-auth"],
+      ["admin", "vite", "VITE", "better-auth"],
+      ["app", "tanstack-start", "VITE", "better-auth"],
+      ["app-2", "react-router", "VITE", "better-auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "better-auth"]
+    ]
+  },
+  {
+    "label": "Bun All five + Better Auth (none)",
+    "apps": "next,vite,tanstack-start,react-router,expo",
+    "auth": "better-auth",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "better-auth"],
+      ["admin", "vite", "VITE", "better-auth"],
+      ["app", "tanstack-start", "VITE", "better-auth"],
+      ["app-2", "react-router", "VITE", "better-auth"],
       ["mobile", "expo", "EXPO_PUBLIC", "better-auth"]
     ]
   }

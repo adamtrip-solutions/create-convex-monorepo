@@ -33,7 +33,7 @@ async function fixture(packageManager: 'pnpm' | 'bun' = 'pnpm') {
   const root = await generateProject(
     {
       name: 'fixture',
-      apps: 'next,vite,tanstack-start,expo',
+      apps: 'next,vite,tanstack-start,expo,router:react-router',
       example: 'none',
       packageManager,
     },
@@ -239,7 +239,7 @@ describe('workspace transactions', () => {
 });
 
 describe('environment sync', () => {
-  it('links only public URLs for all four frameworks, preserves settings, and is idempotent', async () => {
+  it('links only public URLs for all five frameworks, preserves settings, and is idempotent', async () => {
     const ws = await fixture();
     await writeFile(
       join(ws.root, 'packages/backend/.env'),
@@ -261,6 +261,8 @@ describe('environment sync', () => {
     for (const app of ws.config.apps) {
       const env = await readText(ws.root, `apps/${app.name}/.env.local`);
       expect(env).toContain('https://current.convex.cloud');
+      if (app.framework === 'react-router')
+        expect(env).toContain('VITE_CONVEX_URL=');
       expect(env).not.toContain('private-never-print');
     }
     expect(await readText(ws.root, 'apps/web/.env.local')).toContain(

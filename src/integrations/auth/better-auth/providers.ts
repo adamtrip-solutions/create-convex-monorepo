@@ -1,11 +1,12 @@
 import type { AppSpec, GeneratorContext } from '../../../generator/types.js';
-import { platform } from '../shared.js';
+import { platform, writeRouteAuth } from '../shared.js';
 
 export async function writeBetterAuthProviders(
   ctx: GeneratorContext,
   app: AppSpec,
 ): Promise<void> {
   const { native, prefix, env } = platform(app);
+  await writeRouteAuth(ctx, app);
   const text = (value: string) =>
     native ? `<Text>${value}</Text>` : `<p>${value}</p>`;
   await ctx.write(

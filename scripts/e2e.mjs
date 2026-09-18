@@ -7,7 +7,8 @@ import { format } from 'prettier';
 import { normalizeOptions } from '../dist/index.js';
 
 const apps =
-  process.env.CCM_APPS ?? 'next,admin:vite,portal:tanstack-start,expo';
+  process.env.CCM_APPS ??
+  'next,admin:vite,portal:tanstack-start,router:react-router,expo';
 const auth = process.env.CCM_AUTH ?? 'none';
 const example = process.env.CCM_EXAMPLE ?? 'messages';
 const packageManager = process.env.CCM_PACKAGE_MANAGER ?? 'pnpm';
@@ -113,7 +114,7 @@ try {
     command(['add', 'app', 'dry-run-only', '--framework', 'expo', '--dry-run']);
     if ((await snapshot()) !== before)
       throw new Error('Dry-run changed workspace files');
-    // Exercise migration of all four existing apps, and adding apps after auth setup.
+    // Exercise migration of all existing apps, and adding apps after auth setup.
     if (example === 'none' && auth === 'clerk')
       command(['add', 'auth', 'clerk', '--no-install']);
     for (const app of selections.slice(1))
@@ -162,6 +163,7 @@ try {
           next: 'src/app/page.tsx',
           vite: 'src/main.tsx',
           'tanstack-start': 'src/routes/index.tsx',
+          'react-router': 'app/root.tsx',
           expo: 'App.tsx',
         }[app.framework],
       );
@@ -235,7 +237,11 @@ export type MissingModule = typeof api.notAModule;
       lines.push(
         `${prefix}_CLERK_PUBLISHABLE_KEY=pk_test_${Buffer.from('test.clerk.accounts.dev$').toString('base64')}`,
       );
-      if (app.framework === 'next' || app.framework === 'tanstack-start')
+      if (
+        app.framework === 'next' ||
+        app.framework === 'tanstack-start' ||
+        app.framework === 'react-router'
+      )
         lines.push('CLERK_SECRET_KEY=sk_test_not_a_real_secret');
     }
     if (auth === 'workos') {
@@ -281,7 +287,9 @@ export type MissingModule = typeof api.notAModule;
         ? '.next/static'
         : app.framework === 'tanstack-start'
           ? 'dist/client'
-          : 'dist',
+          : app.framework === 'react-router'
+            ? 'build/client'
+            : 'dist',
     );
     for (const file of await readdir(output, { recursive: true })) {
       if (!/\.(?:js|hbc)$/.test(file)) continue;
