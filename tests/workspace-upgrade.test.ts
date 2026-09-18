@@ -19,7 +19,7 @@ afterEach(async () => {
   );
 });
 async function fixture(
-  auth: 'clerk' | 'convex-auth' | 'workos' = 'clerk',
+  auth: 'clerk' | 'convex-auth' | 'workos' | 'better-auth' = 'clerk',
   packageManager: 'pnpm' | 'bun' = 'pnpm',
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-upgrade-test-'));
@@ -668,3 +668,45 @@ it.each(['1.0.0', '99.0.0', 'latest', 'pnpm@1.0.0'])(
       );
   },
 );
+
+it('upgrades Better Auth component and Expo pins without changing source files', async () => {
+  const workspace = await fixture('better-auth');
+  for (const path of [
+    'apps/web/package.json',
+    'apps/mobile/package.json',
+    'packages/backend/package.json',
+  ])
+    await edit(workspace.root, path, (pkg) => {
+      pkg.dependencies['@convex-dev/better-auth'] = '0.1.0';
+      pkg.dependencies['better-auth'] = '1.0.0';
+      if (path !== 'apps/web/package.json')
+        pkg.dependencies['@better-auth/core'] = '1.0.0';
+      if (path === 'apps/mobile/package.json') {
+        pkg.dependencies['@better-auth/expo'] = '1.0.0';
+        pkg.dependencies['expo-secure-store'] = '1.0.0';
+      }
+    });
+  const before = await snapshot(workspace.root);
+  await applyPlan(await planUpgrade(workspace));
+  const after = await snapshot(workspace.root);
+  for (const path of [
+    'apps/web/package.json',
+    'apps/mobile/package.json',
+    'packages/backend/package.json',
+  ]) {
+    const deps = JSON.parse(after[path]!).dependencies;
+    expect(deps['@convex-dev/better-auth']).toBe(versions.convexBetterAuth);
+    expect(deps['better-auth']).toBe(versions.betterAuth);
+    if (path !== 'apps/web/package.json')
+      expect(deps['@better-auth/core']).toBe(versions.betterAuth);
+    if (path === 'apps/mobile/package.json') {
+      expect(deps['@better-auth/expo']).toBe(versions.betterAuthExpo);
+      expect(deps['expo-secure-store']).toBe(versions.expoSecureStore);
+    }
+  }
+  for (const [path, content] of Object.entries(before))
+    if (!path.endsWith('package.json')) expect(after[path], path).toBe(content);
+  expect(
+    (await planUpgrade(await loadWorkspace(workspace.root))).changes,
+  ).toEqual([]);
+});

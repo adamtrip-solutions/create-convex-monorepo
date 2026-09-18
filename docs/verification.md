@@ -204,6 +204,16 @@ Failures found and resolved during implementation:
 
 Independent technical review found the older-workspace setup, Turbo, and formatter compatibility gap. The implementation and tests were extended, and focused re-review found no remaining material issue. Fable was unavailable, so no independent UI design review was performed; the starter keeps the existing messages and blank content without a visual redesign.
 
+## Better Auth checks
+
+`pnpm format`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, and `pnpm build` passed during Better Auth implementation. The test run passed 570 unit tests and 10 backend tests, including unauthenticated access, cross-user isolation, stable ownership across sessions, and expired or deleted session rejection.
+
+`pnpm exec tsx scripts/better-auth-assets.ts` regenerated both starters' official Convex assets. Dependency installation and `CONVEX_AGENT_MODE=anonymous pnpm exec convex dev --once` passed for both component deployments.
+
+Generated Better Auth projects for Next.js, Vite, TanStack Start, and Expo, with both `messages` and `none` starters, passed installation, `pnpm typecheck`, `pnpm lint`, and `pnpm build`. Expo builds exported iOS and Android JavaScript bundles. The combined checks `CCM_APPS=next,expo CCM_AUTH=better-auth CCM_EXAMPLE=messages pnpm test:e2e` and `CCM_APPS=vite,tanstack-start CCM_AUTH=better-auth CCM_EXAMPLE=none pnpm test:e2e` also passed, including formatting, API type assertions, and client-bundle checks for backend code leakage.
+
+Live browser or physical-device sign-in, native binary builds, production deployment, and Windows execution were not tested for Better Auth.
+
 ## Astro framework checks
 
 Executed 2026-09-18 on macOS with Node 24.17.0 and pnpm 10.34.5. All five Astro acceptance criteria passed local checks. Windows and hosted GitHub Actions remain CI checks. No commit or push was made.

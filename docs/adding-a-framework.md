@@ -38,6 +38,8 @@ Add the framework's dependency expectations and diagnostic checks to `src/worksp
 
 The add planner uses the same template as project creation. It copies the new application's files and updates workspace metadata and root scripts. The planner refreshes recognized unmodified setup helpers for every framework. Astro also adds its Turbo environment settings and output ignores. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
 
+For Better Auth, provide a statically accessed public `CONVEX_SITE_URL` alongside `CONVEX_URL` with the framework's environment prefix. Browser clients use `ConvexBetterAuthProvider` with the Convex and cross-domain client plugins. Expo uses the Expo client plugin and SecureStore on native platforms, selecting the cross-domain plugin on web. Include both starters in generated-project typecheck, lint, and build checks, with JavaScript exports for Expo.
+
 ## React Router root authentication
 
 The `react-router` adapter uses the upstream `app/` route layout while retaining shared components and auth files in `src/`. `app/root.tsx` mounts `Providers` around the outlet and re-exports `loader` and `middleware` from adapter-owned `src/auth.server.ts`. Each auth adapter writes that module. Clerk supplies its SSR session loader and middleware; the other adapters return null and an empty middleware list. These hooks do not load Convex data. The home route mounts `AuthControls` and the shared starter content.

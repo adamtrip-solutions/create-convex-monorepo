@@ -1778,7 +1778,7 @@ describe('SvelteKit workspace additions', () => {
       });
     },
   );
-  it.each<Auth>(['clerk', 'convex-auth', 'workos'])(
+  it.each<Auth>(['clerk', 'convex-auth', 'workos', 'better-auth'])(
     'rejects an app addition to a %s workspace before writes',
     async (auth) => {
       const workspace = await fixture('messages', auth);
@@ -1789,7 +1789,7 @@ describe('SvelteKit workspace additions', () => {
       expect(await snapshot(workspace.root)).toEqual(before);
     },
   );
-  it.each(['clerk', 'convex-auth', 'workos', 'custom'])(
+  it.each(['clerk', 'convex-auth', 'workos', 'better-auth', 'custom'])(
     'rejects adding %s auth to a SvelteKit workspace before writes',
     async (auth) => {
       const workspace = await fixture('messages', 'none', 'sveltekit');
@@ -2057,7 +2057,7 @@ it.each([
     ).toContain("authenticateOAuth('google'");
   },
 );
-it.each(['clerk', 'convex-auth', 'workos'] as const)(
+it.each(['clerk', 'convex-auth', 'workos', 'better-auth'] as const)(
   'rejects explicit OAuth in an already configured %s workspace without writes',
   async (auth) => {
     const workspace = await fixture('none', auth);
@@ -2069,7 +2069,7 @@ it.each(['clerk', 'convex-auth', 'workos'] as const)(
     expect(await snapshot(workspace.root)).toEqual(before);
   },
 );
-it.each(['clerk', 'workos'] as const)(
+it.each(['clerk', 'workos', 'better-auth'] as const)(
   'rejects OAuth on %s installation and unknown providers without writes',
   async (provider) => {
     const workspace = await fixture('none');
@@ -2230,7 +2230,7 @@ it.each(['src/middleware.ts', 'middleware.ts'])(
   },
 );
 
-it.each<Auth>(['clerk', 'convex-auth'])(
+it.each<Auth>(['clerk', 'convex-auth', 'better-auth'])(
   'refuses WorkOS replacement of %s',
   async (auth) => {
     const workspace = await fixture('none', auth);
@@ -2396,6 +2396,8 @@ describe.each<Example>(['none', 'messages'])(
       ['clerk', 'vite'],
       ['convex-auth', 'vite'],
       ['workos', 'vite'],
+      ['better-auth', 'vite'],
+      ['better-auth', 'react-router'],
       ['clerk', 'react-router'],
       ['convex-auth', 'react-router'],
     ] as const)(
@@ -2415,6 +2417,13 @@ describe.each<Example>(['none', 'messages'])(
           );
           expect(guide).toContain('bun run convex:setup');
           expect(plan.notes.join('\n')).toContain('WORKOS_SETUP.md');
+        }
+        expect(plan.notes.join('\n')).not.toContain('pnpm');
+        if (provider === 'better-auth') {
+          expect(guide).toContain('bun run convex:better-auth-env');
+          expect(plan.notes.join('\n')).toContain(
+            'bun run convex:better-auth-env',
+          );
         }
         if (provider === 'convex-auth')
           expect(plan.notes.join('\n')).toContain('bun run convex:auth-keys');
@@ -2452,6 +2461,32 @@ it.each(['npm', 'yarn', 'unknown'])(
 );
 
 it.each(['pnpm', 'bun'] as const)(
+  'rejects SvelteKit addition to a %s OAuth workspace without writes',
+  async (packageManager) => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccm-add-oauth-test-'));
+    temporary.push(cwd);
+    const root = await generateProject(
+      {
+        name: 'sample',
+        apps: 'next',
+        auth: 'convex-auth',
+        oauth: 'github,google',
+        packageManager,
+        install: false,
+        git: false,
+      },
+      { cwd },
+    );
+    const workspace = await loadWorkspace(root);
+    const before = await snapshot(root);
+    await expect(
+      planAddApp(workspace, { name: 'svelte', framework: 'sveltekit' }),
+    ).rejects.toThrow('SvelteKit currently supports only --auth none');
+    expect(await snapshot(root)).toEqual(before);
+  },
+);
+
+it.each(['pnpm', 'bun'] as const)(
   'rejects OAuth installation in a %s SvelteKit workspace without writes',
   async (manager) => {
     const workspace = await fixture('messages', 'none', 'sveltekit', manager);
@@ -2462,6 +2497,280 @@ it.each(['pnpm', 'bun'] as const)(
     expect(await snapshot(workspace.root)).toEqual(before);
   },
 );
+
+describe.each<Example>(['messages', 'none'])(
+  'adds Better Auth with %s',
+  (example) => {
+    it.each<Framework>([
+      'next',
+      'vite',
+      'tanstack-start',
+      'react-router',
+      'expo',
+    ])('supports %s with dry run and repeat no-op', async (framework) => {
+      const workspace = await fixture(example, 'none', framework);
+      const before = await snapshot(workspace.root);
+      const plan = await planAddAuth(workspace, 'better-auth');
+      await applyPlan(plan, { dryRun: true });
+      expect(await snapshot(workspace.root)).toEqual(before);
+      await applyPlan(plan);
+      const after = await snapshot(workspace.root);
+      expect(after['packages/backend/convex/schema.ts']).toBe(
+        before['packages/backend/convex/schema.ts'],
+      );
+      for (const [path, content] of Object.entries(before))
+        if (path.includes('/_generated/'))
+          expect(after[path], path).toBe(content);
+      expect(after['packages/backend/convex/convex.config.ts']).toContain(
+        'app.use(betterAuth)',
+      );
+      expect(after['packages/backend/convex/http.ts']).toContain(
+        'authComponent.registerRoutes',
+      );
+      expect(after['packages/backend/convex/auth.ts']).toContain(
+        'createClient',
+      );
+      expect(after['BETTER_AUTH_SETUP.md']).toContain('## Better Auth setup');
+      expect(after['BETTER_AUTH_SETUP.md']).toContain('pnpm install');
+      expect(
+        JSON.parse(after['package.json']!).scripts['convex:better-auth-env'],
+      ).toBe('node scripts/better-auth-env.mjs');
+      expect(after['scripts/better-auth-env.mjs']).toContain(
+        'BETTER_AUTH_SECRET',
+      );
+      expect(after['.gitignore']).toContain('!.env.better-auth.example');
+      expect(
+        (await planAddAuth(await loadWorkspace(workspace.root), 'better-auth'))
+          .changes,
+      ).toEqual([]);
+    });
+  },
+);
+
+it('preserves customized schema tables when adding Better Auth', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  const source =
+    "import { defineSchema, defineTable } from 'convex/server';\nexport default defineSchema({ users: defineTable({}) });\n";
+  await writeFile(join(workspace.root, path), source);
+  await applyPlan(await planAddAuth(workspace, 'better-auth'));
+  expect(await readFile(join(workspace.root, path), 'utf8')).toBe(source);
+});
+
+it.each([
+  "import { defineApp } from 'convex/server'; const app = defineApp(); export default app; // app.use(betterAuth)",
+  "import { defineApp } from 'convex/server'; const app = defineApp(); export const note = 'app.use(betterAuth)'; export default app;",
+  "import betterAuth from './custom'; import { defineApp } from 'convex/server'; const app = defineApp(); app.use(betterAuth); export default app;",
+  "import betterAuth from '@convex-dev/better-auth/convex.config'; import { defineApp } from 'convex/server'; const app = defineApp(); function unused() { app.use(betterAuth); } export default app;",
+])(
+  'rejects unregistered Better Auth component configuration: %s',
+  async (source) => {
+    const workspace = await fixture('none');
+    await writeFile(
+      join(workspace.root, 'packages/backend/convex/convex.config.ts'),
+      source,
+    );
+    const before = await snapshot(workspace.root);
+    await expect(planAddAuth(workspace, 'better-auth')).rejects.toThrow(
+      "import betterAuth from '@convex-dev/better-auth/convex.config'",
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it('preserves and guards a configured Better Auth component with aliases and other components', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/convex.config.ts';
+  const source =
+    "import auth from '@convex-dev/better-auth/convex.config';\nimport { defineApp as makeApp } from 'convex/server';\nimport extra from './extra';\nconst backend = makeApp();\nbackend.use(extra);\nbackend.use(auth);\nexport default backend;\n";
+  await writeFile(join(workspace.root, path), source);
+  const plan = await planAddAuth(workspace, 'better-auth');
+  expect(plan.changes.some((change) => change.path === path)).toBe(false);
+  await writeFile(join(workspace.root, path), `${source}// concurrent edit\n`);
+  await expect(applyPlan(plan)).rejects.toThrow('Workspace changed');
+});
+
+it('explains the Better Auth HTTP route conflict without writing', async () => {
+  const workspace = await fixture('none');
+  await writeFile(
+    join(workspace.root, 'packages/backend/convex/http.ts'),
+    "import { httpRouter } from 'convex/server'; export default httpRouter();",
+  );
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'better-auth')).rejects.toThrow(
+    'authComponent.registerRoutes(http, createAuth, { cors: true })',
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it.each<Auth>(['clerk', 'convex-auth', 'workos'])(
+  'rejects replacement of %s with Better Auth',
+  async (auth) => {
+    const workspace = await fixture('none', auth);
+    const before = await snapshot(workspace.root);
+    await expect(planAddAuth(workspace, 'better-auth')).rejects.toThrow(
+      /already configured.*manual migration/,
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it.each(['clerk', 'convex-auth', 'workos'] as const)(
+  'rejects replacement of Better Auth with %s',
+  async (auth) => {
+    const workspace = await fixture('none', 'better-auth');
+    await expect(planAddAuth(workspace, auth)).rejects.toThrow(
+      /Better Auth is already configured.*manual migration/,
+    );
+  },
+);
+
+it.each([
+  'apps/web/src/providers.tsx',
+  'apps/web/src/auth-controls.tsx',
+  'packages/backend/convex/auth.ts',
+  'packages/backend/convex/auth.config.ts',
+  'packages/backend/convex/access.ts',
+  'packages/backend/.env.better-auth.example',
+  'scripts/better-auth-env.mjs',
+  'BETTER_AUTH_SETUP.md',
+])(
+  'rejects customized %s while adding Better Auth without writes',
+  async (path) => {
+    const workspace = await fixture();
+    await writeFile(join(workspace.root, path), '// custom content\n');
+    const before = await snapshot(workspace.root);
+    await expect(planAddAuth(workspace, 'better-auth')).rejects.toThrow(
+      path === 'packages/backend/convex/access.ts'
+        ? `Incompatible messages backend: ${path} is missing or customized.`
+        : /Conflict|already exists/,
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it('respects per-app blank overrides when adding Better Auth', async () => {
+  let workspace = await fixture();
+  await applyPlan(
+    await planAddApp(workspace, {
+      name: 'blank',
+      framework: 'vite',
+      example: 'none',
+    }),
+  );
+  workspace = await loadWorkspace(workspace.root);
+  await applyPlan(await planAddAuth(workspace, 'better-auth'));
+  const files = await snapshot(workspace.root);
+  expect(files['apps/blank/src/messages.tsx']).toBeUndefined();
+  expect(files['apps/blank/src/auth-controls.tsx']).toContain('authClient');
+  expect(files['apps/web/src/messages.tsx']).toContain('api.messages');
+});
+
+it.each<Framework>([
+  'next',
+  'vite',
+  'tanstack-start',
+  'react-router',
+  'expo',
+  'astro',
+])('adds a %s app to a Better Auth workspace', async (framework) => {
+  const workspace = await fixture('messages', 'better-auth');
+  const before = await snapshot(workspace.root);
+  const plan = await planAddApp(workspace, { name: 'extra', framework });
+  expect(plan.notes.join('\n')).toContain('BETTER_AUTH_TRUSTED_ORIGINS');
+  await applyPlan(plan);
+  const after = await snapshot(workspace.root);
+  expect(
+    JSON.parse(after['apps/extra/package.json']!).dependencies['better-auth'],
+  ).toBe(versions.betterAuth);
+  for (const [path, content] of Object.entries(before))
+    if (path.startsWith('packages/backend/'))
+      expect(after[path], path).toBe(content);
+});
+
+it.each(['default names', 'aliases'])(
+  'adds an app after installing Better Auth and registering another component with %s',
+  async (names) => {
+    let workspace = await fixture('messages');
+    await applyPlan(await planAddAuth(workspace, 'better-auth'));
+    workspace = await loadWorkspace(workspace.root);
+    const path = 'packages/backend/convex/convex.config.ts';
+    let source = await readFile(join(workspace.root, path), 'utf8');
+    source = `import extra from './extra';\n${source.replace(
+      'app.use(betterAuth);',
+      'app.use(betterAuth);\napp.use(extra);',
+    )}`;
+    if (names === 'aliases') {
+      source = source
+        .replace(/\bbetterAuth\b/g, 'auth')
+        .replace('{ defineApp }', '{ defineApp as makeApp }')
+        .replace('defineApp()', 'makeApp()')
+        .replace(/\bapp\b/g, 'backend');
+    }
+    await writeFile(join(workspace.root, path), source);
+    const plan = await planAddApp(workspace, {
+      name: 'extra',
+      framework: 'vite',
+    });
+    expect(plan.guards).toContainEqual({ path, contents: source });
+    await applyPlan(plan);
+    expect(await readFile(join(workspace.root, path), 'utf8')).toBe(source);
+    const added = await loadWorkspace(workspace.root);
+    expect(added.config.apps).toContainEqual({
+      name: 'extra',
+      framework: 'vite',
+    });
+    const manifest = JSON.parse(
+      await readFile(join(workspace.root, 'apps/extra/package.json'), 'utf8'),
+    );
+    expect(manifest.dependencies['better-auth']).toBe(versions.betterAuth);
+  },
+);
+
+it('rejects adding an app when the Better Auth component is not registered', async () => {
+  const workspace = await fixture('messages', 'better-auth');
+  const path = 'packages/backend/convex/convex.config.ts';
+  const source = await readFile(join(workspace.root, path), 'utf8');
+  await writeFile(
+    join(workspace.root, path),
+    source.replace('app.use(betterAuth);', ''),
+  );
+  const before = await snapshot(workspace.root);
+  await expect(
+    planAddApp(workspace, { name: 'extra', framework: 'vite' }),
+  ).rejects.toThrow(`Incompatible Better Auth configuration in ${path}.`);
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('includes every app origin and native scheme in the Better Auth setup command', async () => {
+  let workspace = await fixture('none', 'none', 'next');
+  await applyPlan(
+    await planAddApp(workspace, { name: 'dashboard', framework: 'vite' }),
+  );
+  workspace = await loadWorkspace(workspace.root);
+  await applyPlan(
+    await planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
+  );
+  workspace = await loadWorkspace(workspace.root);
+  const plan = await planAddAuth(workspace, 'better-auth');
+  const setup = plan.changes.find(
+    (change) => change.path === 'BETTER_AUTH_SETUP.md',
+  )!.after;
+  expect(setup).toContain(
+    'pnpm convex:better-auth-env --site-url http://localhost:3000 --trusted-origins http://localhost:3001,ccm-sample-mobile://',
+  );
+  await applyPlan(plan);
+  const manifest = JSON.parse(
+    await readFile(join(workspace.root, 'package.json'), 'utf8'),
+  );
+  expect(manifest.scripts['dev:dashboard']).toBe(
+    'pnpm --filter @sample/dashboard dev',
+  );
+  expect(manifest.scripts['dev:mobile']).toBe(
+    'pnpm --filter @sample/mobile dev',
+  );
+});
+
 describe.each(['pnpm', 'bun'] as const)(
   'Astro integration with %s',
   (packageManager) => {
@@ -2486,7 +2795,7 @@ describe.each(['pnpm', 'bun'] as const)(
       ).rejects.toThrow('The Astro template uses static output');
       expect(await snapshot(workspace.root)).toEqual(before);
     });
-    it.each(['clerk', 'convex-auth'] as const)(
+    it.each(['clerk', 'convex-auth', 'better-auth'] as const)(
       'adds %s to Astro with manager-aware setup guidance',
       async (provider) => {
         const workspace = await fixture(

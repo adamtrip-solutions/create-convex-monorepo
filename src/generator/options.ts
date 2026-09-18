@@ -133,10 +133,11 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     auth !== 'none' &&
     auth !== 'clerk' &&
     auth !== 'convex-auth' &&
-    auth !== 'workos'
+    auth !== 'workos' &&
+    auth !== 'better-auth'
   )
     throw new Error(
-      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, or workos.`,
+      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, workos, or better-auth.`,
     );
   const oauth = normalizeOAuthProviders(raw.oauth, auth);
   if (auth === 'workos') {

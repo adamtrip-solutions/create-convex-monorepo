@@ -1,6 +1,6 @@
 # create-convex-monorepo
 
-A TypeScript CLI that generates pnpm or bun workspaces. Turborepo runs multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, React Router v7, Expo, Astro + React island, SvelteKit, or a combination, with optional Clerk, Convex Auth, or WorkOS AuthKit authentication.
+A TypeScript CLI that generates pnpm or bun workspaces. Turborepo runs multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, React Router v7, Expo, Astro + React island, SvelteKit, or a combination, with optional Clerk, Convex Auth, WorkOS AuthKit, or Better Auth authentication.
 
 The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Choose blank apps or a messages example. The example includes a query and mutation, plus compile-time assertions for the shared API's argument and return types.
 
@@ -48,6 +48,8 @@ npx create-convex-monorepo@latest add auth clerk --dry-run
 npx create-convex-monorepo@latest add auth clerk --install
 npx create-convex-monorepo@latest add auth convex-auth --dry-run
 npx create-convex-monorepo@latest add auth convex-auth --install
+npx create-convex-monorepo@latest add auth better-auth --dry-run
+npx create-convex-monorepo@latest add auth better-auth --install
 npx create-convex-monorepo@latest add auth workos --dry-run
 npx create-convex-monorepo@latest add auth workos --install
 npx create-convex-monorepo@latest env sync --app mobile
@@ -72,17 +74,17 @@ To explicitly generate a new project, use `create <project-name>`. This also let
 npx create-convex-monorepo@latest create doctor --apps vite --no-install --no-git
 ```
 
-| Command           | Behavior                                                                                                                                                                     |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `add app`         | Creates an app using the existing backend and auth, updates root scripts and metadata, and links the public backend URL when configured.                                     |
-| `add package`     | Creates a blank shared TypeScript package under `packages/<name>` and records it in metadata.                                                                                |
-| `add auth`        | Adds Clerk, Convex Auth, or WorkOS AuthKit to generated app providers and the backend auth configuration. Customized files that need replacement cause a conflict.           |
-| `env sync`        | Links only the public backend URL, using each framework's variable prefix. Supports `--app` and `--dry-run`.                                                                 |
-| `doctor`          | Checks workspace configuration, installed dependencies, environment settings, and shared API types. Supports `--json`; errors exit with status 1.                            |
-| `upgrade`         | Updates existing exact dependency pins and the recorded package-manager version to the running CLI's tested baseline. Keeps newer pins and rejects non-exact customizations. |
-| `upgrade --check` | Compares generator versions with npm's latest stable release and reports the running CLI's tested dependency baseline through `--json`. Makes no changes.                    |
+| Command           | Behavior                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add app`         | Creates an app using the existing backend and auth, updates root scripts and metadata, and links the public backend URL when configured.                                        |
+| `add package`     | Creates a blank shared TypeScript package under `packages/<name>` and records it in metadata.                                                                                   |
+| `add auth`        | Adds Clerk, Convex Auth, WorkOS AuthKit, or Better Auth to generated app providers and the backend auth configuration. Customized files that need replacement cause a conflict. |
+| `env sync`        | Links only the public backend URL, using each framework's variable prefix. Supports `--app` and `--dry-run`.                                                                    |
+| `doctor`          | Checks workspace configuration, installed dependencies, environment settings, and shared API types. Supports `--json`; errors exit with status 1.                               |
+| `upgrade`         | Updates existing exact dependency pins and the recorded package-manager version to the running CLI's tested baseline. Keeps newer pins and rejects non-exact customizations.    |
+| `upgrade --check` | Compares generator versions with npm's latest stable release and reports the running CLI's tested dependency baseline through `--json`. Makes no changes.                       |
 
-The `add app`, `add package`, `add auth`, and `upgrade` commands support `--dry-run`, `--install`, `--no-install`, and `--yes`. Without prompts, provide the app name and framework for `add app`, the package name for `add package`, or `clerk`, `convex-auth`, or `workos` for `add auth`. Dependency installation defaults to off. `--yes` enables installation unless `--no-install` is set, and never overrides conflicts. A dry run shows file paths without printing environment values or installing dependencies.
+The `add app`, `add package`, `add auth`, and `upgrade` commands support `--dry-run`, `--install`, `--no-install`, and `--yes`. Without prompts, provide the app name and framework for `add app`, the package name for `add package`, or `clerk`, `convex-auth`, `workos`, or `better-auth` for `add auth`. Dependency installation defaults to off. `--yes` enables installation unless `--no-install` is set, and never overrides conflicts. A dry run shows file paths without printing environment values or installing dependencies.
 
 Existing pnpm workspaces with metadata version 1, including projects created with 0.2.1, are supported. Bun workspaces also use metadata version 1. Preserve `convex-monorepo.json`; the CLI reads it rather than guessing which directories belong to your project. Per-app starter choices are recorded there when they differ from the original selection. Shared packages added by the CLI are recorded in the optional `packages` list as `{ "name": "shared" }` entries.
 
@@ -92,7 +94,7 @@ Commands plan every file before applying changes. They reject unsafe paths, syml
 
 Package addition creates plain TypeScript source with shared lint and typecheck settings. Add `"@<scope>/<name>": "workspace:*"` to each consuming app's dependencies, then run `pnpm install`. Next configs are updated when they match the generated config apart from the `transpilePackages` string list, so repeated `add package` calls keep appending. A missing config or any other customization produces a note with the required manual edit. Other frameworks need no config change.
 
-Auth addition supports `none` to Clerk, Convex Auth, or WorkOS AuthKit. It preserves user functions, generated internals, unrelated package fields, and existing README content. Convex Auth adds `authTables` to a generated schema or a customized schema with a single `defineSchema` call taking an object literal. Other schema shapes need the two manual edits named in the conflict. A customized HTTP router needs a manual `auth.addHttpRoutes(http)` call. Follow the new `CLERK_SETUP.md`, `CONVEX_AUTH_SETUP.md`, or `WORKOS_SETUP.md` for setup. For Convex Auth, run `pnpm install`, then `pnpm convex:auth-keys`; refresh generated types with `pnpm convex:dev` or `convex codegen`. Existing public messages do not acquire an owner automatically and will not appear in authenticated accounts. Review stored-data migration separately. Adding the configured provider again is a no-op; replacing an auth provider is not supported.
+Auth addition supports `none` to Clerk, Convex Auth, WorkOS AuthKit, or Better Auth. It preserves user functions, generated internals, unrelated package fields, and existing README content. Convex Auth adds `authTables` to a generated schema or a customized schema with a single `defineSchema` call taking an object literal. Other schema shapes need the two manual edits named in the conflict. A customized HTTP router needs a manual `auth.addHttpRoutes(http)` call. Follow the new `CLERK_SETUP.md`, `CONVEX_AUTH_SETUP.md`, `WORKOS_SETUP.md`, or `BETTER_AUTH_SETUP.md` for setup. For Convex Auth, run `pnpm install`, then `pnpm convex:auth-keys`; refresh generated types with `pnpm convex:dev` or `convex codegen`. Existing public messages do not acquire an owner automatically and will not appear in authenticated accounts. Review stored-data migration separately. Adding the configured provider again is a no-op; replacing an auth provider is not supported.
 
 A workspace lock prevents two CLI edits from running together. Each planned file is checked again before writing. Failed edits roll back files that still contain this command's output; observed concurrent edits are preserved and reported. Filesystem checks are optimistic, so avoid editing affected files while a command is applying. A failed dependency installation leaves the applied files available for retry with `pnpm install`.
 
@@ -131,18 +133,18 @@ pnpm create convex-monorepo@latest my-app --apps web:next,admin:vite --no-instal
 pnpm create convex-monorepo@latest my-app --apps app:tanstack-start,dashboard:next --auth none --package-manager pnpm --yes
 ```
 
-| Option                              | Meaning                                                            |
-| ----------------------------------- | ------------------------------------------------------------------ |
-| `--apps`                            | Comma-separated framework IDs or `name:framework` entries          |
-| `--auth`                            | `none`, the default, `clerk`, `convex-auth`, or `workos`           |
-| `--oauth`                           | Optional comma list `github,google`; requires `--auth convex-auth` |
-| `--example`                         | `messages`, the default, or `none` for blank projects              |
-| `--package-manager`                 | `pnpm`, the default, or `bun`; npm and yarn are rejected           |
-| `--install`, `--no-install`         | Enable or skip dependency installation                             |
-| `--init-convex`, `--no-init-convex` | Initialize Convex and link URLs; enables installation              |
-| `--git`, `--no-git`                 | Enable or skip `git init`; no commit is created                    |
-| `--yes`, `-y`                       | Skip prompts and accept defaults, including install and git        |
-| `--help`, `--version`               | Show usage or the generator version                                |
+| Option                              | Meaning                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `--apps`                            | Comma-separated framework IDs or `name:framework` entries               |
+| `--auth`                            | `none`, the default, `clerk`, `convex-auth`, `workos`, or `better-auth` |
+| `--oauth`                           | Optional comma list `github,google`; requires `--auth convex-auth`      |
+| `--example`                         | `messages`, the default, or `none` for blank projects                   |
+| `--package-manager`                 | `pnpm`, the default, or `bun`; npm and yarn are rejected                |
+| `--install`, `--no-install`         | Enable or skip dependency installation                                  |
+| `--init-convex`, `--no-init-convex` | Initialize Convex and link URLs; enables installation                   |
+| `--git`, `--no-git`                 | Enable or skip `git init`; no commit is created                         |
+| `--yes`, `-y`                       | Skip prompts and accept defaults, including install and git             |
+| `--help`, `--version`               | Show usage or the generator version                                     |
 
 Without a terminal, prompts are disabled and install/git default to off unless explicitly enabled or `--yes` is passed. Explicit negative flags override `--yes`. Convex initialization defaults to off when prompts are skipped, including with `--yes`; request it explicitly with `--init-convex`. That flag still lets Convex prompt for an account or deployment, and conflicts with `--no-install`. The default app is Next.js. Project and app names must be lowercase letters, digits, and hyphens, at most 100 characters, with no path separators or reserved device names.
 
@@ -160,7 +162,7 @@ bun run lint
 bun run build
 ```
 
-If installation was skipped, run `bun install` first. Use `bun run convex:link`, `bun run convex:dev`, and, for Convex Auth, `bun run convex:auth-keys`. The pnpm script examples in this README use `bun run <script>` in bun workspaces. Run backend binaries from the root with `bun run --cwd packages/backend convex <command>`.
+If installation was skipped, run `bun install` first. Use `bun run convex:link`, `bun run convex:dev`, for Convex Auth, `bun run convex:auth-keys`, and for Better Auth, `bun run convex:better-auth-env`. The pnpm script examples in this README use `bun run <script>` in bun workspaces. Run backend binaries from the root with `bun run --cwd packages/backend convex <command>`.
 
 Bun workspaces put `apps/*` and `packages/*` in the root manifest's `workspaces` list and pin bun in `packageManager`. They keep Turborepo and `workspace:*` dependencies. Commit `bun.lock`; no `pnpm-workspace.yaml` is generated. Existing-workspace commands read the recorded manager, including when invoked through npx or pnpm. `--install` uses that manager, and upgrade updates its version pin. This does not migrate existing pnpm workspaces.
 
@@ -176,7 +178,7 @@ Choose **Blank project** in the starter-content prompt, or pass `--example none`
 pnpm create convex-monorepo@latest my-app --apps next,expo --example none --yes
 ```
 
-Every selected app starts with a minimal page or screen showing its name. Convex providers, workspace dependencies, environment setup, and the selected auth integration remain configured. The backend has official generated types and an empty schema, except Convex Auth projects retain their auth tables and functions. There are no example tables, messages functions, access helpers, query/mutation screens, or demo-specific type-test files to remove.
+Every selected app starts with a minimal page or screen showing its name. Convex providers, workspace dependencies, environment setup, and the selected auth integration remain configured. The backend has official generated types and an empty schema, except Convex Auth projects retain their auth tables and functions. Better Auth keeps its tables in the component and exposes the current-user query. There are no example tables, messages functions, access helpers, query/mutation screens, or demo-specific type-test files to remove.
 
 Add your tables to `packages/backend/convex/schema.ts` and your functions beside it. Run `pnpm convex:dev` to generate their shared API references. With any auth provider, add server-side identity and authorization checks to your protected functions. The blank starter retains sign-in controls and the existing authenticated provider behavior.
 
@@ -285,7 +287,7 @@ Dynamic Convex declarations refer to backend source modules. Client TypeScript p
 
 ## Authentication
 
-Next.js, Vite, TanStack Start, React Router, Expo, and Astro accept `none`, `clerk`, or `convex-auth` with both starters. SvelteKit accepts only `none`; Clerk, WorkOS, and Convex Auth, including OAuth, are rejected before files are written. SvelteKit uses a Svelte runtime; the auth adapters currently support only React. Existing no-auth workspaces accept `add auth clerk`, `add auth convex-auth`, or `add auth workos`. All providers support `add app` for their supported frameworks. WorkOS AuthKit supports Next.js, Vite, and TanStack Start with both starters. Expo, Astro, and React Router are rejected before writing files. Expo has no official React Native AuthKit SDK. The [official Astro SDK](https://github.com/workos/authkit-astro) requires a server adapter and on-demand rendering; this generator uses static Astro output.
+Next.js, Vite, TanStack Start, React Router, Expo, and Astro accept `none`, `clerk`, `convex-auth`, or `better-auth` with both starters. SvelteKit accepts only `none`; Clerk, WorkOS, Better Auth, and Convex Auth, including OAuth, are rejected before files are written. SvelteKit uses a Svelte runtime; the auth adapters currently support only React. Existing no-auth workspaces accept `add auth clerk`, `add auth convex-auth`, `add auth workos`, or `add auth better-auth`. All providers support `add app` for their supported frameworks. WorkOS AuthKit supports Next.js, Vite, and TanStack Start with both starters. Expo, Astro, and React Router are rejected before writing files. Expo has no official React Native AuthKit SDK. The [official Astro SDK](https://github.com/workos/authkit-astro) requires a server adapter and on-demand rendering; this generator uses static Astro output.
 React Router has an official SDK, but this generator has no binding for it yet.
 
 `--auth convex-auth` and `add auth convex-auth` configure email and password sign-up/sign-in, sign-out, and per-user backend access. Web apps use the client ConvexAuthProvider; Expo persists tokens with expo-secure-store. No frontend public auth keys or password-flow redirect scheme are needed. Next.js, TanStack Start, and React Router do not configure server-side authentication or authenticated SSR. GitHub and Google OAuth are opt-in with `--oauth github,google`. Magic links, email verification, password reset, and MFA are outside this starter.
@@ -443,6 +445,33 @@ On a fresh deployment, first run `pnpm convex:setup` to select it. If the push r
 
 Append the variables from each app's `.env.clerk.example` to its `.env.local`, alongside the Convex URL. Publishable keys belong in the appropriate public variables. Next.js, Start, and React Router use a server-only `CLERK_SECRET_KEY`; Vite and Expo must never receive that secret. React Router uses `@clerk/react-router`, `clerkMiddleware`, and `rootAuthLoader`, with `v8_middleware` enabled. Its provider receives the root loader's session data and connects Convex through `ConvexProviderWithClerk`. For production, set `VITE_CLERK_PUBLISHABLE_KEY` at build time and both Clerk keys in the server runtime environment; `react-router-serve` does not load `.env.local` automatically. See [Convex's Clerk guide](https://docs.convex.dev/auth/clerk) and [Clerk's React Router setup](https://clerk.com/docs/react-router/getting-started/quickstart).
 
+## Better Auth setup
+
+Astro uses Better Auth inside its React island with `PUBLIC_CONVEX_URL` and `PUBLIC_CONVEX_SITE_URL`. React Router uses client authentication. Both support messages and blank starters. `--oauth` is only supported with Convex Auth.
+
+`--auth better-auth` uses the official `@convex-dev/better-auth` component for email and password sign-up, sign-in, and sign-out on Next.js, Vite, TanStack Start, React Router, Expo, and Astro. Both starters include loading and error states. Next.js, TanStack Start, and React Router use client authentication. Social providers, magic links, email verification, and authenticated SSR are not configured.
+
+Both package managers are supported. The examples below use pnpm; for bun workspaces, replace `pnpm <script>` with `bun run <script>`. Generated setup instructions use the selected manager.
+
+Run `pnpm convex:setup` to select a deployment. If its first push requests auth configuration, set the deployment variables below and rerun setup. From the generated workspace root, configure your primary web origin and any additional frontend origins or native schemes:
+
+```sh
+pnpm convex:better-auth-env --site-url http://localhost:3000 --trusted-origins http://localhost:3001,ccm-my-app-mobile://
+pnpm convex:better-auth-env --site-url https://example.com --trusted-origins https://admin.example.com,ccm-my-app-mobile:// --prod
+```
+
+Use the actual scheme from the Expo app's `app.json`. For Expo-only development, use its web origin for `SITE_URL` and include its native scheme in the trusted origins. Use a cloud deployment for physical devices and a development build for your custom scheme.
+
+The script generates `BETTER_AUTH_SECRET` in memory and sets it, `SITE_URL`, and `BETTER_AUTH_TRUSTED_ORIGINS` through the installed Convex CLI. It does not store or print the secret. Run the production command separately for production. Re-running rotates the secret, which can invalidate existing sessions. Convex supplies the backend's `CONVEX_SITE_URL`.
+
+Set the public HTTP endpoint in every app's `.env.local`: `NEXT_PUBLIC_CONVEX_SITE_URL` for Next.js, `VITE_CONVEX_SITE_URL` for Vite, TanStack Start, and React Router, `PUBLIC_CONVEX_SITE_URL` for Astro, and `EXPO_PUBLIC_CONVEX_SITE_URL` for Expo. Use your deployment's HTTP URL, normally ending in `.convex.site`. Keep the existing public `CONVEX_URL` setting, normally ending in `.convex.cloud`. `convex:link` and `env sync` copy only `CONVEX_URL`; enter the site URL yourself. Never put `BETTER_AUTH_SECRET` in frontend files.
+
+Better Auth stores its tables inside the component. Message ownership uses the Better Auth user ID returned by `authComponent.getAuthUser(ctx)`. Blank projects keep an empty application schema and the auth query. Expo uses `@better-auth/expo` with SecureStore on native platforms and the cross-domain client on web.
+
+`add auth better-auth` writes `BETTER_AUTH_SETUP.md` and preserves your schema and generated internals. A missing `convex/convex.config.ts` is created. An existing component config or HTTP router that needs integration produces a conflict with the exact manual edit. After installation and configuration, run `pnpm convex:dev` to refresh component types. Provider replacement and stored-data migration remain manual.
+
+See the [official React guide](https://labs.convex.dev/better-auth/framework-guides/react), [Expo guide](https://labs.convex.dev/better-auth/framework-guides/expo), and [email/password documentation](https://www.better-auth.com/docs/authentication/email-password).
+
 ## Expo notes
 
 Expo uses the SDK's React and React Native versions, the default `expo/metro-config`, and a shared workspace backend dependency. Do not add old manual symlink resolver overrides or upgrade React independently in one app.
@@ -455,7 +484,7 @@ Typechecking and Metro export checks do not establish that real OAuth, device pe
 
 - **Destination already exists:** choose a new or empty directory. The CLI refuses non-empty directories and symlinks. Template failures remove staging output; install/git/Convex setup failures preserve the completed project and print a retry command.
 - **Missing URL screen:** run `pnpm convex:setup`, or `pnpm convex:link` if the backend is already configured, then restart development.
-- **Authentication never connects:** for Convex Auth, check deployment signing keys and the generated auth modules. For Clerk, check the `convex` JWT template and deployment issuer, and use the same Clerk application across frontends.
+- **Authentication never connects:** for Better Auth, check deployment `BETTER_AUTH_SECRET`, `SITE_URL`, trusted origins, and each frontend's public `CONVEX_SITE_URL`. For Convex Auth, check deployment signing keys and the generated auth modules. For Clerk, check the `convex` JWT template and deployment issuer, and use the same Clerk application across frontends.
 - **Missing API types:** keep both generated JavaScript and declarations, run the backend watcher, and verify matching Convex versions. Do not fix this by casting the API.
 - **Missing Start route tree:** run that app's `routes:generate` script. Its typecheck script runs route generation automatically.
 - **Metro resolution after dependency changes:** run `pnpm --filter @my-app/mobile exec expo start --clear`. Check SDK-compatible dependency versions before changing resolver settings.

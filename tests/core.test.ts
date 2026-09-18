@@ -88,7 +88,7 @@ describe('options', () => {
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
-  it.each(['none', 'clerk', 'convex-auth', 'workos'])(
+  it.each(['none', 'clerk', 'convex-auth', 'workos', 'better-auth'])(
     'accepts %s auth through CLI options',
     (auth) => {
       expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(
@@ -357,7 +357,7 @@ describe('SvelteKit options', () => {
       expect(selectTemplate('sveltekit').label).toBe('SvelteKit');
     },
   );
-  it.each(['clerk', 'convex-auth', 'workos', 'custom'])(
+  it.each(['clerk', 'convex-auth', 'workos', 'better-auth', 'custom'])(
     'rejects SvelteKit with %s before writing files',
     async (auth) => {
       const cwd = await temp();

@@ -79,6 +79,16 @@ const baselines: Record<string, string> = {
   convex: versions.convex,
   '@convex-dev/auth': versions.convexAuth,
   '@auth/core': versions.authCore,
+  '@convex-dev/better-auth': versions.convexBetterAuth,
+  'better-auth': versions.betterAuth,
+  '@better-auth/core': versions.betterAuth,
+  '@better-auth/expo': versions.betterAuthExpo,
+  'expo-secure-store': versions.expoSecureStore,
+  'expo-network': versions.expoNetwork,
+  'expo-linking': versions.expoLinking,
+  'expo-web-browser': versions.expoWebBrowser,
+  'expo-constants': versions.expoConstants,
+
   'react-router': versions.reactRouter,
   '@react-router/dev': versions.reactRouter,
   '@react-router/node': versions.reactRouter,
@@ -461,6 +471,38 @@ export async function doctor(
         );
     }
   }
+  if (config.auth === 'better-auth') {
+    for (const path of [
+      'packages/backend/convex/auth.config.ts',
+      'packages/backend/convex/auth.ts',
+      'packages/backend/convex/http.ts',
+      'packages/backend/convex/convex.config.ts',
+      'packages/backend/.env.better-auth.example',
+      'scripts/better-auth-env.mjs',
+      ...(config.example === 'messages'
+        ? ['packages/backend/convex/access.ts']
+        : []),
+    ]) {
+      if ((await text(path)) === null)
+        issue(
+          'auth-config-missing',
+          `Better Auth is recorded in metadata but ${path} is missing.`,
+          `Restore the generated Better Auth file ${path} before deploying.`,
+        );
+    }
+    if (
+      object(rootManifest.scripts)['convex:better-auth-env'] !==
+      'node scripts/better-auth-env.mjs'
+    )
+      issue(
+        'auth-script-missing',
+        'The root convex:better-auth-env script is missing or customized.',
+        'Restore the generated convex:better-auth-env script or review your deployment secret setup.',
+      );
+    result.checks.push(
+      'Better Auth deployment secrets and trusted origins require a separate Convex deployment check; no remote secrets were read.',
+    );
+  }
   if (hasOAuth) {
     let hasSiteUrlGuidance = false;
     for (const path of [
@@ -591,6 +633,14 @@ export async function doctor(
   await dependencies('packages/backend', backend, [
     'convex',
     'typescript',
+    ...(config.auth === 'better-auth'
+      ? [
+          '@convex-dev/better-auth',
+          'better-auth',
+          '@better-auth/expo',
+          '@better-auth/core',
+        ]
+      : []),
     ...(config.auth === 'convex-auth'
       ? ['@convex-dev/auth', '@auth/core']
       : []),
@@ -614,6 +664,20 @@ export async function doctor(
         ? ['@workos-inc/node']
         : []),
       ...(config.auth === 'convex-auth' ? ['@convex-dev/auth'] : []),
+      ...(config.auth === 'better-auth'
+        ? ['@convex-dev/better-auth', 'better-auth']
+        : []),
+      ...(config.auth === 'better-auth' && app.framework === 'expo'
+        ? [
+            '@better-auth/expo',
+            '@better-auth/core',
+            'expo-secure-store',
+            'expo-network',
+            'expo-linking',
+            'expo-web-browser',
+            'expo-constants',
+          ]
+        : []),
       ...(config.auth === 'convex-auth' && app.framework === 'expo'
         ? ['expo-secure-store']
         : []),
@@ -651,6 +715,7 @@ export async function doctor(
         'WORKOS_API_KEY',
         'WORKOS_COOKIE_PASSWORD',
         'CONVEX_DEPLOY_KEY',
+        'BETTER_AUTH_SECRET',
         'JWT_PRIVATE_KEY',
         'JWKS',
         'AUTH_GITHUB_SECRET',
@@ -689,6 +754,15 @@ export async function doctor(
       );
     } else if (validUrl(backendUrl))
       result.checks.push(`${directory} uses the backend deployment URL.`);
+    if (
+      config.auth === 'better-auth' &&
+      !validUrl(env.get(`${prefix}_CONVEX_SITE_URL`))
+    )
+      issue(
+        'auth-env-missing',
+        `${directory} has a missing or invalid ${prefix}_CONVEX_SITE_URL.`,
+        'Set the Convex HTTP actions URL in this app’s private .env.local, following the Better Auth setup instructions.',
+      );
     if (config.auth === 'clerk') {
       const required = [
         `${prefix}_CLERK_PUBLISHABLE_KEY`,
