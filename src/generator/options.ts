@@ -1,4 +1,5 @@
 import type { AppSpec, Auth, Framework, ProjectOptions } from './types.js';
+import { validateAuthCompatibility } from '../integrations/auth/index.js';
 
 export interface RawOptions {
   name?: string;
@@ -16,6 +17,7 @@ export const frameworks: readonly Framework[] = [
   'vite',
   'tanstack-start',
   'expo',
+  'sveltekit',
 ];
 const reserved = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9]|node_modules)$/i;
 export function validateProjectName(name: string): string | undefined {
@@ -43,10 +45,6 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
   if (example !== 'none' && example !== 'messages')
     throw new Error(`Unknown example "${example}". Choose none or messages.`);
   const auth = raw.auth ?? 'none';
-  if (auth !== 'none' && auth !== 'clerk' && auth !== 'convex-auth')
-    throw new Error(
-      `Unknown auth provider "${auth}". Choose none, clerk, or convex-auth.`,
-    );
   const used = new Set<string>();
   const input = raw.apps ?? 'next';
   const entries =
@@ -96,6 +94,11 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     used.add(appName);
     return { name: appName, framework };
   });
+  validateAuthCompatibility(apps, auth);
+  if (auth !== 'none' && auth !== 'clerk' && auth !== 'convex-auth')
+    throw new Error(
+      `Unknown auth provider "${auth}". Choose none, clerk, or convex-auth.`,
+    );
   return {
     name,
     apps,

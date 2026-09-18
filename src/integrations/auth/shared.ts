@@ -1,12 +1,36 @@
-import type { AppSpec, GeneratorContext } from '../../generator/types.js';
+import type {
+  AppSpec,
+  Framework,
+  GeneratorContext,
+} from '../../generator/types.js';
+
+export type UiRuntime = 'react' | 'svelte';
+const runtimes: Record<Framework, UiRuntime> = {
+  next: 'react',
+  vite: 'react',
+  'tanstack-start': 'react',
+  expo: 'react',
+  sveltekit: 'svelte',
+};
+export function uiRuntime(framework: Framework): UiRuntime {
+  return runtimes[framework];
+}
 
 export function platform(app: AppSpec) {
   const native = app.framework === 'expo';
   const prefix =
-    app.framework === 'next' ? 'NEXT_PUBLIC' : native ? 'EXPO_PUBLIC' : 'VITE';
+    app.framework === 'next'
+      ? 'NEXT_PUBLIC'
+      : native
+        ? 'EXPO_PUBLIC'
+        : app.framework === 'sveltekit'
+          ? 'PUBLIC'
+          : 'VITE';
   const env = (name: string) =>
-    `${prefix === 'VITE' ? 'import.meta.env' : 'process.env'}.${prefix}_${name}`;
-  return { native, prefix, env };
+    prefix === 'PUBLIC'
+      ? `PUBLIC_${name}`
+      : `${prefix === 'VITE' ? 'import.meta.env' : 'process.env'}.${prefix}_${name}`;
+  return { native, prefix, env, runtime: uiRuntime(app.framework) };
 }
 
 export async function writeProviders(
@@ -18,6 +42,27 @@ export async function writeProviders(
     providerProps?: string;
   },
 ): Promise<void> {
+  if (uiRuntime(app.framework) === 'svelte') {
+    if (auth) throw new Error('SvelteKit currently supports only --auth none.');
+    await ctx.write(
+      `apps/${app.name}/src/Providers.svelte`,
+      `<script lang="ts">
+  import type { Snippet } from 'svelte';
+  import { setupConvex } from 'convex-svelte';
+  import { PUBLIC_CONVEX_URL } from '$env/static/public';
+  let { children }: { children: Snippet } = $props();
+  if (PUBLIC_CONVEX_URL) setupConvex(PUBLIC_CONVEX_URL);
+</script>
+
+{#if PUBLIC_CONVEX_URL}
+  {@render children()}
+{:else}
+  <p>Set PUBLIC_CONVEX_URL in this app's .env.local.</p>
+{/if}
+`,
+    );
+    return;
+  }
   const { native, env } = platform(app);
   const text = (message: string) =>
     native ? `<Text>${message}</Text>` : `<p>${message}</p>`;

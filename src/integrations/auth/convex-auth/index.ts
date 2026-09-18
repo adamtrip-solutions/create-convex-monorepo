@@ -7,6 +7,7 @@ import { authControls } from './controls.js';
 export const convexAuthAdapter: AuthAdapter = {
   id: 'convex-auth',
   label: 'Convex Auth',
+  supportedRuntimes: ['react'],
   async apply(ctx) {
     await ctx.mergePackage('packages/backend/package.json', {
       dependencies: {

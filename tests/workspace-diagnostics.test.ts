@@ -422,9 +422,24 @@ closing secret"
           module: 'ESNext',
           moduleResolution: 'Bundler',
           target: 'ES2023',
-          types: [],
+          types: ['ccm-doctor-local'],
         },
       }),
+    );
+    // Explicit type packages must resolve from the app, not the CLI's cwd.
+    await put(
+      workspace.root,
+      'apps/web/node_modules/@types/ccm-doctor-local/package.json',
+      JSON.stringify({
+        name: '@types/ccm-doctor-local',
+        version: '1.0.0',
+        types: 'index.d.ts',
+      }),
+    );
+    await put(
+      workspace.root,
+      'apps/web/node_modules/@types/ccm-doctor-local/index.d.ts',
+      'interface DoctorAppLocalType { name: string }\n',
     );
     await mkdir(join(workspace.root, 'node_modules/@diagnostics'), {
       recursive: true,
@@ -436,7 +451,7 @@ closing secret"
     await put(
       workspace.root,
       'packages/backend/convex/_generated/api.d.ts',
-      'export declare const api: { custom: { run: { name: string } } };\n',
+      'export declare const api: { custom: { run: DoctorAppLocalType } };\n',
     );
     await put(
       workspace.root,
@@ -711,4 +726,55 @@ describe('upgrade check', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await rejected;
   });
+});
+
+it('checks SvelteKit dependencies and PUBLIC_CONVEX_URL without requiring React', async () => {
+  const workspace = await fixture('web:sveltekit');
+  await put(
+    workspace.root,
+    'packages/backend/.env.local',
+    'CONVEX_URL=https://test.convex.cloud\n',
+  );
+  await put(
+    workspace.root,
+    'apps/web/.env.local',
+    'PUBLIC_CONVEX_URL=https://test.convex.cloud\n',
+  );
+  const before = await snapshot(workspace.root);
+  const report = await doctor(workspace);
+  expect(
+    report.issues.filter((issue) =>
+      ['app-url', 'app-url-mismatch', 'dependency-missing'].includes(
+        issue.code,
+      ),
+    ),
+  ).toEqual([]);
+  expect(
+    report.issues.some((issue) => /\breact(?:-dom)?\b/.test(issue.message)),
+  ).toBe(false);
+  expect(await snapshot(workspace.root)).toEqual(before);
+  const path = join(workspace.root, 'apps/web/package.json');
+  const pkg = JSON.parse(await readFile(path, 'utf8'));
+  for (const dependency of ['svelte', 'convex-svelte', '@sveltejs/kit']) {
+    delete pkg.dependencies[dependency];
+    delete pkg.devDependencies[dependency];
+  }
+  await writeFile(path, JSON.stringify(pkg));
+  const missing = await doctor(workspace);
+  for (const dependency of ['svelte', 'convex-svelte', '@sveltejs/kit']) {
+    expect(missing.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'dependency-missing',
+        message: `apps/web does not declare ${dependency}.`,
+      }),
+    );
+  }
+  await put(
+    workspace.root,
+    'apps/web/.env.local',
+    'VITE_CONVEX_URL=https://test.convex.cloud\n',
+  );
+  expect(
+    (await doctor(workspace)).issues.some((issue) => issue.code === 'app-url'),
+  ).toBe(true);
 });

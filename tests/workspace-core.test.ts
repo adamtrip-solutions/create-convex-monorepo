@@ -27,11 +27,11 @@ afterEach(async () => {
       .map((dir) => rm(dir, { recursive: true, force: true })),
   );
 });
-async function fixture() {
+async function fixture(apps = 'next,vite,tanstack-start,expo') {
   const dir = await mkdtemp(join(tmpdir(), 'ccm-workspace-core-'));
   directories.push(dir);
   const root = await generateProject(
-    { name: 'fixture', apps: 'next,vite,tanstack-start,expo', example: 'none' },
+    { name: 'fixture', apps, example: 'none' },
     { cwd: dir },
   );
   return loadWorkspace(root);
@@ -234,8 +234,8 @@ describe('workspace transactions', () => {
 });
 
 describe('environment sync', () => {
-  it('links only public URLs for all four frameworks, preserves settings, and is idempotent', async () => {
-    const ws = await fixture();
+  it('links only public URLs for all frameworks, preserves settings, and is idempotent', async () => {
+    const ws = await fixture('next,vite,tanstack-start,expo,svelte:sveltekit');
     await writeFile(
       join(ws.root, 'packages/backend/.env'),
       'CONVEX_URL=https://old.convex.cloud\n',
@@ -260,6 +260,9 @@ describe('environment sync', () => {
     }
     expect(await readText(ws.root, 'apps/web/.env.local')).toContain(
       'OTHER="first\nsecond"',
+    );
+    expect(await readText(ws.root, 'apps/svelte/.env.local')).toBe(
+      'PUBLIC_CONVEX_URL=https://current.convex.cloud\n',
     );
     expect((await planEnvSync(ws)).changes).toEqual([]);
   });

@@ -14,6 +14,8 @@ export function publicVariable(framework) {
     case 'vite':
     case 'tanstack-start':
       return 'VITE_CONVEX_URL';
+    case 'sveltekit':
+      return 'PUBLIC_CONVEX_URL';
     case 'expo':
       return 'EXPO_PUBLIC_CONVEX_URL';
     default:

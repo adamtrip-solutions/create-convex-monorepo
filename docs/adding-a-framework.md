@@ -8,9 +8,11 @@ Start with current framework and Convex documentation, then install a minimal up
 2. Create `src/templates/apps/<id>/index.ts` exporting an `AppTemplate`. Use `context.write`, `context.json`, and shared manifest helpers. Generate framework files under `apps/${app.name}`.
 3. Register it in `src/templates/apps/index.ts` and add the interactive label in `src/commands/create.ts`.
 4. Generate the public Convex environment variable with the framework's required prefix. Use statically named environment access where the bundler requires it. Add its public variable to `publicVariable` in `assets/setup/convex-setup.mjs`, update the generated README environment table, and test URL linking for the new framework.
-5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own `src/providers.tsx` and `src/auth-controls.tsx`; the framework template must not write those files.
-6. Add platform handling in `src/integrations/auth/shared.ts` and a binding in the Clerk adapter. If the integration cannot work, add explicit compatibility validation before output is written.
+5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own the provider and auth-control components. React uses `src/providers.tsx` and `src/auth-controls.tsx`; Svelte uses `src/Providers.svelte` and `src/AuthControls.svelte`. The framework template must not write those files.
+6. Declare the framework's UI runtime, `react` or `svelte`, in `src/integrations/auth/shared.ts`. Each auth adapter declares `supportedRuntimes`. Shared manifests use the runtime to include React dependencies only where needed. Add platform environment handling and provider components for that runtime. Add a Clerk binding only if it is supported. Compatibility validation must reject unsupported combinations during create, add app, and add auth before output is written.
 7. Add versions, development/build/typecheck/lint scripts, and any route-generation step the framework needs on a clean checkout.
+
+The SvelteKit template composes the shared TypeScript ESLint rules with `eslint-plugin-svelte`. Its TypeScript config extends both the shared base and SvelteKit's generated config. Its app-local Prettier config loads the pinned Svelte plugin, which the generator also loads from its own installation to format components before writing.
 
 The existing Vite template is the smallest example. Next and Expo show framework-specific configuration; do not copy their environment prefixes or resolver behavior into another framework.
 

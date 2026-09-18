@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import spawn from 'cross-spawn';
 import { format } from 'prettier';
+import * as sveltePlugin from 'prettier-plugin-svelte';
 import { generateProject, normalizeOptions } from '../dist/index.js';
 
 const apps =
@@ -124,26 +125,47 @@ try {
           vite: 'src/main.tsx',
           'tanstack-start': 'src/routes/index.tsx',
           expo: 'App.tsx',
+          sveltekit: 'src/routes/+page.svelte',
         }[app.framework],
       );
       const entry = await readFile(entryPath, 'utf8');
-      const sharedElement =
-        app.framework === 'expo'
-          ? '<SharedText>{packageName}</SharedText>'
-          : '<p>{packageName}</p>';
-      if (!entry.includes('</Providers>'))
-        throw new Error(`Missing Providers element in ${entryPath}`);
-      await writeFile(
-        entryPath,
-        await format(
-          "import { packageName } from '@fixture/shared';\n" +
-            (app.framework === 'expo'
-              ? "import { Text as SharedText } from 'react-native';\n"
-              : '') +
-            entry.replace('</Providers>', `${sharedElement}</Providers>`),
-          { parser: 'typescript', singleQuote: true, trailingComma: 'all' },
-        ),
-      );
+      if (app.framework === 'sveltekit') {
+        if (!entry.includes('<script lang="ts">'))
+          throw new Error(`Missing TypeScript script in ${entryPath}`);
+        await writeFile(
+          entryPath,
+          await format(
+            entry.replace(
+              '<script lang="ts">',
+              '<script lang="ts">\n  import { packageName } from "@fixture/shared";',
+            ) + '\n<p>{packageName}</p>\n',
+            {
+              parser: 'svelte',
+              plugins: [sveltePlugin],
+              singleQuote: true,
+              trailingComma: 'all',
+            },
+          ),
+        );
+      } else {
+        const sharedElement =
+          app.framework === 'expo'
+            ? '<SharedText>{packageName}</SharedText>'
+            : '<p>{packageName}</p>';
+        if (!entry.includes('</Providers>'))
+          throw new Error(`Missing Providers element in ${entryPath}`);
+        await writeFile(
+          entryPath,
+          await format(
+            "import { packageName } from '@fixture/shared';\n" +
+              (app.framework === 'expo'
+                ? "import { Text as SharedText } from 'react-native';\n"
+                : '') +
+              entry.replace('</Providers>', `${sharedElement}</Providers>`),
+            { parser: 'typescript', singleQuote: true, trailingComma: 'all' },
+          ),
+        );
+      }
     }
     if (example === 'none') {
       // Keep starter assertions here so adding a user's first function does not break their project.
@@ -181,7 +203,9 @@ export type MissingModule = typeof api.notAModule;
         ? 'NEXT_PUBLIC'
         : app.framework === 'expo'
           ? 'EXPO_PUBLIC'
-          : 'VITE';
+          : app.framework === 'sveltekit'
+            ? 'PUBLIC'
+            : 'VITE';
     // Syntactically valid test configuration, no deployment or identity-provider credentials.
     const lines = [`${prefix}_CONVEX_URL=https://example.convex.cloud`];
     if (auth === 'clerk') {
@@ -211,7 +235,9 @@ export type MissingModule = typeof api.notAModule;
         ? '.next/static'
         : app.framework === 'tanstack-start'
           ? 'dist/client'
-          : 'dist',
+          : app.framework === 'sveltekit'
+            ? '.svelte-kit/output/client'
+            : 'dist',
     );
     for (const file of await readdir(output, { recursive: true })) {
       if (!/\.(?:js|hbc)$/.test(file)) continue;

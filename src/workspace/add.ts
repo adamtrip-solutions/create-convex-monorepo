@@ -12,6 +12,7 @@ import {
 } from '../generator/format.js';
 import { validateProjectName } from '../generator/options.js';
 import { versions } from '../templates/versions.js';
+import { validateAuthCompatibility } from '../integrations/auth/index.js';
 import { readBackendEnvironment } from './env.js';
 import {
   render,
@@ -191,6 +192,40 @@ export async function planAddApp(
     example,
     workspace.config.auth,
   );
+  if (app.framework === 'sveltekit') {
+    const setupPath = 'scripts/convex-setup.mjs';
+    const setup = await guardedRead(workspace, plan, setupPath);
+    const target = generated.get(setupPath)!;
+    if (!(await equivalentGeneratedFile(setupPath, setup, target))) {
+      const previous = target.replace(
+        /    case 'sveltekit':\n      return 'PUBLIC_CONVEX_URL';\n/,
+        '',
+      );
+      if (!(await equivalentGeneratedFile(setupPath, setup, previous)))
+        throw new Error(
+          'Customized or missing scripts/convex-setup.mjs cannot be updated safely for SvelteKit. Restore the generated setup script before rerunning add app. No files were changed.',
+        );
+      plan.changes.push({
+        path: setupPath,
+        before: setup,
+        after: retainNewlines(target, setup),
+      });
+    }
+    const ignorePath = '.prettierignore';
+    const ignore = await guardedRead(workspace, plan, ignorePath);
+    const missing = ['**/.svelte-kit/', '**/build/'].filter(
+      (pattern) => !ignore?.split(/\r?\n/).includes(pattern),
+    );
+    if (missing.length)
+      plan.changes.push({
+        path: ignorePath,
+        before: ignore,
+        after: retainNewlines(
+          `${(ignore ?? '').replace(/\r\n/g, '\n')}${ignore && !ignore.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`,
+          ignore,
+        ),
+      });
+  }
   const newPort =
     (app.framework === 'expo' ? 8081 : 3000) + workspace.config.apps.length;
   for (const existing of workspace.config.apps) {
@@ -208,7 +243,8 @@ export async function planAddApp(
     );
     if (
       existing.framework === 'vite' ||
-      existing.framework === 'tanstack-start'
+      existing.framework === 'tanstack-start' ||
+      existing.framework === 'sveltekit'
     ) {
       const configPath = `apps/${existing.name}/vite.config.ts`;
       const config = await guardedRead(workspace, plan, configPath);
@@ -570,6 +606,7 @@ export async function planAddAuth(
   workspace: Workspace,
   provider: 'clerk' | 'convex-auth',
 ): Promise<ChangePlan> {
+  validateAuthCompatibility(workspace.config.apps, provider);
   if (provider !== 'clerk' && provider !== 'convex-auth')
     throw new Error('Choose add auth clerk or add auth convex-auth.');
   const label = (auth: 'clerk' | 'convex-auth') =>

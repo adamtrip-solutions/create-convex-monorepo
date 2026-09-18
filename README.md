@@ -1,6 +1,6 @@
 # create-convex-monorepo
 
-A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, or a combination, with optional Clerk or Convex Auth authentication.
+A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, SvelteKit, or a combination, with optional Clerk or Convex Auth authentication.
 
 The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Choose blank apps or a messages example. The example includes a query and mutation, plus compile-time assertions for the shared API's argument and return types.
 
@@ -86,7 +86,7 @@ Existing workspaces with metadata version 1, including projects created with 0.2
 
 ### Changes and conflicts
 
-Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app or package paths, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend.
+Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app or package paths, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding SvelteKit also updates an unchanged older URL setup script and adds formatter ignores for its generated output; customized setup scripts cause a conflict. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend.
 
 Package addition creates plain TypeScript source with shared lint and typecheck settings. Add `"@<scope>/<name>": "workspace:*"` to each consuming app's dependencies, then run `pnpm install`. Next configs are updated when they match the generated config apart from the `transpilePackages` string list, so repeated `add package` calls keep appending. A missing config or any other customization produces a note with the required manual edit. Other frameworks need no config change.
 
@@ -164,6 +164,9 @@ The choice applies to the whole workspace. `--example messages` keeps the existi
 | `vite`           | Vite + React             | `VITE_CONVEX_URL`        |
 | `tanstack-start` | TanStack Start with Vite | `VITE_CONVEX_URL`        |
 | `expo`           | Expo / React Native      | `EXPO_PUBLIC_CONVEX_URL` |
+| `sveltekit`      | SvelteKit with Svelte 5  | `PUBLIC_CONVEX_URL`      |
+
+SvelteKit currently supports only `--auth none`, for both starters. It can share a workspace with any of the React frameworks when auth is `none`. Adding SvelteKit to an authenticated workspace or adding auth to a workspace containing SvelteKit fails before files are written.
 
 Versions are pinned in the templates. Start uses ordinary Convex React hooks; server-side Convex prefetching is not configured. Expo's build command exports JavaScript, not native application binaries. See [research and upstream caveats](docs/research.md).
 
@@ -224,7 +227,9 @@ pnpm lint
 pnpm build
 ```
 
-Complete setup in a normal terminal before starting Turbo. Stop a separately running backend watcher before `pnpm dev`, which starts its own. Public environment values are embedded at build time; rebuild frontends when they change. Backend build checks types and does not deploy.
+Complete setup in a normal terminal before starting Turbo. Stop a separately running backend watcher before `pnpm dev`, which starts its own. SvelteKit reads `PUBLIC_CONVEX_URL` from `$env/static/public`, so set it before typechecking or building. Its root layout mounts the Svelte Convex provider; messages subscribe with `useQuery`.
+
+Public environment values are embedded at build time; rebuild frontends when they change. Backend build checks types and does not deploy.
 
 ## Code formatting
 
@@ -235,7 +240,7 @@ pnpm format
 pnpm format:check
 ```
 
-Convex `_generated` files, TanStack's generated route tree, build output, lockfiles, and environment files are excluded. Adding an app formats its new files; it does not reformat existing application code. Auth migration accepts formatting differences in older starters while still rejecting customized code that would be replaced.
+Svelte components use the pinned `prettier-plugin-svelte` formatter. Convex `_generated` files, TanStack's generated route tree, SvelteKit's generated files, build output, lockfiles, and environment files are excluded. Adding an app formats its new files; it does not reformat existing application code. Auth migration accepts formatting differences in older starters while still rejecting customized code that would be replaced.
 
 ## Convex backend sharing
 
@@ -250,7 +255,7 @@ Dynamic Convex declarations refer to backend source modules. Client TypeScript p
 
 ## Authentication
 
-New projects accept `none`, `clerk`, or `convex-auth` across all four frameworks and both starters. Existing no-auth workspaces accept `add auth clerk` or `add auth convex-auth`. Both providers support `add app`.
+Next.js, Vite, TanStack Start, and Expo accept `none`, `clerk`, or `convex-auth` with both starters. SvelteKit accepts only `none`. Existing no-auth workspaces accept `add auth clerk` or `add auth convex-auth`. Both providers support `add app` for the React frameworks.
 
 `--auth convex-auth` and `add auth convex-auth` configure email and password sign-up/sign-in, sign-out, and per-user backend access. Web apps use the client ConvexAuthProvider; Expo persists tokens with expo-secure-store. No frontend public auth keys or password-flow redirect scheme are needed. Next.js and TanStack Start do not configure server-side authentication or authenticated SSR. OAuth, magic links, email verification, password reset, and MFA are outside this starter.
 

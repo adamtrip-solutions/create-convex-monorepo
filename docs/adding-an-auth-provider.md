@@ -5,9 +5,9 @@ An auth adapter runs after framework generation and owns authentication wiring a
 ## Implement the adapter
 
 1. Add the provider ID to `Auth` in `src/generator/types.ts`, normalization in `src/generator/options.ts`, and prompt choices in `src/commands/create.ts`.
-2. Create `src/integrations/auth/<id>/index.ts` exporting an `AuthAdapter`, then register it in `src/integrations/auth/index.ts`.
+2. Create `src/integrations/auth/<id>/index.ts` exporting an `AuthAdapter`, then register it in `src/integrations/auth/index.ts`. Declare its `supportedRuntimes`, using the UI runtime types from `src/integrations/auth/shared.ts`.
 3. Write `packages/backend/convex/access.ts` with the `getOwner` function consumed by the example backend. Use a stable authenticated identity and reject unauthenticated access. Generate the provider's supported Convex auth configuration.
-4. For each app, merge SDK dependencies through `context.mergePackage` and write `src/providers.tsx` and `src/auth-controls.tsx`. Add middleware or native configuration where the SDK requires it.
+4. For each app, merge SDK dependencies through `context.mergePackage` and write the components for its supported UI runtime. React uses `src/providers.tsx` and `src/auth-controls.tsx`; Svelte uses `src/Providers.svelte` and `src/AuthControls.svelte`. SvelteKit currently supports only the none adapter. Add middleware or native configuration where the SDK requires it.
 5. Generate safe environment examples and setup instructions. Separate public keys, framework server secrets, and environment variables configured on the Convex deployment.
 
 The none adapter demonstrates file ownership. The Clerk adapter demonstrates a binding map that selects SDKs by framework. Keep provider-specific framework details in the adapter; do not introduce auth branches into every app template.

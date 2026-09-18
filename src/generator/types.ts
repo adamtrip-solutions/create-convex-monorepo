@@ -1,4 +1,11 @@
-export type Framework = 'next' | 'vite' | 'tanstack-start' | 'expo';
+import type { UiRuntime } from '../integrations/auth/shared.js';
+
+export type Framework =
+  | 'next'
+  | 'vite'
+  | 'tanstack-start'
+  | 'expo'
+  | 'sveltekit';
 export type Auth = 'none' | 'clerk' | 'convex-auth';
 export type Example = 'none' | 'messages';
 export interface AppSpec {
@@ -43,5 +50,6 @@ export interface AppTemplate {
 export interface AuthAdapter {
   id: Auth;
   label: string;
+  supportedRuntimes: readonly UiRuntime[];
   apply(context: GeneratorContext): Promise<void>;
 }

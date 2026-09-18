@@ -283,3 +283,37 @@ describe('setup recovery and cancellation', () => {
     expect(await readFile(join(target, 'user-file'), 'utf8')).toBe('keep me');
   });
 });
+
+describe('SvelteKit options', () => {
+  it.each(['sveltekit', 'sveltekit,next', 'vite,sveltekit,expo'])(
+    'accepts %s with both starters and no auth',
+    (apps) => {
+      for (const example of ['none', 'messages']) {
+        const options = normalizeOptions(
+          parseCommand(['--apps', apps, '--auth', 'none', '--example', example])
+            .raw,
+        );
+        expect(options.apps.some((app) => app.framework === 'sveltekit')).toBe(
+          true,
+        );
+        expect(options.example).toBe(example);
+      }
+      expect(selectTemplate('sveltekit').label).toBe('SvelteKit');
+    },
+  );
+  it.each(['clerk', 'convex-auth', 'custom'])(
+    'rejects SvelteKit with %s before writing files',
+    async (auth) => {
+      const cwd = await temp();
+      for (const apps of ['sveltekit', 'next,sveltekit']) {
+        expect(() => normalizeOptions({ apps, auth })).toThrow(
+          'SvelteKit currently supports only --auth none',
+        );
+        await expect(
+          generateProject({ name: 'rejected', apps, auth }, { cwd }),
+        ).rejects.toThrow('SvelteKit currently supports only --auth none');
+        expect(await readdir(cwd)).toEqual([]);
+      }
+    },
+  );
+});

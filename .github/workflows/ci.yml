@@ -55,6 +55,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - apps: sveltekit
+            auth: none
+            example: messages
+          - apps: sveltekit,next
+            auth: none
+            example: none
+          - apps: vite,sveltekit
+            auth: none
+            example: messages
+            workspaceCommands: '1'
           - apps: next
             auth: none
           - apps: vite

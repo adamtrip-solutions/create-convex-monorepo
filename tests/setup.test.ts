@@ -122,7 +122,9 @@ describe('Convex initialization options', () => {
 
 describe('public URL linking', () => {
   it('maps all frameworks, respects .env.local precedence, and never copies backend credentials', async () => {
-    const { root } = await fixture();
+    const { root } = await fixture(
+      'next,admin:vite,portal:tanstack-start,expo,svelte:sveltekit',
+    );
     await writeFile(
       join(root, 'packages/backend/.env'),
       'CONVEX_URL=https://old.convex.cloud\n',
@@ -138,6 +140,7 @@ describe('public URL linking', () => {
       ['admin', 'VITE_CONVEX_URL'],
       ['portal', 'VITE_CONVEX_URL'],
       ['mobile', 'EXPO_PUBLIC_CONVEX_URL'],
+      ['svelte', 'PUBLIC_CONVEX_URL'],
     ]) {
       const text = await readFile(join(root, `apps/${app}/.env.local`), 'utf8');
       expect(parseEnv(text)).toEqual({

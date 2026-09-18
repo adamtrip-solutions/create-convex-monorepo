@@ -3,6 +3,7 @@ import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
 import { versions as v } from '../versions.js';
 import { formattingOptions } from '../../generator/format.js';
+import { publicVariable } from '../../../assets/setup/convex-setup.mjs';
 import { convexAuthSetup } from '../../integrations/auth/convex-auth/setup.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
@@ -50,7 +51,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   await ctx.json('.prettierrc.json', formattingOptions);
   await ctx.write(
     '.prettierignore',
-    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.output/\n**/dist/\n**/.turbo/\npnpm-lock.yaml\n.env*\n**/.env*\n',
+    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.output/\n**/.svelte-kit/\n**/build/\n**/dist/\n**/.turbo/\npnpm-lock.yaml\n.env*\n**/.env*\n',
   );
   await ctx.write(
     'pnpm-workspace.yaml',
@@ -68,17 +69,25 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
           'NEXT_PUBLIC_*',
           'VITE_*',
           'EXPO_PUBLIC_*',
+          'PUBLIC_*',
         ],
       },
       build: {
         dependsOn: ['^build'],
         inputs: ['$TURBO_DEFAULT$', '.env*'],
-        outputs: ['.next/**', '!.next/cache/**', 'dist/**', '.output/**'],
-        env: ['NEXT_PUBLIC_*', 'VITE_*', 'EXPO_PUBLIC_*'],
+        outputs: [
+          '.next/**',
+          '!.next/cache/**',
+          'dist/**',
+          '.output/**',
+          '.svelte-kit/**',
+          'build/**',
+        ],
+        env: ['NEXT_PUBLIC_*', 'VITE_*', 'EXPO_PUBLIC_*', 'PUBLIC_*'],
         passThroughEnv: ['CLERK_SECRET_KEY'],
       },
       [`@${scope}/backend#build`]: { outputs: [] },
-      typecheck: { dependsOn: ['^typecheck'], outputs: [] },
+      typecheck: { dependsOn: ['^typecheck'], outputs: [], env: ['PUBLIC_*'] },
       lint: { dependsOn: ['^lint'], outputs: [] },
     },
   });
@@ -140,10 +149,7 @@ export default tseslint.config(
 `,
   );
   const envTable = options.apps
-    .map(
-      (app) =>
-        `| ${app.name} | ${app.framework === 'next' ? 'NEXT_PUBLIC' : app.framework === 'expo' ? 'EXPO_PUBLIC' : 'VITE'}_CONVEX_URL |`,
-    )
+    .map((app) => `| ${app.name} | ${publicVariable(app.framework)} |`)
     .join('\n');
   await ctx.write(
     'README.md',
@@ -189,6 +195,7 @@ ${options.example === 'messages' ? 'The backend checks identity and uses an owne
         : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
 `
 }
+${options.apps.some((app) => app.framework === 'sveltekit') ? 'SvelteKit currently supports only --auth none. Set PUBLIC_CONVEX_URL in its .env.local before typechecking or building. The root layout mounts Providers.svelte, which calls setupConvex for its children.\n' : ''}
 ## Development
 
 \`\`\`sh

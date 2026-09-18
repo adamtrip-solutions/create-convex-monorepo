@@ -8,6 +8,7 @@ import {
   publicVariable,
 } from '../../assets/setup/convex-setup.mjs';
 import type { Framework } from '../generator/types.js';
+import { platform, uiRuntime } from '../integrations/auth/shared.js';
 import { versions } from '../templates/versions.js';
 import { readJson, readText, type Workspace } from './project.js';
 
@@ -28,14 +29,31 @@ const frameworks: Record<Framework, string[]> = {
   vite: ['vite', '@vitejs/plugin-react', 'react-dom'],
   'tanstack-start': ['@tanstack/react-start', 'vite', 'react-dom'],
   expo: ['expo', 'react-native'],
+  sveltekit: [
+    'svelte',
+    '@sveltejs/kit',
+    '@sveltejs/adapter-auto',
+    '@sveltejs/vite-plugin-svelte',
+    'convex-svelte',
+    'svelte-check',
+    'vite',
+    'eslint-plugin-svelte',
+  ],
 };
-const clerk: Record<Framework, string> = {
+const clerk: Partial<Record<Framework, string>> = {
   next: '@clerk/nextjs',
   vite: '@clerk/react',
   'tanstack-start': '@clerk/tanstack-react-start',
   expo: '@clerk/expo',
 };
 const baselines: Record<string, string> = {
+  svelte: versions.svelte,
+  '@sveltejs/kit': versions.sveltekit,
+  '@sveltejs/adapter-auto': versions.svelteAdapterAuto,
+  '@sveltejs/vite-plugin-svelte': versions.viteSvelte,
+  'convex-svelte': versions.convexSvelte,
+  'svelte-check': versions.svelteCheck,
+  'eslint-plugin-svelte': versions.eslintSvelte,
   convex: versions.convex,
   '@convex-dev/auth': versions.convexAuth,
   '@auth/core': versions.authCore,
@@ -493,10 +511,12 @@ export async function doctor(
     const pkg = await manifest(`${directory}/package.json`);
     await dependencies(directory, pkg, [
       'convex',
-      'react',
+      ...(uiRuntime(app.framework) === 'react' ? ['react'] : []),
       'typescript',
       ...frameworks[app.framework],
-      ...(config.auth === 'clerk' ? [clerk[app.framework]] : []),
+      ...(config.auth === 'clerk' && clerk[app.framework]
+        ? [clerk[app.framework]!]
+        : []),
       ...(config.auth === 'convex-auth' ? ['@convex-dev/auth'] : []),
       ...(config.auth === 'convex-auth' && app.framework === 'expo'
         ? ['expo-secure-store']
@@ -512,12 +532,7 @@ export async function doctor(
         'Add the backend package with a workspace dependency.',
       );
     }
-    const prefix =
-      app.framework === 'next'
-        ? 'NEXT_PUBLIC'
-        : app.framework === 'expo'
-          ? 'EXPO_PUBLIC'
-          : 'VITE';
+    const { prefix } = platform(app);
     const env = await environment(directory);
     let envFiles: string[] = [];
     try {
@@ -539,8 +554,8 @@ export async function doctor(
         'JWKS',
       ]) {
         if (
-          ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'].some((publicPrefix) =>
-            values.get(`${publicPrefix}_${secret}`),
+          ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'PUBLIC'].some(
+            (publicPrefix) => values.get(`${publicPrefix}_${secret}`),
           )
         )
           exposed.add(secret);
@@ -682,6 +697,8 @@ function probeTypes(
     config.config,
     compiler.sys,
     dirname(configPath),
+    undefined,
+    configPath,
   );
   if (parsed.errors.some((error) => error.code !== 18003))
     return `TS${parsed.errors[0]!.code}`;
