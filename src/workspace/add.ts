@@ -1,5 +1,7 @@
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { parsers } from 'prettier/plugins/typescript';
+import type { ParserOptions } from 'prettier';
 import { normalizeOptions } from '../generator/index.js';
 import type { Example, Framework } from '../generator/types.js';
 import { readText, type Workspace } from './project.js';
@@ -424,21 +426,161 @@ export async function planAddPackage(
   return plan;
 }
 
+class AuthSchemaConflict extends Error {}
+
+async function patchAuthSchema(
+  source: string,
+  path: string,
+): Promise<string | null> {
+  // Parse with the formatter's bundled parser so comments, strings and nested
+  // expressions cannot be mistaken for the schema call. No project code runs.
+  type Node = {
+    type?: string;
+    name?: string;
+    callee?: Node;
+    argument?: Node;
+    arguments?: Node[];
+    body?: Node[];
+    declaration?: Node;
+    source?: Node;
+    specifiers?: Node[];
+    imported?: Node;
+    local?: Node;
+    importKind?: string;
+    properties?: Node[];
+    key?: Node;
+    value?: unknown;
+    range?: [number, number];
+    [key: string]: unknown;
+  };
+  const program = (await parsers.typescript.parse(source, {
+    filepath: path,
+  } as ParserOptions)) as Node;
+  const bindings = new Set(
+    program.body
+      ?.filter(
+        (node) =>
+          node.type === 'ImportDeclaration' &&
+          node.source?.value === 'convex/server' &&
+          node.importKind !== 'type',
+      )
+      .flatMap((node) => node.specifiers ?? [])
+      .filter(
+        (node) =>
+          node.type === 'ImportSpecifier' &&
+          node.imported?.name === 'defineSchema' &&
+          node.importKind !== 'type' &&
+          node.local?.type === 'Identifier',
+      )
+      .map((node) => node.local!.name!),
+  );
+  const authTablesBindings = new Set(
+    program.body
+      ?.filter(
+        (node) =>
+          node.type === 'ImportDeclaration' &&
+          node.source?.value === '@convex-dev/auth/server' &&
+          node.importKind !== 'type',
+      )
+      .flatMap((node) => node.specifiers ?? [])
+      .filter(
+        (node) =>
+          node.type === 'ImportSpecifier' &&
+          (node.imported?.name ?? node.imported?.value) === 'authTables' &&
+          node.importKind !== 'type' &&
+          node.local?.type === 'Identifier',
+      )
+      .map((node) => node.local!.name!),
+  );
+  const calls: Node[] = [];
+  let declaresAuthTables = false;
+  function visit(value: unknown) {
+    if (!value || typeof value !== 'object') return;
+    const node = value as Node;
+    if (node.type === 'Identifier' && node.name === 'authTables')
+      declaresAuthTables = true;
+    if (
+      node.type === 'CallExpression' &&
+      node.callee?.type === 'Identifier' &&
+      bindings.has(node.callee.name!)
+    )
+      calls.push(node);
+    for (const child of Object.values(value)) visit(child);
+  }
+  visit(program);
+  const call = program.body?.find(
+    (node) => node.type === 'ExportDefaultDeclaration',
+  )?.declaration;
+  const argument = call?.arguments?.[0];
+  const importOffset = program.body?.[0]?.range?.[0];
+  if (
+    calls.length !== 1 ||
+    calls[0] !== call ||
+    call?.arguments?.length !== 1 ||
+    argument?.type !== 'ObjectExpression' ||
+    !argument.range ||
+    importOffset === undefined
+  )
+    throw new Error('Unsupported schema expression.');
+  const hasAuthTables = argument.properties?.some(
+    (property) =>
+      property.type === 'SpreadElement' &&
+      property.argument?.type === 'Identifier' &&
+      authTablesBindings.has(property.argument.name!),
+  );
+  if (hasAuthTables) return null;
+  const authTableNames = new Set([
+    'users',
+    'authSessions',
+    'authAccounts',
+    'authRefreshTokens',
+    'authVerificationCodes',
+    'authVerifiers',
+    'authRateLimits',
+  ]);
+  for (const property of argument.properties ?? []) {
+    const key = property.key;
+    if (
+      property.type === 'SpreadElement' ||
+      property.computed === true ||
+      (key?.type !== 'Identifier' &&
+        !(key?.type === 'Literal' && typeof key.value === 'string'))
+    )
+      throw new AuthSchemaConflict(
+        `Conflict in ${path}: the schema contains a spread or computed table name, so Convex Auth tables cannot be merged safely. Add "...authTables" manually and rerun add auth convex-auth. No files were changed.`,
+      );
+    const name = key?.type === 'Identifier' ? key.name : key?.value;
+    if (typeof name === 'string' && authTableNames.has(name))
+      throw new AuthSchemaConflict(
+        `Conflict in ${path}: table "${name}" collides with Convex Auth. Merge it with the Convex Auth users table definition manually. No files were changed.`,
+      );
+  }
+  if (declaresAuthTables)
+    throw new AuthSchemaConflict(
+      `Conflict in ${path}: authTables is already declared but not spread into the exported schema. Insert "...authTables," as the first entry of the object passed to defineSchema. No files were changed.`,
+    );
+  const offset = argument.range[0] + 1;
+  return formatGeneratedFile(
+    path,
+    `${source.slice(0, importOffset)}import { authTables } from '@convex-dev/auth/server';\n${source.slice(importOffset, offset)}\n...authTables,${source.slice(offset)}`,
+  );
+}
+
 export async function planAddAuth(
   workspace: Workspace,
-  provider: 'clerk',
+  provider: 'clerk' | 'convex-auth',
 ): Promise<ChangePlan> {
-  if (provider !== 'clerk')
+  if (provider !== 'clerk' && provider !== 'convex-auth')
+    throw new Error('Choose add auth clerk or add auth convex-auth.');
+  const label = (auth: 'clerk' | 'convex-auth') =>
+    auth === 'clerk' ? 'Clerk' : 'Convex Auth';
+  if (workspace.config.auth !== 'none' && workspace.config.auth !== provider)
     throw new Error(
-      'Only Clerk authentication can be installed. Use add auth clerk.',
-    );
-  if (workspace.config.auth === 'convex-auth')
-    throw new Error(
-      'Convex Auth is already configured. Switching authentication providers requires a manual migration.',
+      `${label(workspace.config.auth)} is already configured. Switching authentication providers requires a manual migration.`,
     );
   const plan = initialPlan(workspace);
-  if (workspace.config.auth === 'clerk') {
-    plan.notes.push('Clerk is already configured.');
+  if (workspace.config.auth === provider) {
+    plan.notes.push(`${label(provider)} is already configured.`);
     return plan;
   }
   await verifyWorkspace(workspace, plan);
@@ -453,9 +595,9 @@ export async function planAddAuth(
     workspace,
     [first],
     workspace.config.example,
-    'clerk',
+    provider,
   );
-  if (workspace.config.example === 'messages')
+  if (provider === 'clerk' && workspace.config.example === 'messages')
     await verifyMessages(workspace, plan, backendBefore);
   async function patchFiles(
     before: Files,
@@ -472,14 +614,16 @@ export async function planAddAuth(
       }
       let next = target;
       if (
-        path.endsWith('/package.json') &&
+        (path === 'package.json' || path.endsWith('/package.json')) &&
         current !== null &&
         baseline !== null
       )
         next = mergePackage(current, baseline, target, path);
       else if (!(await equivalentGeneratedFile(path, current, baseline)))
         throw new Error(
-          `Conflict in ${path}: file is customized or already exists. No files were changed.`,
+          path === 'packages/backend/convex/http.ts'
+            ? `Conflict in ${path}: call auth.addHttpRoutes(http) manually in your existing router. No files were changed.`
+            : `Conflict in ${path}: file is customized or already exists. No files were changed.`,
         );
       plan.changes.push({
         path,
@@ -489,34 +633,95 @@ export async function planAddAuth(
     }
   }
   await patchFiles(backendBefore, backendAfter, (path) =>
-    [
-      'packages/backend/convex/access.ts',
-      'packages/backend/convex/auth.config.ts',
-      'packages/backend/.env.clerk.example',
-    ].includes(path),
+    (provider === 'clerk'
+      ? [
+          'packages/backend/convex/access.ts',
+          'packages/backend/convex/auth.config.ts',
+          'packages/backend/.env.clerk.example',
+        ]
+      : [
+          'packages/backend/convex/access.ts',
+          'packages/backend/convex/auth.ts',
+          'packages/backend/convex/http.ts',
+          'packages/backend/convex/auth.config.ts',
+          'packages/backend/.env.convex-auth.example',
+          'packages/backend/package.json',
+          'scripts/convex-auth-keys.mjs',
+          'package.json',
+        ]
+    ).includes(path),
   );
+  if (provider === 'convex-auth') {
+    const path = 'packages/backend/convex/schema.ts';
+    const current = await guardedRead(workspace, plan, path);
+    let next: string | null;
+    if (await equivalentGeneratedFile(path, current, backendBefore.get(path)))
+      next = backendAfter.get(path)!;
+    else {
+      try {
+        if (current === null) throw new Error('Missing schema.');
+        next = await patchAuthSchema(current, path);
+      } catch (error) {
+        if (error instanceof AuthSchemaConflict) throw error;
+        throw new Error(
+          `Conflict in ${path}: add "import { authTables } from '@convex-dev/auth/server';" and insert "...authTables," as the first entry of the object passed to defineSchema. Then rerun add auth convex-auth. No files were changed.`,
+        );
+      }
+    }
+    if (next !== null)
+      plan.changes.push({
+        path,
+        before: current,
+        after: retainNewlines(next, current),
+      });
+    const ignorePath = '.gitignore';
+    const ignore = await guardedRead(workspace, plan, ignorePath);
+    if (
+      await equivalentGeneratedFile(
+        ignorePath,
+        ignore,
+        backendBefore.get(ignorePath),
+      )
+    )
+      plan.changes.push({
+        path: ignorePath,
+        before: ignore,
+        after: retainNewlines(backendAfter.get(ignorePath)!, ignore),
+      });
+    else
+      plan.notes.push(
+        'Add !.env.convex-auth.example to your customized .gitignore so the backend environment example can be committed.',
+      );
+    plan.notes.push(
+      'Generated types refresh on the next pnpm convex:dev or convex codegen. Sign-in needs pnpm convex:auth-keys.',
+    );
+  }
   for (const app of workspace.config.apps) {
     const example = app.example ?? workspace.config.example;
     const baseline = await render(workspace, [app], example, 'none');
-    const target = await render(workspace, [app], example, 'clerk');
+    const target = await render(workspace, [app], example, provider);
     await patchFiles(baseline, target, (path) =>
       path.startsWith(`apps/${app.name}/`),
     );
   }
   const readme = backendAfter.get('README.md')!;
-  const start = readme.indexOf('## Clerk setup');
+  const start = readme.indexOf(`## ${label(provider)} setup`);
   const end = readme.indexOf('\n## Development', start);
-  const setup = `${readme.slice(start, end).trim()}\n\nRun pnpm install after applying this change. Existing public messages have no owner and will not appear in authenticated accounts. This command does not migrate stored data.\n`;
-  const existing = await readText(workspace.root, 'CLERK_SETUP.md');
+  const setup = `${readme.slice(start, end).trim()}\n\nRun pnpm install after applying this change.${workspace.config.example === 'messages' ? ' Existing public messages have no owner and will not appear in authenticated accounts. This command does not migrate stored data.' : ''}\n`;
+  const setupPath =
+    provider === 'clerk' ? 'CLERK_SETUP.md' : 'CONVEX_AUTH_SETUP.md';
+  const existing = await guardedRead(workspace, plan, setupPath);
   if (existing !== null && existing !== setup)
     throw new Error(
-      'CLERK_SETUP.md already exists with different content. No files were changed.',
+      `${setupPath} already exists with different content. No files were changed.`,
     );
   if (existing === null)
-    plan.changes.push({ path: 'CLERK_SETUP.md', before: null, after: setup });
-  await metadata(workspace, plan, { auth: 'clerk' });
+    plan.changes.push({ path: setupPath, before: null, after: setup });
+  await metadata(workspace, plan, { auth: provider });
   plan.notes.push(
-    'Run pnpm install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.',
+    provider === 'clerk'
+      ? 'Run pnpm install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.'
+      : 'Run pnpm install, then pnpm convex:auth-keys, and follow CONVEX_AUTH_SETUP.md.',
   );
   return plan;
 }

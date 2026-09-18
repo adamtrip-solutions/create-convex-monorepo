@@ -1024,3 +1024,534 @@ it.each(['none', 'messages'] as const)(
     expect(await snapshot(workspace.root)).toEqual(before);
   },
 );
+
+describe.each<Example>(['none', 'messages'])(
+  'add Convex Auth with %s content',
+  (example) => {
+    it.each(frameworks)(
+      'integrates %s while preserving project-owned files and package entries',
+      async (framework) => {
+        const workspace = await fixture(example, 'none', framework);
+        for (const path of [
+          'package.json',
+          'packages/backend/package.json',
+          'apps/web/package.json',
+        ]) {
+          const fullPath = join(workspace.root, path);
+          const pkg = JSON.parse(await readFile(fullPath, 'utf8'));
+          pkg.dependencies = {
+            ...pkg.dependencies,
+            'my-custom-library': '1.2.3',
+          };
+          pkg.scripts = { ...pkg.scripts, custom: 'echo custom' };
+          await writeFile(fullPath, JSON.stringify(pkg));
+        }
+        await writeFile(
+          join(workspace.root, 'README.md'),
+          '# My documentation\n',
+        );
+        const before = await snapshot(workspace.root);
+        const plan = await planAddAuth(workspace, 'convex-auth');
+        await applyPlan(plan, { dryRun: true });
+        expect(await snapshot(workspace.root)).toEqual(before);
+        expect(
+          plan.changes.some(({ path }) => path.includes('/_generated/')),
+        ).toBe(false);
+        expect(plan.notes.join('\n')).toMatch(/pnpm convex:dev|convex codegen/);
+        expect(plan.notes.join('\n')).toContain('pnpm convex:auth-keys');
+        expect(plan.notes.join('\n')).toContain('pnpm install');
+        expect(plan.notes.join('\n')).toContain('CONVEX_AUTH_SETUP.md');
+        await applyPlan(plan);
+        const after = await snapshot(workspace.root);
+        for (const path of Object.keys(before).filter(
+          (path) =>
+            path.includes('/_generated/') ||
+            path.endsWith('/messages.ts') ||
+            path === 'README.md',
+        ))
+          expect(after[path], path).toBe(before[path]);
+        for (const path of [
+          'package.json',
+          'packages/backend/package.json',
+          'apps/web/package.json',
+        ]) {
+          const pkg = JSON.parse(after[path]!);
+          expect(pkg.dependencies['my-custom-library']).toBe('1.2.3');
+          expect(pkg.scripts.custom).toBe('echo custom');
+        }
+        const backend = JSON.parse(after['packages/backend/package.json']!);
+        expect(backend.dependencies['@convex-dev/auth']).toBe(
+          versions.convexAuth,
+        );
+        expect(backend.dependencies['@auth/core']).toBe(versions.authCore);
+        const app = JSON.parse(after['apps/web/package.json']!);
+        expect(app.dependencies['@convex-dev/auth']).toBe(versions.convexAuth);
+        if (framework === 'expo') {
+          expect(app.dependencies['expo-secure-store']).toBe('57.0.3');
+          expect(after['apps/web/src/providers.tsx']).toContain(
+            'expo-secure-store',
+          );
+        } else expect(app.dependencies['expo-secure-store']).toBeUndefined();
+        expect(after['apps/web/src/providers.tsx']).toContain(
+          'ConvexAuthProvider',
+        );
+        expect(after['apps/web/src/auth-controls.tsx']).toContain(
+          '@convex-dev/auth/react',
+        );
+        expect(after['packages/backend/convex/auth.ts']).toContain(
+          'providers: [Password]',
+        );
+        expect(after['packages/backend/convex/http.ts']).toContain(
+          'auth.addHttpRoutes(http)',
+        );
+        expect(after['packages/backend/convex/auth.config.ts']).toContain(
+          'CONVEX_SITE_URL',
+        );
+        expect(after['packages/backend/.env.convex-auth.example']).toContain(
+          'JWT_PRIVATE_KEY',
+        );
+        const asset =
+          example === 'messages'
+            ? 'backend-convex-auth'
+            : 'backend-blank-convex-auth';
+        expect(after['packages/backend/convex/schema.ts']).toBe(
+          await formatGeneratedFile(
+            'schema.ts',
+            await readFile(
+              new URL(`../assets/${asset}/convex/schema.ts`, import.meta.url),
+              'utf8',
+            ),
+          ),
+        );
+        if (example === 'messages')
+          expect(after['packages/backend/convex/access.ts']).toContain(
+            'getAuthUserId',
+          );
+        else expect(after['packages/backend/convex/access.ts']).toBeUndefined();
+        expect(
+          JSON.parse(after['package.json']!).scripts['convex:auth-keys'],
+        ).toBe('node scripts/convex-auth-keys.mjs');
+        expect(after['scripts/convex-auth-keys.mjs']).toContain(
+          'JWT_PRIVATE_KEY',
+        );
+        expect(after['.gitignore']).toContain('!.env.convex-auth.example');
+        expect(after['CONVEX_AUTH_SETUP.md']).toContain('## Convex Auth setup');
+        expect(after['CONVEX_AUTH_SETUP.md']).toContain('pnpm install');
+        if (example === 'messages')
+          expect(after['CONVEX_AUTH_SETUP.md']).toContain(
+            'does not migrate stored data',
+          );
+        const reloaded = await loadWorkspace(workspace.root);
+        expect(reloaded.config.auth).toBe('convex-auth');
+        const repeated = await planAddAuth(reloaded, 'convex-auth');
+        expect(repeated.changes).toEqual([]);
+        expect(repeated.notes.join('\n')).toMatch(/already configured/i);
+      },
+    );
+  },
+);
+
+it('adds authTables first in a customized schema while retaining custom tables', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(
+    join(workspace.root, path),
+    `import { defineSchema, defineTable } from 'convex/server';
+import { v } from 'convex/values';
+// Preserve our custom tables.
+export default defineSchema({ projects: defineTable({ name: v.string() }).index('by_name', ['name']) });
+`,
+  );
+  await applyPlan(await planAddAuth(workspace, 'convex-auth'));
+  const schema = await readFile(join(workspace.root, path), 'utf8');
+  expect(schema).toContain(
+    "import { authTables } from '@convex-dev/auth/server';",
+  );
+  expect(schema).toMatch(/defineSchema\(\{\s*\.\.\.authTables,\s*projects:/);
+  expect(schema).toContain(".index('by_name', ['name'])");
+  expect(schema).toContain('// Preserve our custom tables.');
+  expect(schema).toBe(await formatGeneratedFile(path, schema));
+});
+
+it.each(['authTables', 'convexAuthTables'])(
+  'preserves and guards a schema that spreads the imported %s',
+  async (localName) => {
+    const workspace = await fixture('none');
+    const path = 'packages/backend/convex/schema.ts';
+    const source = `import { authTables as ${localName} } from '@convex-dev/auth/server';
+import { defineSchema } from 'convex/server';
+export default defineSchema({ ...${localName} });
+`;
+    await writeFile(join(workspace.root, path), source);
+    const plan = await planAddAuth(workspace, 'convex-auth');
+    expect(plan.changes.some((change) => change.path === path)).toBe(false);
+    await applyPlan(plan, { dryRun: true });
+    await writeFile(
+      join(workspace.root, path),
+      `${source}\n// concurrent edit\n`,
+    );
+    await expect(applyPlan(plan)).rejects.toThrow('Workspace changed');
+  },
+);
+
+it.each([
+  '...customTables',
+  '[key]: defineTable({})',
+  "['projects']: defineTable({})",
+  '123: defineTable({})',
+])('rejects a schema with an unsafe table key: %s', async (property) => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(
+    join(workspace.root, path),
+    `import { defineSchema, defineTable } from 'convex/server';
+const customTables = { users: defineTable({}) };
+const key = 'users';
+export default defineSchema({ ${property} });
+`,
+  );
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    `Conflict in ${path}: the schema contains a spread or computed table name, so Convex Auth tables cannot be merged safely. Add "...authTables" manually and rerun add auth convex-auth. No files were changed.`,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('does not report a variable named users as a literal table collision', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(
+    join(workspace.root, path),
+    `import { defineSchema, defineTable } from 'convex/server';
+const users = 'projects';
+export default defineSchema({ [users]: defineTable({}) });
+`,
+  );
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    `Conflict in ${path}: the schema contains a spread or computed table name, so Convex Auth tables cannot be merged safely. Add "...authTables" manually and rerun add auth convex-auth. No files were changed.`,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it.each([
+  'const authTables = {};',
+  "import type { authTables } from '@convex-dev/auth/server';",
+  "import { type authTables } from '@convex-dev/auth/server';",
+  "import { authTables } from './custom';",
+  "import { other as authTables } from '@convex-dev/auth/server';",
+  "import authTables from '@convex-dev/auth/server';",
+])('does not accept an unrelated authTables spread: %s', async (binding) => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(
+    join(workspace.root, path),
+    `import { defineSchema } from 'convex/server';
+${binding}
+export default defineSchema({ ...authTables });
+`,
+  );
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    `Conflict in ${path}: the schema contains a spread or computed table name, so Convex Auth tables cannot be merged safely. Add "...authTables" manually and rerun add auth convex-auth. No files were changed.`,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('checks table collisions when imported authTables is only spread outside the schema', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(
+    join(workspace.root, path),
+    `import { defineSchema, defineTable } from 'convex/server';
+import { authTables } from '@convex-dev/auth/server';
+const tables = { ...authTables };
+export default defineSchema({ users: defineTable({}) });
+`,
+  );
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    `Conflict in ${path}: table "users" collides with Convex Auth. Merge it with the Convex Auth users table definition manually. No files were changed.`,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('rejects an unused authTables binding instead of injecting a duplicate import', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(
+    join(workspace.root, path),
+    `import { defineSchema, defineTable } from 'convex/server';
+import { authTables } from '@convex-dev/auth/server';
+export default defineSchema({ projects: defineTable({}) });
+`,
+  );
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    `Conflict in ${path}: authTables is already declared but not spread into the exported schema. Insert "...authTables," as the first entry of the object passed to defineSchema. No files were changed.`,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+describe.each(['identifier', 'string literal'])(
+  'Convex Auth table collision with a %s key',
+  (keyType) => {
+    it.each([
+      'users',
+      'authSessions',
+      'authAccounts',
+      'authRefreshTokens',
+      'authVerificationCodes',
+      'authVerifiers',
+      'authRateLimits',
+    ])('rejects the existing %s table without writes', async (table) => {
+      const workspace = await fixture('none');
+      const path = 'packages/backend/convex/schema.ts';
+      const key = keyType === 'identifier' ? table : `'${table}'`;
+      await writeFile(
+        join(workspace.root, path),
+        `import { defineSchema, defineTable } from 'convex/server';
+import { v } from 'convex/values';
+export default defineSchema({ ${key}: defineTable({ custom: v.string() }) });
+`,
+      );
+      const before = await snapshot(workspace.root);
+      await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+        `Conflict in ${path}: table "${table}" collides with Convex Auth. Merge it with the Convex Auth users table definition manually. No files were changed.`,
+      );
+      expect(await snapshot(workspace.root)).toEqual(before);
+    });
+  },
+);
+
+it('patches the default-exported schema through a renamed Convex import', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(
+    join(workspace.root, path),
+    `import { defineSchema as schema, defineTable } from 'convex/server';
+import { v } from 'convex/values';
+export default schema({ projects: defineTable({ name: v.string() }) });
+`,
+  );
+  await applyPlan(await planAddAuth(workspace, 'convex-auth'));
+  const schema = await readFile(join(workspace.root, path), 'utf8');
+  expect(schema).toContain(
+    "import { authTables } from '@convex-dev/auth/server';",
+  );
+  expect(schema).toMatch(
+    /export default schema\(\{\s*\.\.\.authTables,\s*projects:/,
+  );
+});
+
+it.each([
+  "import { defineSchema } from 'convex/server'; const unused = defineSchema({}); export default {};",
+  "import { defineSchema } from 'convex/server'; const schema = defineSchema({}); export default schema;",
+  "import { defineSchema } from 'convex/server'; export default wrap(defineSchema({}));",
+  'function defineSchema(tables: object) { return tables; } export default defineSchema({});',
+  "import { defineSchema } from './custom'; export default defineSchema({});",
+  "import { other as defineSchema } from 'convex/server'; export default defineSchema({});",
+  "import defineSchema from 'convex/server'; export default defineSchema({});",
+  "import type { defineSchema } from 'convex/server'; export default defineSchema({});",
+  "import { type defineSchema } from 'convex/server'; export default defineSchema({});",
+])('rejects an incorrectly bound or exported schema: %s', async (source) => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(join(workspace.root, path), source);
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    `Conflict in ${path}: add "import { authTables } from '@convex-dev/auth/server';" and insert "...authTables," as the first entry of the object passed to defineSchema. Then rerun add auth convex-auth. No files were changed.`,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('keeps leading comments and TypeScript directives above the authTables import', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  const leading = '// @ts-nocheck\n/* Project schema. Keep this header. */\n';
+  await writeFile(
+    join(workspace.root, path),
+    `${leading}import { defineSchema } from 'convex/server';
+export default defineSchema({});
+`,
+  );
+  await applyPlan(await planAddAuth(workspace, 'convex-auth'));
+  const schema = await readFile(join(workspace.root, path), 'utf8');
+  expect(
+    schema.startsWith(
+      `${leading}import { authTables } from '@convex-dev/auth/server';\n`,
+    ),
+  ).toBe(true);
+  expect(schema).toMatch(
+    /export default defineSchema\(\{\s*\.\.\.authTables,?\s*\}\);/,
+  );
+  expect(schema).toBe(await formatGeneratedFile(path, schema));
+});
+
+it('does not mistake comments or strings for schema calls or authTables references', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/schema.ts';
+  await writeFile(
+    join(workspace.root, path),
+    `import { defineSchema } from 'convex/server';
+// TODO: add authTables using defineSchema({ ...authTables }).
+export const description = 'authTables and defineSchema({})';
+export default defineSchema({});
+`,
+  );
+  await applyPlan(await planAddAuth(workspace, 'convex-auth'));
+  const schema = await readFile(join(workspace.root, path), 'utf8');
+  expect(schema).toContain(
+    "import { authTables } from '@convex-dev/auth/server';",
+  );
+  expect(schema).toMatch(
+    /export default defineSchema\(\{\s*\.\.\.authTables,?\s*\}\);/,
+  );
+  expect(schema).toContain("'authTables and defineSchema({})'");
+});
+
+it.each([
+  "import { defineSchema } from 'convex/server'; const tables = {}; export default defineSchema(tables);",
+  "import { defineSchema } from 'convex/server'; import { authTables } from '@convex-dev/auth/server'; const tables = { ...authTables }; export default defineSchema(tables);",
+  "import { defineSchema } from 'convex/server'; const other = defineSchema({}); export default defineSchema({});",
+  'export default {',
+])('rejects a schema requiring manual edits: %s', async (source) => {
+  const workspace = await fixture('none');
+  await writeFile(
+    join(workspace.root, 'packages/backend/convex/schema.ts'),
+    source,
+  );
+  const before = await snapshot(workspace.root);
+  const error = await planAddAuth(workspace, 'convex-auth').catch(
+    (error: unknown) => error,
+  );
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain(
+    'packages/backend/convex/schema.ts',
+  );
+  expect((error as Error).message).toContain(
+    "import { authTables } from '@convex-dev/auth/server'",
+  );
+  expect((error as Error).message).toContain('...authTables,');
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('rejects custom HTTP routes with an actionable manual integration message', async () => {
+  const workspace = await fixture();
+  await writeFile(
+    join(workspace.root, 'packages/backend/convex/http.ts'),
+    "import { httpRouter } from 'convex/server';\nexport default httpRouter();\n",
+  );
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    'auth.addHttpRoutes(http)',
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('guards an existing equivalent Convex Auth HTTP router', async () => {
+  const workspace = await fixture('none');
+  const path = 'packages/backend/convex/http.ts';
+  const initial = await planAddAuth(workspace, 'convex-auth');
+  const source = initial.changes.find((change) => change.path === path)!.after;
+  await writeFile(join(workspace.root, path), source);
+  const plan = await planAddAuth(workspace, 'convex-auth');
+  expect(plan.changes.some((change) => change.path === path)).toBe(false);
+  await writeFile(
+    join(workspace.root, path),
+    `${source}\n// concurrent edit\n`,
+  );
+  await expect(applyPlan(plan)).rejects.toThrow('Workspace changed');
+});
+
+it.each([
+  'apps/web/src/providers.tsx',
+  'apps/web/src/auth-controls.tsx',
+  'packages/backend/convex/auth.ts',
+  'packages/backend/convex/auth.config.ts',
+  'packages/backend/convex/access.ts',
+  'packages/backend/.env.convex-auth.example',
+  'scripts/convex-auth-keys.mjs',
+  'CONVEX_AUTH_SETUP.md',
+])(
+  'rejects customized %s during Convex Auth installation without writes',
+  async (path) => {
+    const workspace = await fixture();
+    await writeFile(join(workspace.root, path), '// custom content\n');
+    const before = await snapshot(workspace.root);
+    await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+      /Conflict|already exists/,
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it.each([
+  ['apps/web/package.json', '@convex-dev/auth'],
+  ['apps/web/package.json', 'expo-secure-store'],
+  ['packages/backend/package.json', '@convex-dev/auth'],
+  ['packages/backend/package.json', '@auth/core'],
+])('rejects incompatible %s dependency %s', async (path, name) => {
+  const workspace = await fixture('none', 'none', 'expo');
+  const fullPath = join(workspace.root, path);
+  const pkg = JSON.parse(await readFile(fullPath, 'utf8'));
+  pkg.dependencies[name] = 'custom';
+  await writeFile(fullPath, JSON.stringify(pkg));
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    /Conflict|Incompatible/,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('rejects a conflicting root auth key script', async () => {
+  const workspace = await fixture();
+  const path = join(workspace.root, 'package.json');
+  const pkg = JSON.parse(await readFile(path, 'utf8'));
+  pkg.scripts['convex:auth-keys'] = 'echo custom';
+  await writeFile(path, JSON.stringify(pkg));
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    /Conflict|already exists/,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('refuses to replace Clerk with Convex Auth', async () => {
+  const workspace = await fixture('messages', 'clerk');
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'convex-auth')).rejects.toThrow(
+    /already configured.*manual migration/,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('preserves custom gitignore content and notes the required Convex Auth exception', async () => {
+  const workspace = await fixture();
+  const path = join(workspace.root, '.gitignore');
+  const source = `${await readFile(path, 'utf8')}\ncustom-output/\n`;
+  await writeFile(path, source);
+  const plan = await planAddAuth(workspace, 'convex-auth');
+  expect(plan.notes.join('\n')).toContain('!.env.convex-auth.example');
+  await applyPlan(plan);
+  expect(await readFile(path, 'utf8')).toBe(source);
+});
+
+it('respects per-app blank overrides when adding Convex Auth', async () => {
+  let workspace = await fixture();
+  await applyPlan(
+    await planAddApp(workspace, {
+      name: 'blank',
+      framework: 'vite',
+      example: 'none',
+    }),
+  );
+  workspace = await loadWorkspace(workspace.root);
+  await applyPlan(await planAddAuth(workspace, 'convex-auth'));
+  const files = await snapshot(workspace.root);
+  expect(files['apps/blank/src/messages.tsx']).toBeUndefined();
+  expect(files['apps/blank/src/auth-controls.tsx']).toContain(
+    '@convex-dev/auth/react',
+  );
+  expect(files['apps/web/src/messages.tsx']).toContain('api.messages');
+});
