@@ -1097,3 +1097,39 @@ it('checks bun lockfiles, version pins, layout, and setup commands', async () =>
     expect.objectContaining({ code: 'workspace-package-excluded' }),
   );
 });
+
+it('checks Better Auth files, deployment site URLs, dependencies and public secret exposure', async () => {
+  const workspace = await fixture('web:next,mobile:expo', 'better-auth');
+  await rm(join(workspace.root, 'packages/backend/convex/convex.config.ts'));
+  await put(
+    workspace.root,
+    'apps/web/.env.local',
+    'NEXT_PUBLIC_BETTER_AUTH_SECRET=do-not-echo-this\nNEXT_PUBLIC_CONVEX_SITE_URL=invalid\n',
+  );
+  const before = await snapshot(workspace.root);
+  const result = await doctor(workspace);
+  expect(result.issues).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        code: 'auth-config-missing',
+        message: expect.stringContaining('convex.config.ts'),
+      }),
+      expect.objectContaining({
+        code: 'auth-env-missing',
+        message: expect.stringContaining('NEXT_PUBLIC_CONVEX_SITE_URL'),
+      }),
+      expect.objectContaining({
+        code: 'public-secret',
+        message: expect.stringContaining('BETTER_AUTH_SECRET'),
+      }),
+      expect.objectContaining({
+        code: 'dependency-uninstalled',
+        message: expect.stringContaining('@better-auth/expo'),
+      }),
+    ]),
+  );
+  expect(JSON.stringify(result)).not.toContain('do-not-echo-this');
+  expect(JSON.stringify(result)).not.toContain('CLERK_PUBLISHABLE_KEY');
+  expect(result.checks.join('\n')).toContain('no remote secrets were read');
+  expect(await snapshot(workspace.root)).toEqual(before);
+});

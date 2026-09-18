@@ -90,6 +90,25 @@ describe('generated project golden matrix', () => {
           'convex-auth-keys.mjs',
         );
       }
+      if (scenario.auth === 'better-auth') {
+        const readme = await read('README.md');
+        expect(readme).toContain(`${run} convex:setup`);
+        expect(readme).toContain(`${run} convex:better-auth-env`);
+        expect(readme).toContain(`${run} convex:dev`);
+        if (manager === 'bun') expect(readme).not.toContain('pnpm');
+        expect(manifest.scripts?.['convex:better-auth-env']).toBe(
+          'node scripts/better-auth-env.mjs',
+        );
+        expect(await read('scripts/better-auth-env.mjs')).toBe(
+          await readFile(
+            new URL('../assets/setup/better-auth-env.mjs', import.meta.url),
+            'utf8',
+          ),
+        );
+        expect(await read('README.md')).toContain('## Better Auth setup');
+      } else {
+        expect(manifest.scripts).not.toHaveProperty('convex:better-auth-env');
+      }
       const config = await json<ProjectOptions & { generator: string }>(
         'convex-monorepo.json',
       );
@@ -146,6 +165,14 @@ describe('generated project golden matrix', () => {
       });
       expect(backend.dependencies).toEqual({
         convex: versions.convex,
+        ...(scenario.auth === 'better-auth'
+          ? {
+              '@convex-dev/better-auth': versions.convexBetterAuth,
+              'better-auth': versions.betterAuth,
+              '@better-auth/expo': versions.betterAuthExpo,
+              '@better-auth/core': versions.betterAuth,
+            }
+          : {}),
         ...(scenario.auth === 'convex-auth'
           ? {
               '@convex-dev/auth': versions.convexAuth,
@@ -166,7 +193,7 @@ describe('generated project golden matrix', () => {
         expect(api).toContain('messages: typeof messages');
         expect(api).toContain('access: typeof access');
       }
-      if (scenario.auth === 'convex-auth') {
+      if (scenario.auth === 'convex-auth' || scenario.auth === 'better-auth') {
         expect(api).toContain('../auth.js');
         expect(api).toContain('../http.js');
       }
@@ -205,6 +232,10 @@ describe('generated project golden matrix', () => {
           expect(access).toContain('getAuthUserId(ctx)');
           expect(access).toContain('Promise<string>');
           expect(access).toContain('Sign in to access messages.');
+          expect(access).not.toContain('tokenIdentifier');
+        } else if (scenario.auth === 'better-auth') {
+          expect(access).toContain('authComponent.getAuthUser(ctx)');
+          expect(access).toContain('return user._id');
           expect(access).not.toContain('tokenIdentifier');
         } else {
           expect(access).toContain('return undefined');
@@ -245,6 +276,42 @@ describe('generated project golden matrix', () => {
         for (const variable of ['JWT_PRIVATE_KEY', 'JWKS', 'SITE_URL'])
           expect(deploymentEnv).toContain(variable);
         expect(await read('README.md')).toContain('## Convex Auth setup');
+      }
+      if (scenario.auth === 'better-auth') {
+        const readme = await read('README.md');
+        expect(readme).toContain(`${run} convex:setup`);
+        expect(readme).toContain(`${run} convex:better-auth-env`);
+        expect(readme).toContain(`${run} convex:dev`);
+        if (manager === 'bun') expect(readme).not.toContain('pnpm');
+        expect(api).toContain('betterAuth');
+        expect(
+          await read('packages/backend/convex/convex.config.ts'),
+        ).toContain('app.use(betterAuth)');
+        expect(await read('packages/backend/convex/auth.config.ts')).toContain(
+          'getAuthConfigProvider()',
+        );
+        const authSource = await read('packages/backend/convex/auth.ts');
+        expect(authSource).toContain('components.betterAuth');
+        expect(authSource).toContain('emailAndPassword:');
+        expect(authSource).toContain('requireEmailVerification: false');
+        expect(authSource).toContain('crossDomain({ siteUrl })');
+        expect(authSource).toContain('convex({ authConfig })');
+        expect(await read('packages/backend/convex/http.ts')).toContain(
+          'authComponent.registerRoutes(http, createAuth, { cors: true })',
+        );
+        expect(await read('packages/backend/convex/schema.ts')).not.toContain(
+          'authTables',
+        );
+        const deploymentEnv = await read(
+          'packages/backend/.env.better-auth.example',
+        );
+        expect(deploymentEnv).toContain(`${run} convex:better-auth-env`);
+        for (const variable of [
+          'BETTER_AUTH_SECRET',
+          'SITE_URL',
+          'BETTER_AUTH_TRUSTED_ORIGINS',
+        ])
+          expect(deploymentEnv).toContain(variable);
       }
       if (scenario.auth === 'workos') {
         const readme = await read('README.md');
@@ -421,6 +488,55 @@ describe('generated project golden matrix', () => {
               'proxy.ts',
             );
             expect(providers).not.toContain('@convex-dev/auth/nextjs');
+          }
+        } else if (scenario.auth === 'better-auth') {
+          expect(app.dependencies).toMatchObject({
+            'better-auth': versions.betterAuth,
+            '@convex-dev/better-auth': versions.convexBetterAuth,
+          });
+          expect(providers).toContain('ConvexBetterAuthProvider');
+          expect(providers).toContain('<Authenticated>');
+          expect(providers).toContain('<AuthLoading>');
+          expect(providers).toMatch(/<Unauthenticated>\s*<AuthControls \/>/);
+          expect(providers).toContain(`${prefix}_CONVEX_SITE_URL`);
+          const client = await read(`${dir}/src/auth-client.ts`);
+          expect(client).toContain("from 'better-auth/react'");
+          expect(client).toContain(
+            "from '@convex-dev/better-auth/client/plugins'",
+          );
+          expect(client).toContain('convexClient()');
+          expect(client).toContain('crossDomainClient()');
+          const controls = await read(`${dir}/src/auth-controls.tsx`);
+          for (const operation of [
+            'authClient.signUp.email',
+            'authClient.signIn.email',
+            'authClient.signOut',
+            'result.error',
+            'setPending(true)',
+            'setPending(false)',
+          ])
+            expect(controls).toContain(operation);
+          expect(controls).not.toContain('alert(');
+          const env = await read(`${dir}/.env.better-auth.example`);
+          expect(env).toContain(`${prefix}_CONVEX_SITE_URL=\n`);
+          expect(env).not.toContain('BETTER_AUTH_SECRET');
+          if (framework === 'expo') {
+            expect(app.dependencies).toMatchObject({
+              '@better-auth/expo': versions.betterAuthExpo,
+              'expo-secure-store': versions.expoSecureStore,
+            });
+            expect(client).toContain("Platform.OS === 'web'");
+            expect(client).toContain('expoClient(');
+            expect(client).toContain('storage: SecureStore');
+            const expoConfig = await json<{ expo: { scheme: string } }>(
+              `${dir}/app.json`,
+            );
+            expect(client).toContain(`scheme: '${expoConfig.expo.scheme}'`);
+            expect(controls).toContain('secureTextEntry');
+          } else {
+            expect(controls).toContain('type="email"');
+            expect(controls).toContain('type="password"');
+            expect(client).not.toContain('expoClient');
           }
         } else if (scenario.auth === 'workos') {
           const pin =

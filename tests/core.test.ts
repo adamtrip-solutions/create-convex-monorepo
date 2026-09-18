@@ -88,7 +88,7 @@ describe('options', () => {
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
-  it.each(['none', 'clerk', 'convex-auth', 'workos'])(
+  it.each(['none', 'clerk', 'convex-auth', 'workos', 'better-auth'])(
     'accepts %s auth through CLI options',
     (auth) => {
       expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(

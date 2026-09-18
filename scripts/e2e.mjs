@@ -210,7 +210,13 @@ export type AuthUsersExist = Assert<Equal<'users' extends TableNames ? true : fa
 export type NoMessages = Assert<Equal<'messages' extends TableNames ? true : false, false>>;
 // @ts-expect-error No messages example has been defined.
 export type MissingMessages = typeof api.messages;`
-    : `export type ApiIsEmpty = Assert<Equal<keyof typeof api, never>>;
+    : auth === 'better-auth'
+      ? `export type AuthApiExists = Assert<Equal<keyof typeof api, 'auth'>>;
+export type CurrentUserExists = Assert<Equal<keyof typeof api.auth, 'getCurrentUser'>>;
+export type TablesAreEmpty = Assert<Equal<TableNames, never>>;
+// @ts-expect-error No messages example has been defined.
+export type MissingMessages = typeof api.messages;`
+      : `export type ApiIsEmpty = Assert<Equal<keyof typeof api, never>>;
 export type TablesAreEmpty = Assert<Equal<TableNames, never>>;`
 }
 
@@ -232,6 +238,8 @@ export type MissingModule = typeof api.notAModule;
             : 'VITE';
     // Syntactically valid test configuration, no deployment or identity-provider credentials.
     const lines = [`${prefix}_CONVEX_URL=https://example.convex.cloud`];
+    if (auth === 'better-auth')
+      lines.push(`${prefix}_CONVEX_SITE_URL=https://example.convex.site`);
     if (auth === 'clerk') {
       lines.push(
         `${prefix}_CLERK_PUBLISHABLE_KEY=pk_test_${Buffer.from('test.clerk.accounts.dev$').toString('base64')}`,

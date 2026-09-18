@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { parseEnv, promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
+import { setBetterAuthEnv } from '../assets/setup/better-auth-env.mjs';
 import { generateAuthKeys } from '../assets/setup/convex-auth-keys.mjs';
 import { generateProject } from '../src/generator/index.js';
 import { normalizeOptions } from '../src/generator/options.js';
@@ -605,3 +606,131 @@ it('reports cancellation during URL linking and leaves remaining apps unchanged'
     'NEXT_PUBLIC_CONVEX_URL=',
   );
 });
+
+describe('Better Auth deployment environment setup', () => {
+  const run = promisify(execFile);
+  it.each(
+    ['pnpm', 'bun'].flatMap((manager) =>
+      [false, true].map((prod) => ({ manager, prod })),
+    ),
+  )(
+    'sets private deployment variables with $manager and production=$prod',
+    async ({ manager, prod }) => {
+      const { root, cwd } = await fixture('next,expo', 'better-auth');
+      await managerMetadata(root, manager, `${manager}@1.0.0`);
+      await fakeConvex(
+        root,
+        `
+      const assert = require('node:assert/strict');
+      const fs = require('node:fs');
+      const args = process.argv.slice(2);
+      assert.deepEqual(args.slice(0, ${prod ? 3 : 2}), ${JSON.stringify(['env', 'set', ...(prod ? ['--prod'] : [])])});
+      const [name, value] = args.slice(${prod ? 3 : 2});
+      if (name === 'BETTER_AUTH_SECRET') assert.equal(Buffer.from(value, 'base64').length, 32);
+      else if (name === 'SITE_URL') assert.equal(value, 'http://localhost:3000');
+      else { assert.equal(name, 'BETTER_AUTH_TRUSTED_ORIGINS'); assert.equal(value, 'ccm-fixture-mobile://,https://admin.example.com'); }
+      fs.appendFileSync('calls.txt', name + '\\n');
+      console.log(value); console.error(value);
+    `,
+      );
+      const result = await run(
+        process.execPath,
+        [
+          join(root, 'scripts/better-auth-env.mjs'),
+          '--site-url',
+          'http://localhost:3000/',
+          '--trusted-origins',
+          'ccm-fixture-mobile://,https://admin.example.com',
+          ...(prod ? ['--prod'] : []),
+        ],
+        { cwd },
+      );
+      expect(result).toEqual({
+        stdout: `Set Better Auth deployment variables for ${prod ? 'production' : 'the selected development deployment'}.\n`,
+        stderr: '',
+      });
+      expect(
+        await readFile(join(root, 'packages/backend/calls.txt'), 'utf8'),
+      ).toBe('BETTER_AUTH_SECRET\nSITE_URL\nBETTER_AUTH_TRUSTED_ORIGINS\n');
+    },
+  );
+  it.each(['BETTER_AUTH_SECRET', 'SITE_URL', 'BETTER_AUTH_TRUSTED_ORIGINS'])(
+    'suppresses CLI output if setting %s fails',
+    async (variable) => {
+      const { root } = await fixture('vite', 'better-auth');
+      await fakeConvex(
+        root,
+        `
+      console.error('sensitive-output ' + process.argv.join(' '));
+      if (process.argv[4] === ${JSON.stringify(variable)}) process.exit(1);
+    `,
+      );
+      try {
+        await run(process.execPath, [
+          join(root, 'scripts/better-auth-env.mjs'),
+          '--site-url',
+          'http://localhost:3000',
+        ]);
+        expect.fail('Expected environment setup to fail');
+      } catch (error) {
+        expect(error).toMatchObject({ code: 1, stdout: '' });
+        expect((error as { stderr: string }).stderr).not.toContain(
+          'sensitive-output',
+        );
+        expect((error as { stderr: string }).stderr).toContain(
+          'No values were logged.',
+        );
+      }
+    },
+  );
+  it.each(
+    [
+      [],
+      ['--site-url', 'https://user:password@example.com'],
+      ['--site-url', 'https://example.com/path'],
+      [
+        '--site-url',
+        'https://example.com',
+        '--trusted-origins',
+        'https://*.example.com',
+      ],
+      ['--secret', 'do-not-print-this'],
+    ].map((args) => ({ args })),
+  )(
+    'rejects invalid arguments before running the CLI: $args',
+    async ({ args }) => {
+      const { root } = await fixture('vite', 'better-auth');
+      await fakeConvex(
+        root,
+        "require('node:fs').writeFileSync('called.txt', 'unexpected');",
+      );
+      await expect(
+        run(process.execPath, [
+          join(root, 'scripts/better-auth-env.mjs'),
+          ...args,
+        ]),
+      ).rejects.toMatchObject({ code: 1, stdout: '' });
+      await expect(
+        readFile(join(root, 'packages/backend/called.txt')),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    },
+  );
+});
+
+it.each([
+  ['bun', 'pnpm@10.0.0', 'bun run'],
+  [undefined, 'bun@1.4.2', 'bun run'],
+  ['pnpm', 'bun@1.4.2', 'pnpm'],
+  [undefined, undefined, 'pnpm'],
+])(
+  'Better Auth helper uses recorded manager %s with fallback %s',
+  async (config, manifest, command) => {
+    const { root } = await fixture('vite', 'better-auth');
+    await managerMetadata(root, config, manifest);
+    await expect(
+      setBetterAuthEnv(root, ['--site-url', 'http://localhost:3000']),
+    ).rejects.toThrow(
+      `Convex is not installed. Run ${command!.split(' ')[0]} install, then ${command} convex:better-auth-env.`,
+    );
+  },
+);

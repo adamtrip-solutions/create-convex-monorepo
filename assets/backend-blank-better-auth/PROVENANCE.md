@@ -1,0 +1,3 @@
+Generated files under convex/\_generated were produced unchanged by convex@1.45.0 using CONVEX_AGENT_MODE=anonymous pnpm exec convex dev --once on 2026-09-18, after pnpm install in a temporary generated workspace. Dynamic JS/declaration output. Auth dependencies: @convex-dev/better-auth@0.12.5, better-auth@1.6.15 and @better-auth/expo@1.6.15. Input modules: convex.config.ts, schema.ts, auth.ts, http.ts. auth.config.ts configures the issuer and is excluded from the generated function API. No internal codegen entry point was called. Run normal convex dev after changing backend modules.
+
+Convex SDK source is Apache-2.0 licensed: https://github.com/get-convex/convex-js/blob/main/LICENSE.

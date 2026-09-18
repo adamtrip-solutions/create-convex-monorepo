@@ -56,6 +56,18 @@ jobs:
       matrix:
         include:
           - apps: astro,react-router
+            auth: better-auth
+          - apps: astro,react-router
+            auth: better-auth
+            packageManager: bun
+          - apps: astro,react-router
+            auth: better-auth
+            example: none
+          - apps: astro,react-router
+            auth: better-auth
+            example: none
+            packageManager: bun
+          - apps: astro,react-router
             auth: clerk
           - apps: astro,react-router
             auth: convex-auth
@@ -174,6 +186,21 @@ jobs:
           - apps: next,vite,tanstack-start,expo
             auth: convex-auth
             example: none
+          - apps: react-router,vite
+            auth: better-auth
+          - apps: react-router,vite
+            auth: better-auth
+            packageManager: bun
+          - apps: next,expo
+            auth: better-auth
+          - apps: vite,tanstack-start
+            auth: better-auth
+          - apps: next,expo
+            auth: better-auth
+            example: none
+          - apps: vite,tanstack-start
+            auth: better-auth
+            example: none
           - apps: next,vite,tanstack-start,expo
             auth: none
             example: none
@@ -194,6 +221,20 @@ jobs:
             packageManager: bun
           - apps: next,vite,tanstack-start
             auth: workos
+            example: none
+            packageManager: bun
+          - apps: next,expo
+            auth: better-auth
+            packageManager: bun
+          - apps: vite,tanstack-start
+            auth: better-auth
+            packageManager: bun
+          - apps: next,expo
+            auth: better-auth
+            example: none
+            packageManager: bun
+          - apps: vite,tanstack-start
+            auth: better-auth
             example: none
             packageManager: bun
     env:

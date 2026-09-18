@@ -50,7 +50,7 @@ export async function generateBackend(ctx: GeneratorContext): Promise<void> {
     `# Run ${scriptCommand(ctx.options.packageManager, 'convex:setup')} from the workspace root.\n# Convex writes deployment selection and public URLs to this package's .env.local.\n# Never copy this file wholesale into an application.\n`,
   );
   const assetDir = new URL('../../../assets/backend/convex/', import.meta.url);
-  const assetName = `backend${ctx.options.example === 'none' ? '-blank' : ''}${ctx.options.auth === 'convex-auth' ? '-convex-auth' : ''}`;
+  const assetName = `backend${ctx.options.example === 'none' ? '-blank' : ''}${ctx.options.auth === 'convex-auth' ? '-convex-auth' : ctx.options.auth === 'better-auth' ? '-better-auth' : ''}`;
   const selectedAssets = new URL(
     `../../../assets/${assetName}/convex/`,
     import.meta.url,

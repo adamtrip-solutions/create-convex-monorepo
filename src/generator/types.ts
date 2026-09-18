@@ -5,7 +5,7 @@ export type Framework =
   | 'react-router'
   | 'expo'
   | 'astro';
-export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos';
+export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos' | 'better-auth';
 export type OAuthProvider = 'github' | 'google';
 export type PackageManagerId = 'pnpm' | 'bun';
 export type Example = 'none' | 'messages';
