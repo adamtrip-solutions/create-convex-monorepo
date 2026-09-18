@@ -1462,7 +1462,7 @@ it('guards an existing equivalent Convex Auth HTTP router', async () => {
     `${source}\n// concurrent edit\n`,
   );
   await expect(applyPlan(plan)).rejects.toThrow('Workspace changed');
-});
+}, 20_000); // Two full plans; the first parser load is slow on Windows runners.
 
 it.each([
   'apps/web/src/providers.tsx',
