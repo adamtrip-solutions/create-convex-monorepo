@@ -1,10 +1,18 @@
-import type { AppSpec, Auth, Framework, ProjectOptions } from './types.js';
 import { validateAuthCompatibility } from '../integrations/auth/index.js';
+import { workosBindings } from '../integrations/auth/workos/index.js';
+import type {
+  AppSpec,
+  Auth,
+  Framework,
+  OAuthProvider,
+  ProjectOptions,
+} from './types.js';
 
 export interface RawOptions {
   name?: string;
   apps?: string | AppSpec[];
   auth?: string;
+  oauth?: string | readonly string[];
   example?: string;
   packageManager?: string;
   install?: boolean;
@@ -16,9 +24,30 @@ export const frameworks: readonly Framework[] = [
   'next',
   'vite',
   'tanstack-start',
+  'react-router',
   'expo',
   'sveltekit',
 ];
+export const oauthProviders: readonly OAuthProvider[] = ['github', 'google'];
+export function normalizeOAuthProviders(
+  raw: string | readonly string[] | undefined,
+  auth: string,
+): OAuthProvider[] {
+  if (raw === undefined) return [];
+  if (auth !== 'convex-auth')
+    throw new Error(
+      '--oauth requires --auth convex-auth or add auth convex-auth.',
+    );
+  const entries =
+    typeof raw === 'string' ? raw.split(',').map((entry) => entry.trim()) : raw;
+  for (const provider of entries) {
+    if (!oauthProviders.includes(provider as OAuthProvider))
+      throw new Error(
+        `Unknown OAuth provider "${provider}". Choose github or google.`,
+      );
+  }
+  return oauthProviders.filter((provider) => entries.includes(provider));
+}
 const reserved = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9]|node_modules)$/i;
 export function validateProjectName(name: string): string | undefined {
   if (
@@ -34,8 +63,12 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
   const name = raw.name ?? 'my-app';
   const error = validateProjectName(name);
   if (error) throw new Error(`Invalid project name "${name}". ${error}`);
-  if (raw.packageManager !== undefined && raw.packageManager !== 'pnpm')
-    throw new Error('Only pnpm is supported in v0.1.');
+  if (
+    raw.packageManager !== undefined &&
+    raw.packageManager !== 'pnpm' &&
+    raw.packageManager !== 'bun'
+  )
+    throw new Error('Unsupported package manager. Choose pnpm or bun.');
   const initConvex = raw.initConvex ?? false;
   if (initConvex && raw.install === false)
     throw new Error(
@@ -95,16 +128,30 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     return { name: appName, framework };
   });
   validateAuthCompatibility(apps, auth);
-  if (auth !== 'none' && auth !== 'clerk' && auth !== 'convex-auth')
+  if (
+    auth !== 'none' &&
+    auth !== 'clerk' &&
+    auth !== 'convex-auth' &&
+    auth !== 'workos'
+  )
     throw new Error(
-      `Unknown auth provider "${auth}". Choose none, clerk, or convex-auth.`,
+      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, or workos.`,
     );
+  const oauth = normalizeOAuthProviders(raw.oauth, auth);
+  if (auth === 'workos') {
+    const unsupported = apps.find((app) => !workosBindings[app.framework]);
+    if (unsupported)
+      throw new Error(
+        `WorkOS AuthKit is not supported by this generator for framework "${unsupported.framework}". Choose ${Object.keys(workosBindings).join(', ')}.${unsupported.framework === 'expo' ? ' No official Expo / React Native AuthKit SDK is available.' : ''}`,
+      );
+  }
   return {
     name,
     apps,
     auth: auth as Auth,
+    ...(oauth.length ? { oauth } : {}),
     example,
-    packageManager: 'pnpm',
+    packageManager: raw.packageManager ?? 'pnpm',
     install: raw.install ?? (initConvex || raw.yes || false),
     initConvex,
     git: raw.git ?? raw.yes ?? false,

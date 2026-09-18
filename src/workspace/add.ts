@@ -1,3 +1,5 @@
+import { scriptCommand, workspaceScript } from '../package-manager/index.js';
+import { createHash } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parsers } from 'prettier/plugins/typescript';
@@ -10,7 +12,10 @@ import {
   equivalentGeneratedFile,
   formatGeneratedFile,
 } from '../generator/format.js';
-import { validateProjectName } from '../generator/options.js';
+import {
+  normalizeOAuthProviders,
+  validateProjectName,
+} from '../generator/options.js';
 import { versions } from '../templates/versions.js';
 import { validateAuthCompatibility } from '../integrations/auth/index.js';
 import { readBackendEnvironment } from './env.js';
@@ -31,27 +36,42 @@ import {
 } from '../../assets/setup/convex-setup.mjs';
 
 async function verifyWorkspace(workspace: Workspace, plan: ChangePlan) {
-  const yaml = await guardedRead(workspace, plan, 'pnpm-workspace.yaml');
-  // Support the generated workspace layout, including comments and unrelated
-  // pnpm settings. Refuse aliases, inline lists, exclusions and custom globs.
-  const section = yaml?.match(
-    /^packages:\s*(?:#.*)?\n((?:[ \t]+[^\n]*\n|\s*\n)*)/m,
-  )?.[1];
-  const patterns = section
-    ?.split('\n')
-    .map((line) => line.replace(/\s+#.*$/, '').trim())
-    .filter((line) => line && !line.startsWith('#'))
-    .map((line) => /^-\s+['"]?(apps\/\*|packages\/\*)['"]?$/.exec(line)?.[1]);
-  if (
-    (yaml?.match(/^packages:/gm)?.length ?? 0) !== 1 ||
-    !patterns ||
-    patterns.length !== 2 ||
-    !patterns.includes('apps/*') ||
-    !patterns.includes('packages/*')
-  )
-    throw new Error(
-      'Unsupported pnpm-workspace.yaml packages configuration. Expected apps/* and packages/* without exclusions or other globs.',
-    );
+  if (workspace.config.packageManager === 'bun') {
+    const contents = await guardedRead(workspace, plan, 'package.json');
+    const manifest = object(JSON.parse(contents ?? '{}'), 'package.json');
+    const patterns = manifest.workspaces;
+    if (
+      !Array.isArray(patterns) ||
+      patterns.length !== 2 ||
+      !patterns.includes('apps/*') ||
+      !patterns.includes('packages/*')
+    )
+      throw new Error(
+        'Unsupported package.json workspaces configuration. Expected apps/* and packages/* without exclusions or other globs.',
+      );
+  } else {
+    const yaml = await guardedRead(workspace, plan, 'pnpm-workspace.yaml');
+    // Support the generated workspace layout, including comments and unrelated
+    // pnpm settings. Refuse aliases, inline lists, exclusions and custom globs.
+    const section = yaml?.match(
+      /^packages:\s*(?:#.*)?\n((?:[ \t]+[^\n]*\n|\s*\n)*)/m,
+    )?.[1];
+    const patterns = section
+      ?.split('\n')
+      .map((line) => line.replace(/\s+#.*$/, '').trim())
+      .filter((line) => line && !line.startsWith('#'))
+      .map((line) => /^-\s+['"]?(apps\/\*|packages\/\*)['"]?$/.exec(line)?.[1]);
+    if (
+      (yaml?.match(/^packages:/gm)?.length ?? 0) !== 1 ||
+      !patterns ||
+      patterns.length !== 2 ||
+      !patterns.includes('apps/*') ||
+      !patterns.includes('packages/*')
+    )
+      throw new Error(
+        'Unsupported pnpm-workspace.yaml packages configuration. Expected apps/* and packages/* without exclusions or other globs.',
+      );
+  }
   for (const name of ['backend', 'typescript-config', 'eslint-config']) {
     const path = `packages/${name}/package.json`;
     const contents = await guardedRead(workspace, plan, path);
@@ -101,6 +121,52 @@ async function verifyMessages(
       throw new Error(
         `Incompatible messages backend: ${path} is missing or customized. Restore the generated messages contract, or add an app with --example none.`,
       );
+  }
+}
+
+async function equivalentLegacySetupHelper(
+  path: string,
+  current: string | null,
+  baseline: string,
+) {
+  if (current === null) return false;
+  try {
+    const formatted = await formatGeneratedFile(path, current);
+    const mapping =
+      /export function publicVariable\(framework\) \{[\s\S]*?^\}/m;
+    const currentMapping = formatted.match(mapping)?.[0];
+    if (!currentMapping) return false;
+    const frameworks = new Set(
+      [...currentMapping.matchAll(/case '([^']+)':/g)].map((match) => match[1]),
+    );
+    // Older releases lack cases for newer frameworks. Only remove those
+    // branches from the generated map; compare all remaining code/comments.
+    const legacy = baseline.replace(mapping, (generatedMapping) =>
+      generatedMapping.replace(
+        /((?:    case '[^']+':\n)+)(      return '[^']+';\n)/g,
+        (_branch, cases: string, result: string) => {
+          const retained = cases.replace(
+            /    case '([^']+)':\n/g,
+            (line, framework: string) =>
+              frameworks.has(framework) ? line : '',
+          );
+          return retained ? retained + result : '';
+        },
+      ),
+    );
+    if (await equivalentGeneratedFile(path, current, legacy)) return true;
+    // The pre-Bun helper also predates React Router. Recognize its exact
+    // formatted body, while checking its framework map separately. Never
+    // replace user changes outside the missing framework cases.
+    return (
+      currentMapping === legacy.match(mapping)?.[0] &&
+      createHash('sha256')
+        .update(formatted.replace(mapping, ''))
+        .digest('hex') ===
+        '7cb94228bbba1afde8f8d896a8ecd40078a78922f71bd55b750f5c9694bc30ac'
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -165,6 +231,7 @@ export async function planAddApp(
     apps: [{ name: options.name, framework: options.framework }],
     example,
     auth: workspace.config.auth,
+    packageManager: workspace.config.packageManager,
   });
   const app = normalized.apps[0]!;
   if (workspace.config.apps.some((existing) => existing.name === app.name))
@@ -192,25 +259,34 @@ export async function planAddApp(
     example,
     workspace.config.auth,
   );
-  if (app.framework === 'sveltekit') {
-    const setupPath = 'scripts/convex-setup.mjs';
-    const setup = await guardedRead(workspace, plan, setupPath);
-    const target = generated.get(setupPath)!;
-    if (!(await equivalentGeneratedFile(setupPath, setup, target))) {
-      const previous = target.replace(
-        /    case 'sveltekit':\n      return 'PUBLIC_CONVEX_URL';\n/,
-        '',
+  const baseline = await render(
+    workspace,
+    workspace.config.apps,
+    workspace.config.example,
+    workspace.config.auth,
+  );
+  const setupPath = 'scripts/convex-setup.mjs';
+  const setupBefore = await guardedRead(workspace, plan, setupPath);
+  const setupAfter = generated.get(setupPath)!;
+  const setupBaseline = baseline.get(setupPath)!;
+  if (
+    (await equivalentGeneratedFile(setupPath, setupBefore, setupBaseline)) ||
+    (await equivalentGeneratedFile(setupPath, setupBefore, setupAfter)) ||
+    (await equivalentLegacySetupHelper(setupPath, setupBefore, setupBaseline))
+  ) {
+    const after = retainNewlines(setupAfter, setupBefore);
+    if (setupBefore !== after)
+      plan.changes.push({ path: setupPath, before: setupBefore, after });
+  } else {
+    if (app.framework === 'sveltekit')
+      throw new Error(
+        'Customized or missing scripts/convex-setup.mjs cannot be updated safely for SvelteKit. Restore the generated setup script before rerunning add app. No files were changed.',
       );
-      if (!(await equivalentGeneratedFile(setupPath, setup, previous)))
-        throw new Error(
-          'Customized or missing scripts/convex-setup.mjs cannot be updated safely for SvelteKit. Restore the generated setup script before rerunning add app. No files were changed.',
-        );
-      plan.changes.push({
-        path: setupPath,
-        before: setup,
-        after: retainNewlines(target, setup),
-      });
-    }
+    plan.notes.push(
+      `${setupPath} is missing or customized. Copy the current helper from a fresh project or update its framework map to support ${app.framework} before running ${scriptCommand(workspace.config.packageManager, 'convex:setup')} or ${scriptCommand(workspace.config.packageManager, 'convex:link')}.`,
+    );
+  }
+  if (app.framework === 'sveltekit') {
     const ignorePath = '.prettierignore';
     const ignore = await guardedRead(workspace, plan, ignorePath);
     const missing = ['**/.svelte-kit/', '**/build/'].filter(
@@ -244,7 +320,8 @@ export async function planAddApp(
     if (
       existing.framework === 'vite' ||
       existing.framework === 'tanstack-start' ||
-      existing.framework === 'sveltekit'
+      existing.framework === 'sveltekit' ||
+      existing.framework === 'react-router'
     ) {
       const configPath = `apps/${existing.name}/vite.config.ts`;
       const config = await guardedRead(workspace, plan, configPath);
@@ -262,25 +339,62 @@ export async function planAddApp(
   if (example === 'messages') await verifyMessages(workspace, plan, generated);
   if (workspace.config.auth !== 'none') {
     const files =
-      workspace.config.auth === 'clerk'
+      workspace.config.auth !== 'convex-auth'
         ? ['auth.config.ts']
         : ['auth.config.ts', 'auth.ts', 'http.ts'];
-    const label = workspace.config.auth === 'clerk' ? 'Clerk' : 'Convex Auth';
+    const label =
+      workspace.config.auth === 'clerk'
+        ? 'Clerk'
+        : workspace.config.auth === 'workos'
+          ? 'WorkOS AuthKit'
+          : 'Convex Auth';
+    const baseline = workspace.config.oauth?.length
+      ? await render(
+          workspace,
+          workspace.config.apps,
+          example,
+          workspace.config.auth,
+        )
+      : generated;
     for (const name of files) {
       const path = `packages/backend/convex/${name}`;
-      if (
-        !(await equivalentGeneratedFile(
+      const current = await guardedRead(workspace, plan, path);
+      if (!(await equivalentGeneratedFile(path, current, baseline.get(path))))
+        throw new Error(
+          `Incompatible ${label} configuration in ${path}. Restore the generated configuration before adding an app, or integrate it manually.`,
+        );
+      if (baseline.get(path) !== generated.get(path))
+        plan.changes.push({
           path,
-          await guardedRead(workspace, plan, path),
-          generated.get(path),
-        ))
-      )
-        throw new Error(`Incompatible ${label} configuration in ${path}.`);
+          before: current,
+          after: retainNewlines(generated.get(path)!, current),
+        });
     }
   }
   for (const [path, after] of generated) {
     if (path.startsWith(`${dir}/`))
       plan.changes.push({ path, before: null, after });
+  }
+  if (app.framework === 'react-router') {
+    const path = '.prettierignore';
+    const before = await guardedRead(workspace, plan, path);
+    const lines = (before ?? '').split(/\r?\n/);
+    const missing = ['.react-router', 'build']
+      .filter(
+        (output) =>
+          !lines.includes(`**/${output}/`) &&
+          !lines.includes(`${dir}/${output}/`),
+      )
+      .map((output) => `${dir}/${output}/`);
+    if (missing.length)
+      plan.changes.push({
+        path,
+        before,
+        after: retainNewlines(
+          `${before ?? ''}${before && !before.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`,
+          before,
+        ),
+      });
   }
   const path = 'package.json';
   const before = await guardedRead(workspace, plan, path);
@@ -290,7 +404,12 @@ export async function planAddApp(
   const script = `dev:${app.name}`;
   if (Object.hasOwn(scripts, script))
     throw new Error(`Root script ${script} already exists.`);
-  scripts[script] = `pnpm --filter @${workspace.config.name}/${app.name} dev`;
+  scripts[script] = workspaceScript(
+    workspace.config.packageManager,
+    workspace.config.name,
+    app.name,
+    'dev',
+  );
   const previousDev = `turbo run dev --ui=stream --concurrency=${workspace.config.apps.length + 2}`;
   if (scripts.dev !== previousDev)
     throw new Error(
@@ -316,7 +435,7 @@ export async function planAddApp(
       mode: 0o600,
     });
     plan.notes.push(
-      `Will link the public Convex URL into ${dir}/.env.local. Run pnpm install before starting the app.`,
+      `Will link the public Convex URL into ${dir}/.env.local. Run ${workspace.config.packageManager} install before starting the app.`,
     );
     if (
       app.framework === 'expo' &&
@@ -327,12 +446,16 @@ export async function planAddApp(
       );
   } else {
     plan.notes.push(
-      `Run pnpm install, then pnpm convex:setup or pnpm convex:link to configure ${dir}/.env.local.`,
+      `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:setup')} or ${scriptCommand(workspace.config.packageManager, 'convex:link')} to configure ${dir}/.env.local.`,
     );
   }
   if (workspace.config.auth === 'clerk')
     plan.notes.push(
       `Add the Clerk keys listed in apps/${app.name}/.env.clerk.example.`,
+    );
+  if (workspace.config.auth === 'workos')
+    plan.notes.push(
+      `Add the WorkOS settings listed in apps/${app.name}/.env.workos.example.`,
     );
   return plan;
 }
@@ -457,7 +580,7 @@ export async function planAddPackage(
     ],
   });
   plan.notes.push(
-    `Add "${packageName}": "workspace:*" to each app that should import it, then run pnpm install.`,
+    `Add "${packageName}": "workspace:*" to each app that should import it, then run ${workspace.config.packageManager} install.`,
   );
   return plan;
 }
@@ -604,13 +727,25 @@ async function patchAuthSchema(
 
 export async function planAddAuth(
   workspace: Workspace,
-  provider: 'clerk' | 'convex-auth',
+  provider: 'clerk' | 'convex-auth' | 'workos',
+  options: { oauth?: string | readonly string[] } = {},
 ): Promise<ChangePlan> {
   validateAuthCompatibility(workspace.config.apps, provider);
-  if (provider !== 'clerk' && provider !== 'convex-auth')
-    throw new Error('Choose add auth clerk or add auth convex-auth.');
-  const label = (auth: 'clerk' | 'convex-auth') =>
-    auth === 'clerk' ? 'Clerk' : 'Convex Auth';
+  if (
+    provider !== 'clerk' &&
+    provider !== 'convex-auth' &&
+    provider !== 'workos'
+  )
+    throw new Error(
+      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
+    );
+  if (options.oauth !== undefined && workspace.config.auth !== 'none')
+    throw new Error(
+      'Authentication is already configured. Adding OAuth to an existing workspace requires manual edits. See the README OAuth instructions. No files were changed.',
+    );
+  const oauth = normalizeOAuthProviders(options.oauth, provider);
+  const label = (auth: 'clerk' | 'convex-auth' | 'workos') =>
+    auth === 'clerk' ? 'Clerk' : auth === 'workos' ? 'WorkOS' : 'Convex Auth';
   if (workspace.config.auth !== 'none' && workspace.config.auth !== provider)
     throw new Error(
       `${label(workspace.config.auth)} is already configured. Switching authentication providers requires a manual migration.`,
@@ -621,20 +756,38 @@ export async function planAddAuth(
     return plan;
   }
   await verifyWorkspace(workspace, plan);
-  const first = workspace.config.apps[0]!;
+  normalizeOptions({
+    name: workspace.config.name,
+    apps: workspace.config.apps,
+    example: workspace.config.example,
+    auth: provider,
+  });
+  if (provider === 'workos') {
+    for (const app of workspace.config.apps) {
+      if (app.framework !== 'next') continue;
+      for (const location of ['src/middleware.ts', 'middleware.ts']) {
+        const path = `apps/${app.name}/${location}`;
+        if ((await guardedRead(workspace, plan, path)) !== null)
+          throw new Error(
+            `Conflict in ${path}: manually migrate this middleware to apps/${app.name}/src/proxy.ts and integrate WorkOS AuthKit with authkitProxy. Next.js 16 cannot use both middleware.ts and proxy.ts. No files were changed.`,
+          );
+      }
+    }
+  }
   const backendBefore = await render(
     workspace,
-    [first],
+    workspace.config.apps,
     workspace.config.example,
     'none',
   );
   const backendAfter = await render(
     workspace,
-    [first],
+    workspace.config.apps,
     workspace.config.example,
     provider,
+    oauth,
   );
-  if (provider === 'clerk' && workspace.config.example === 'messages')
+  if (provider !== 'convex-auth' && workspace.config.example === 'messages')
     await verifyMessages(workspace, plan, backendBefore);
   async function patchFiles(
     before: Files,
@@ -670,11 +823,11 @@ export async function planAddAuth(
     }
   }
   await patchFiles(backendBefore, backendAfter, (path) =>
-    (provider === 'clerk'
+    (provider !== 'convex-auth'
       ? [
           'packages/backend/convex/access.ts',
           'packages/backend/convex/auth.config.ts',
-          'packages/backend/.env.clerk.example',
+          `packages/backend/.env.${provider}.example`,
         ]
       : [
           'packages/backend/convex/access.ts',
@@ -684,6 +837,7 @@ export async function planAddAuth(
           'packages/backend/.env.convex-auth.example',
           'packages/backend/package.json',
           'scripts/convex-auth-keys.mjs',
+          'scripts/convex-auth-site.mjs',
           'package.json',
         ]
     ).includes(path),
@@ -730,23 +884,123 @@ export async function planAddAuth(
         'Add !.env.convex-auth.example to your customized .gitignore so the backend environment example can be committed.',
       );
     plan.notes.push(
-      'Generated types refresh on the next pnpm convex:dev or convex codegen. Sign-in needs pnpm convex:auth-keys.',
+      `Generated types refresh on the next ${scriptCommand(workspace.config.packageManager, 'convex:dev')} or convex codegen. Sign-in needs ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}.`,
     );
   }
+  if (provider === 'workos') {
+    const path = 'turbo.json';
+    const current = await guardedRead(workspace, plan, path);
+    if (current === null) throw new Error('Missing turbo.json.');
+    const config = object(JSON.parse(current), path);
+    const tasks = { ...object(config.tasks, path) };
+    const beforeTasks = object(
+      object(JSON.parse(backendBefore.get(path)!), path).tasks,
+      path,
+    );
+    const afterTasks = object(
+      object(JSON.parse(backendAfter.get(path)!), path).tasks,
+      path,
+    );
+    let changed = false;
+    for (const name of ['dev', 'build']) {
+      const previous = object(beforeTasks[name], path).passThroughEnv;
+      const target = object(afterTasks[name], path).passThroughEnv;
+      if (tasks[name] === undefined)
+        throw new Error(
+          `Conflict in ${path}: tasks.${name} is missing. No files were changed.`,
+        );
+      const task = object(tasks[name], path);
+      const existing = task.passThroughEnv;
+      if (
+        !Array.isArray(previous) ||
+        !Array.isArray(target) ||
+        (existing !== undefined &&
+          (!Array.isArray(existing) ||
+            existing.some((value) => typeof value !== 'string')))
+      )
+        throw new Error(
+          `Conflict in ${path}: tasks.${name}.passThroughEnv must be a string array. No files were changed.`,
+        );
+      const additions = target.filter((value) => !previous.includes(value));
+      const values = [...((existing as string[] | undefined) ?? [])];
+      for (const value of additions) {
+        if (!values.includes(value)) {
+          values.push(value);
+          changed = true;
+        }
+      }
+      tasks[name] = { ...task, passThroughEnv: values };
+    }
+    if (changed)
+      plan.changes.push({
+        path,
+        before: current,
+        after: retainNewlines(json({ ...config, tasks }), current),
+      });
+    const ignorePath = '.gitignore';
+    const ignore = await guardedRead(workspace, plan, ignorePath);
+    if (ignore === null) throw new Error('Missing .gitignore.');
+    if (!ignore.split(/\r?\n/).includes('!.env.workos.example'))
+      plan.changes.push({
+        path: ignorePath,
+        before: ignore,
+        after: retainNewlines(
+          `${ignore.replace(/\r?\n/g, '\n')}${ignore.endsWith('\n') || ignore.length === 0 ? '' : '\n'}!.env.workos.example\n`,
+          ignore,
+        ),
+      });
+  }
   for (const app of workspace.config.apps) {
+    if (oauth.length && app.framework === 'expo') {
+      const path = `apps/${app.name}/app.json`;
+      const current = await guardedRead(workspace, plan, path);
+      const expectedScheme = `ccm-${workspace.config.name}-${app.name}`;
+      let scheme: unknown;
+      try {
+        scheme = object(
+          object(JSON.parse(current ?? '{}'), path).expo,
+          path,
+        ).scheme;
+      } catch {
+        throw new Error(
+          `Conflict in ${path}: OAuth requires a valid app.json with expo.scheme set to "${expectedScheme}". No files were changed.`,
+        );
+      }
+      if (scheme !== expectedScheme)
+        throw new Error(
+          `Conflict in ${path}: OAuth requires expo.scheme to be "${expectedScheme}". Update the scheme before rerunning, or configure OAuth manually for your custom scheme. No files were changed.`,
+        );
+    }
     const example = app.example ?? workspace.config.example;
-    const baseline = await render(workspace, [app], example, 'none');
-    const target = await render(workspace, [app], example, provider);
+    const baseline = await render(
+      workspace,
+      workspace.config.apps,
+      example,
+      'none',
+    );
+    const target = await render(
+      workspace,
+      workspace.config.apps,
+      example,
+      provider,
+      oauth,
+    );
     await patchFiles(baseline, target, (path) =>
       path.startsWith(`apps/${app.name}/`),
     );
   }
   const readme = backendAfter.get('README.md')!;
   const start = readme.indexOf(`## ${label(provider)} setup`);
-  const end = readme.indexOf('\n## Development', start);
-  const setup = `${readme.slice(start, end).trim()}\n\nRun pnpm install after applying this change.${workspace.config.example === 'messages' ? ' Existing public messages have no owner and will not appear in authenticated accounts. This command does not migrate stored data.' : ''}\n`;
+  const end = readme.indexOf('\n## Shared backend types', start);
+  if (start === -1 || end === -1)
+    throw new Error('Generated authentication setup instructions are missing.');
+  const setup = `${readme.slice(start, end).trim()}\n\nRun ${workspace.config.packageManager} install after applying this change.${workspace.config.example === 'messages' ? ' Existing public messages have no owner and will not appear in authenticated accounts. This command does not migrate stored data.' : ''}\n`;
   const setupPath =
-    provider === 'clerk' ? 'CLERK_SETUP.md' : 'CONVEX_AUTH_SETUP.md';
+    provider === 'clerk'
+      ? 'CLERK_SETUP.md'
+      : provider === 'workos'
+        ? 'WORKOS_SETUP.md'
+        : 'CONVEX_AUTH_SETUP.md';
   const existing = await guardedRead(workspace, plan, setupPath);
   if (existing !== null && existing !== setup)
     throw new Error(
@@ -754,11 +1008,16 @@ export async function planAddAuth(
     );
   if (existing === null)
     plan.changes.push({ path: setupPath, before: null, after: setup });
-  await metadata(workspace, plan, { auth: provider });
+  await metadata(workspace, plan, {
+    auth: provider,
+    ...(oauth.length ? { oauth } : {}),
+  });
   plan.notes.push(
     provider === 'clerk'
-      ? 'Run pnpm install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.'
-      : 'Run pnpm install, then pnpm convex:auth-keys, and follow CONVEX_AUTH_SETUP.md.',
+      ? `Run ${workspace.config.packageManager} install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.`
+      : provider === 'workos'
+        ? `Run ${workspace.config.packageManager} install and follow WORKOS_SETUP.md to configure AuthKit and the Convex issuer.`
+        : `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}, and follow CONVEX_AUTH_SETUP.md.`,
   );
   return plan;
 }

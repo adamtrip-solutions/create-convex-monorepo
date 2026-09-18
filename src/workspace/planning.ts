@@ -2,7 +2,12 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generateProject } from '../generator/index.js';
-import type { Auth, Example, AppSpec } from '../generator/types.js';
+import type {
+  Auth,
+  Example,
+  AppSpec,
+  OAuthProvider,
+} from '../generator/types.js';
 import { readText, type Workspace } from './project.js';
 import type { ChangePlan } from './changes.js';
 
@@ -16,15 +21,20 @@ export async function render(
   apps: AppSpec[],
   example: Example,
   auth: Auth,
+  oauth: OAuthProvider[] = auth === 'convex-auth'
+    ? (workspace.config.oauth ?? [])
+    : [],
 ): Promise<Files> {
   const temporary = await mkdtemp(join(tmpdir(), 'ccm-add-'));
   try {
     const root = await generateProject(
       {
         name: workspace.config.name,
+        packageManager: workspace.config.packageManager,
         apps,
         example,
         auth,
+        ...(oauth.length ? { oauth } : {}),
         install: false,
         git: false,
         initConvex: false,

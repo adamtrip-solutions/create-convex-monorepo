@@ -1,3 +1,4 @@
+import { scriptCommand } from '../package-manager/index.js';
 import { readdir, readFile, realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -28,6 +29,15 @@ const frameworks: Record<Framework, string[]> = {
   next: ['next', 'react-dom'],
   vite: ['vite', '@vitejs/plugin-react', 'react-dom'],
   'tanstack-start': ['@tanstack/react-start', 'vite', 'react-dom'],
+  'react-router': [
+    'react-router',
+    '@react-router/dev',
+    '@react-router/node',
+    '@react-router/serve',
+    'isbot',
+    'vite',
+    'react-dom',
+  ],
   expo: ['expo', 'react-native'],
   sveltekit: [
     'svelte',
@@ -44,7 +54,13 @@ const clerk: Partial<Record<Framework, string>> = {
   next: '@clerk/nextjs',
   vite: '@clerk/react',
   'tanstack-start': '@clerk/tanstack-react-start',
+  'react-router': '@clerk/react-router',
   expo: '@clerk/expo',
+};
+const workos: Partial<Record<Framework, string>> = {
+  next: '@workos-inc/authkit-nextjs',
+  vite: '@workos-inc/authkit-react',
+  'tanstack-start': '@workos/authkit-tanstack-react-start',
 };
 const baselines: Record<string, string> = {
   svelte: versions.svelte,
@@ -54,9 +70,18 @@ const baselines: Record<string, string> = {
   'convex-svelte': versions.convexSvelte,
   'svelte-check': versions.svelteCheck,
   'eslint-plugin-svelte': versions.eslintSvelte,
+  '@workos-inc/node': versions.workosNode,
+  '@workos-inc/authkit-nextjs': versions.workosNext,
+  '@workos-inc/authkit-react': versions.workosReact,
+  '@workos/authkit-tanstack-react-start': versions.workosTanstack,
   convex: versions.convex,
   '@convex-dev/auth': versions.convexAuth,
   '@auth/core': versions.authCore,
+  'react-router': versions.reactRouter,
+  '@react-router/dev': versions.reactRouter,
+  '@react-router/node': versions.reactRouter,
+  '@react-router/serve': versions.reactRouter,
+  '@clerk/react-router': versions.clerkReactRouter,
   react: versions.react,
   typescript: versions.typescript,
   next: versions.next,
@@ -191,6 +216,7 @@ export async function doctor(
   options: { signal?: AbortSignal } = {},
 ): Promise<DoctorResult> {
   const { root, config } = workspace;
+  const hasOAuth = config.auth === 'convex-auth' && !!config.oauth?.length;
   const result: DoctorResult = { issues: [], checks: [] };
   const issue = (
     code: string,
@@ -252,16 +278,19 @@ export async function doctor(
       'The root package name does not match convex-monorepo.json.',
       'Align the root package name with the workspace metadata.',
     );
-  if (rootManifest.packageManager !== `pnpm@${versions.pnpm}`) {
+  if (
+    rootManifest.packageManager !==
+    `${config.packageManager}@${versions[config.packageManager]}`
+  ) {
     issue(
       'package-manager-baseline',
-      'The root packageManager differs from this CLI’s tested pnpm version.',
-      'Run npx create-convex-monorepo@latest upgrade, then pnpm install.',
+      `The root packageManager differs from this CLI’s tested ${config.packageManager} version (${versions[config.packageManager]}).`,
+      `Run npx create-convex-monorepo@latest upgrade, then ${config.packageManager} install.`,
       'warning',
     );
   }
   for (const path of [
-    'pnpm-workspace.yaml',
+    ...(config.packageManager === 'pnpm' ? ['pnpm-workspace.yaml'] : []),
     'turbo.json',
     'packages/backend/convex/tsconfig.json',
     'packages/backend/convex/schema.ts',
@@ -273,7 +302,39 @@ export async function doctor(
         'Restore the workspace configuration file.',
       );
   }
-  const workspaceYaml = await text('pnpm-workspace.yaml');
+  const lockfile =
+    config.packageManager === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml';
+  if ((await text(lockfile)) === null)
+    issue(
+      'lockfile-missing',
+      `${lockfile} is missing.`,
+      `Run ${config.packageManager} install and commit ${lockfile}.`,
+      'warning',
+    );
+  else result.checks.push(`${lockfile} exists.`);
+  result.checks.push(
+    `Tested package manager: ${config.packageManager}@${versions[config.packageManager]}.`,
+  );
+  if (config.packageManager === 'bun') {
+    const patterns = rootManifest.workspaces;
+    if (
+      !Array.isArray(patterns) ||
+      patterns.length !== 2 ||
+      !patterns.includes('apps/*') ||
+      !patterns.includes('packages/*')
+    )
+      issue(
+        'workspace-package-excluded',
+        'package.json workspaces must include apps/* and packages/*.',
+        'Restore the generated workspaces list in package.json.',
+      );
+    else
+      result.checks.push(
+        'The bun workspaces list includes all recorded apps and shared packages.',
+      );
+  }
+  const workspaceYaml =
+    config.packageManager === 'pnpm' ? await text('pnpm-workspace.yaml') : null;
   if (workspaceYaml !== null) {
     const layout = workspacePatterns(workspaceYaml);
     if (layout.unsupported)
@@ -374,13 +435,13 @@ export async function doctor(
     );
   }
   if (
-    config.auth === 'clerk' &&
+    (config.auth === 'clerk' || config.auth === 'workos') &&
     (await text('packages/backend/convex/auth.config.ts')) === null
   ) {
     issue(
       'auth-config-missing',
-      'Clerk is recorded in metadata but the backend auth.config.ts is missing.',
-      'Restore the backend Clerk auth configuration before deploying.',
+      `${config.auth === 'clerk' ? 'Clerk' : 'WorkOS AuthKit'} is recorded in metadata but the backend auth.config.ts is missing.`,
+      'Restore the backend auth configuration before deploying.',
     );
   }
   if (config.auth === 'convex-auth') {
@@ -393,6 +454,28 @@ export async function doctor(
           `Restore the generated Convex Auth file ${path} before deploying.`,
         );
     }
+  }
+  if (hasOAuth) {
+    let hasSiteUrlGuidance = false;
+    for (const path of [
+      'packages/backend/.env.convex-auth.example',
+      'README.md',
+      'CONVEX_AUTH_SETUP.md',
+    ]) {
+      if (/\bSITE_URL\b/.test((await text(path)) ?? ''))
+        hasSiteUrlGuidance = true;
+    }
+    if (!hasSiteUrlGuidance)
+      issue(
+        'oauth-site-url-guidance',
+        'OAuth is recorded in metadata but the setup files do not mention SITE_URL.',
+        'Document the required SITE_URL deployment setting in README.md, CONVEX_AUTH_SETUP.md, or packages/backend/.env.convex-auth.example.',
+        'warning',
+      );
+    else
+      result.checks.push(
+        'OAuth SITE_URL setup guidance exists; deployment settings were not checked.',
+      );
   }
   const backend = await manifest('packages/backend/package.json');
   const backendName = typeof backend.name === 'string' ? backend.name : '';
@@ -421,7 +504,7 @@ export async function doctor(
       issue(
         'backend-declarations',
         `The backend ${key} declaration is missing or unsafe.`,
-        `Run pnpm --filter ${backendName || './packages/backend'} exec convex codegen after reviewing the deployment configuration.`,
+        `Run ${config.packageManager === 'bun' ? 'bun run --cwd packages/backend convex codegen' : `pnpm --filter ${backendName || './packages/backend'} exec convex codegen`} after reviewing the deployment configuration.`,
       );
     } else
       result.checks.push(`Backend ${key} declaration exists (${expected}).`);
@@ -443,7 +526,7 @@ export async function doctor(
     issue(
       'backend-url',
       'The backend CONVEX_URL is missing or invalid.',
-      'Run pnpm convex:setup to configure the backend deployment.',
+      `Run ${scriptCommand(config.packageManager, 'convex:setup')} to configure the backend deployment.`,
     );
   else result.checks.push('Backend CONVEX_URL is a valid HTTP(S) origin.');
   const resolved = new Map<string, Map<string, string>>();
@@ -464,7 +547,7 @@ export async function doctor(
         issue(
           'dependency-missing',
           `${directory || 'root'} does not declare ${name}.`,
-          'Restore the required dependency and run pnpm install.',
+          `Restore the required dependency and run ${config.packageManager} install.`,
         );
         continue;
       }
@@ -473,7 +556,7 @@ export async function doctor(
         issue(
           'dependency-uninstalled',
           `${name} cannot be resolved from ${directory || 'root'}.`,
-          'Run pnpm install from the workspace root.',
+          `Run ${config.packageManager} install from the workspace root.`,
         );
         continue;
       }
@@ -485,14 +568,14 @@ export async function doctor(
         issue(
           'dependency-version',
           `${directory || 'root'} resolves ${name}@${installed}, which differs from its declared version.`,
-          'Run pnpm install and review the lockfile.',
+          `Run ${config.packageManager} install and review the lockfile.`,
         );
       }
       if (baselines[name] && baselines[name] !== installed) {
         issue(
           'dependency-baseline',
           `${directory || 'root'} resolves ${name}@${installed}, outside this CLI’s tested baseline.`,
-          'Run npx create-convex-monorepo@latest upgrade, then pnpm install.',
+          `Run npx create-convex-monorepo@latest upgrade, then ${config.packageManager} install.`,
           'warning',
         );
       }
@@ -517,9 +600,19 @@ export async function doctor(
       ...(config.auth === 'clerk' && clerk[app.framework]
         ? [clerk[app.framework]!]
         : []),
+      ...(config.auth === 'workos' && workos[app.framework]
+        ? [workos[app.framework]!]
+        : []),
+      ...(config.auth === 'workos' &&
+      (app.framework === 'next' || app.framework === 'tanstack-start')
+        ? ['@workos-inc/node']
+        : []),
       ...(config.auth === 'convex-auth' ? ['@convex-dev/auth'] : []),
       ...(config.auth === 'convex-auth' && app.framework === 'expo'
         ? ['expo-secure-store']
+        : []),
+      ...(hasOAuth && app.framework === 'expo'
+        ? ['expo-web-browser', 'expo-linking']
         : []),
     ]);
     if (
@@ -549,9 +642,13 @@ export async function doctor(
       const values = await environment(directory, [filename]);
       for (const secret of [
         'CLERK_SECRET_KEY',
+        'WORKOS_API_KEY',
+        'WORKOS_COOKIE_PASSWORD',
         'CONVEX_DEPLOY_KEY',
         'JWT_PRIVATE_KEY',
         'JWKS',
+        'AUTH_GITHUB_SECRET',
+        'AUTH_GOOGLE_SECRET',
       ]) {
         if (
           ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'PUBLIC'].some(
@@ -573,7 +670,7 @@ export async function doctor(
       issue(
         'app-url',
         `${directory} has a missing or invalid ${key}.`,
-        'Run pnpm convex:link after configuring the backend.',
+        `Run ${scriptCommand(config.packageManager, 'convex:link')} after configuring the backend.`,
       );
     else if (
       validUrl(backendUrl) &&
@@ -582,14 +679,16 @@ export async function doctor(
       issue(
         'app-url-mismatch',
         `${directory} ${key} does not match the backend deployment URL.`,
-        'Run pnpm convex:link, then restart the app.',
+        `Run ${scriptCommand(config.packageManager, 'convex:link')}, then restart the app.`,
       );
     } else if (validUrl(backendUrl))
       result.checks.push(`${directory} uses the backend deployment URL.`);
     if (config.auth === 'clerk') {
       const required = [
         `${prefix}_CLERK_PUBLISHABLE_KEY`,
-        ...(app.framework === 'next' || app.framework === 'tanstack-start'
+        ...(app.framework === 'next' ||
+        app.framework === 'tanstack-start' ||
+        app.framework === 'react-router'
           ? ['CLERK_SECRET_KEY']
           : []),
       ];
@@ -601,6 +700,24 @@ export async function doctor(
             'Set the key in this app’s private .env.local.',
           );
     }
+    if (config.auth === 'workos') {
+      const required = [
+        `${prefix}_WORKOS_CLIENT_ID`,
+        app.framework === 'tanstack-start'
+          ? 'WORKOS_REDIRECT_URI'
+          : `${prefix}_WORKOS_REDIRECT_URI`,
+        ...(app.framework === 'next' || app.framework === 'tanstack-start'
+          ? ['WORKOS_CLIENT_ID', 'WORKOS_API_KEY', 'WORKOS_COOKIE_PASSWORD']
+          : []),
+      ];
+      for (const name of required)
+        if (!env.get(name))
+          issue(
+            'auth-env-missing',
+            `${directory} is missing ${name}.`,
+            'Set the value in this app’s private .env.local.',
+          );
+    }
     if ((await text(`${directory}/tsconfig.json`)) === null)
       issue(
         'app-tsconfig',
@@ -608,6 +725,35 @@ export async function doctor(
         'Restore the app TypeScript configuration.',
       );
     if (app.framework === 'expo') {
+      if (hasOAuth) {
+        const path = `${directory}/app.json`;
+        const source = await text(path);
+        let scheme: unknown;
+        try {
+          const parsed: unknown = JSON.parse(source ?? '{}');
+          scheme = object(object(parsed).expo).scheme;
+        } catch {
+          // Invalid JSON is reported with the same repair as a missing scheme.
+        }
+        const schemes = Array.isArray(scheme) ? scheme : [scheme];
+        if (
+          schemes.length === 0 ||
+          !schemes.every(
+            (value) =>
+              typeof value === 'string' &&
+              /^[A-Za-z][A-Za-z0-9+.-]*$/.test(value),
+          )
+        )
+          issue(
+            'expo-oauth-scheme',
+            `${path} has no valid expo.scheme for OAuth redirects.`,
+            'Set expo.scheme to a nonempty URI scheme, use it in the OAuth redirectTo URL, and rebuild the development app.',
+          );
+        else
+          result.checks.push(
+            `${path} declares an OAuth redirect scheme; provider registration and native redirects were not checked.`,
+          );
+      }
       const metro =
         (await text(`${directory}/metro.config.cjs`)) ??
         (await text(`${directory}/metro.config.js`));
@@ -672,9 +818,13 @@ export async function doctor(
       issue(
         'dependency-incompatible',
         `Workspace packages resolve different ${name} versions.`,
-        `Align ${name} versions across packages and run pnpm install.`,
+        `Align ${name} versions across packages and run ${config.packageManager} install.`,
       );
   }
+  if (config.auth === 'workos')
+    result.checks.push(
+      'WorkOS issuer and client ID configuration requires a separate Convex deployment check; no remote secrets were read.',
+    );
   if (config.auth === 'clerk')
     result.checks.push(
       'Clerk deployment issuer configuration requires a separate Convex deployment check; no remote secrets were read.',

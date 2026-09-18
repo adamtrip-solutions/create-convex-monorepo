@@ -1,3 +1,4 @@
+import { scriptCommand } from '../../../package-manager/index.js';
 import type { AuthAdapter, Framework } from '../../../generator/types.js';
 import { versions as v } from '../../../templates/versions.js';
 import { platform, writeProviders } from '../shared.js';
@@ -6,6 +7,7 @@ const bindings: Partial<Record<Framework, { sdk: string; version: string }>> = {
   next: { sdk: '@clerk/nextjs', version: v.clerkNext },
   vite: { sdk: '@clerk/react', version: v.clerkReact },
   'tanstack-start': { sdk: '@clerk/tanstack-react-start', version: '1.5.12' },
+  'react-router': { sdk: '@clerk/react-router', version: v.clerkReactRouter },
   expo: { sdk: '@clerk/expo', version: v.clerkExpo },
 };
 
@@ -59,7 +61,7 @@ export default { providers: [{ domain, applicationID: 'convex' }] } satisfies Au
       });
       await ctx.write(
         `${dir}/.env.clerk.example`,
-        `# Append these values to .env.local alongside the Convex URL.\n${prefix}_CLERK_PUBLISHABLE_KEY=\n${app.framework === 'next' || app.framework === 'tanstack-start' ? '# Server only. Never prefix this with NEXT_PUBLIC_, VITE_ or EXPO_PUBLIC_.\nCLERK_SECRET_KEY=\n' : ''}${native ? `# Enable Google OAuth and Native API in Clerk.\n# Register redirect URL: ccm-${ctx.options.name}-${app.name}://continue\n# Build a development client with pnpm ios or pnpm android for this scheme.\n` : ''}`,
+        `# Append these values to .env.local alongside the Convex URL.\n${prefix}_CLERK_PUBLISHABLE_KEY=\n${app.framework === 'next' || app.framework === 'tanstack-start' || app.framework === 'react-router' ? '# Server only. Never prefix this with NEXT_PUBLIC_, VITE_ or EXPO_PUBLIC_.\nCLERK_SECRET_KEY=\n' : ''}${native ? `# Enable Google OAuth and Native API in Clerk.\n# Register redirect URL: ccm-${ctx.options.name}-${app.name}://continue\n# Build a development client with ${scriptCommand(ctx.options.packageManager, 'ios')} or ${scriptCommand(ctx.options.packageManager, 'android')} for this scheme.\n` : ''}`,
       );
       await writeProviders(ctx, app, {
         sdk: binding.sdk,

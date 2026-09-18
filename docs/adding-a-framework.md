@@ -33,3 +33,9 @@ Add focused output assertions, option-selection coverage, and representative gen
 Add the framework's dependency expectations and diagnostic checks to `src/workspace/doctor.ts`. Verify that `add app` renders the framework at its real workspace index so development ports remain distinct. Add command tests for a new app next to an existing customized app, both starter choices, inherited auth, automatic URL linking, and a dry run. Extend the command E2E matrix to install and build the added framework.
 
 The add planner uses the same template as project creation. It copies only the new application's files and updates workspace metadata and root scripts. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
+
+## React Router root authentication
+
+The `react-router` adapter uses the upstream `app/` route layout while retaining shared components and auth files in `src/`. `app/root.tsx` mounts `Providers` around the outlet and re-exports `loader` and `middleware` from adapter-owned `src/auth.server.ts`. Each auth adapter writes that module. Clerk supplies its SSR session loader and middleware; the other adapters return null and an empty middleware list. These hooks do not load Convex data. The home route mounts `AuthControls` and the shared starter content.
+
+Keep `.react-router` type output and `build` output out of lint, formatting, and version control. The app's Turbo config records `build/**` even when it is added to an older workspace. Adding this framework also extends an older root `.prettierignore` without replacing existing settings.

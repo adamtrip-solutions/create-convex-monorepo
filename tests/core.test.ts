@@ -84,15 +84,47 @@ describe('options', () => {
     { apps: [] },
     { auth: 'custom' },
     { packageManager: 'npm' },
+    { packageManager: 'yarn' },
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
-  it.each(['none', 'clerk', 'convex-auth'])(
+  it.each(['none', 'clerk', 'convex-auth', 'workos'])(
     'accepts %s auth through CLI options',
     (auth) => {
       expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(
         auth,
       );
+    },
+  );
+  it.each(['react-router', 'web:react-router'])(
+    'accepts %s through CLI options',
+    (apps) => {
+      expect(normalizeOptions(parseCommand(['--apps', apps]).raw).apps).toEqual(
+        [{ name: 'web', framework: 'react-router' }],
+      );
+      expect(selectTemplate('react-router').id).toBe('react-router');
+    },
+  );
+  it.each(['pnpm', 'bun'])(
+    'accepts %s through the package-manager flag',
+    (manager) => {
+      expect(
+        normalizeOptions(parseCommand(['--package-manager', manager]).raw)
+          .packageManager,
+      ).toBe(manager);
+    },
+  );
+  it('defaults to pnpm', () => {
+    expect(normalizeOptions({}).packageManager).toBe('pnpm');
+  });
+  it.each(['npm', 'yarn'])(
+    'rejects %s before creating files',
+    async (manager) => {
+      const cwd = await temp();
+      await expect(
+        generateProject({ name: 'invalid', packageManager: manager }, { cwd }),
+      ).rejects.toThrow('Choose pnpm or bun');
+      expect(await readdir(cwd)).toEqual([]);
     },
   );
   it('selects framework adapters', () =>
@@ -150,6 +182,30 @@ describe('context', () => {
   });
 });
 describe('generation safety', () => {
+  it.each(['react-router', 'next,router:react-router'])(
+    'rejects unsupported WorkOS apps %s during normalization and before writing output',
+    async (apps) => {
+      const cwd = await temp();
+      const raw = { name: 'unsupported', apps, auth: 'workos' };
+      expect(() => normalizeOptions(raw)).toThrow(/framework "react-router"/);
+      await expect(generateProject(raw, { cwd })).rejects.toThrow(
+        /Choose next, vite, tanstack-start/,
+      );
+      expect(await readdir(cwd)).toEqual([]);
+    },
+  );
+
+  it.each(['expo', 'next,expo', 'expo,vite', 'tanstack-start,mobile:expo'])(
+    'rejects unsupported WorkOS apps %s before writing output',
+    async (apps) => {
+      const cwd = await temp();
+      await expect(
+        generateProject({ name: 'unsupported', apps, auth: 'workos' }, { cwd }),
+      ).rejects.toThrow(/expo/i);
+      expect(await readdir(cwd)).toEqual([]);
+    },
+  );
+
   it('refuses nonempty directories without modifying files', async () => {
     const cwd = await temp();
     await mkdir(join(cwd, 'existing'));
@@ -301,7 +357,7 @@ describe('SvelteKit options', () => {
       expect(selectTemplate('sveltekit').label).toBe('SvelteKit');
     },
   );
-  it.each(['clerk', 'convex-auth', 'custom'])(
+  it.each(['clerk', 'convex-auth', 'workos', 'custom'])(
     'rejects SvelteKit with %s before writing files',
     async (auth) => {
       const cwd = await temp();
@@ -317,3 +373,40 @@ describe('SvelteKit options', () => {
     },
   );
 });
+
+it('installs bun projects with the selected package manager', async () => {
+  const install = vi
+    .spyOn(packageManager.bun, 'install')
+    .mockResolvedValueOnce();
+  const other = vi
+    .spyOn(packageManager.pnpm, 'install')
+    .mockResolvedValueOnce();
+  const root = await generateProject(
+    { name: 'bun-install', apps: 'vite', packageManager: 'bun', install: true },
+    { cwd: await temp() },
+  );
+  expect(install).toHaveBeenCalledWith(root, undefined);
+  expect(other).not.toHaveBeenCalled();
+});
+
+it.each(['pnpm', 'bun'])(
+  'rejects SvelteKit Convex Auth OAuth with %s before writing files',
+  async (packageManager) => {
+    const cwd = await temp();
+    for (const apps of ['sveltekit', 'react-router,sveltekit']) {
+      await expect(
+        generateProject(
+          {
+            name: 'rejected',
+            apps,
+            auth: 'convex-auth',
+            oauth: 'github,google',
+            packageManager,
+          },
+          { cwd },
+        ),
+      ).rejects.toThrow('SvelteKit currently supports only --auth none');
+      expect(await readdir(cwd)).toEqual([]);
+    }
+  },
+);
