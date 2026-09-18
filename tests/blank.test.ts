@@ -33,6 +33,7 @@ describe.each(['none', 'clerk', 'convex-auth', 'workos'])(
             'vite',
             'tanstack-start',
             'expo',
+            'astro',
             'react-router',
             'next,admin:vite,portal:tanstack-start,expo',
             'next,admin:vite,portal:tanstack-start,expo,router:react-router',
@@ -82,9 +83,11 @@ describe.each(['none', 'clerk', 'convex-auth', 'workos'])(
                 ? 'src/main.tsx'
                 : app.framework === 'expo'
                   ? 'App.tsx'
-                  : app.framework === 'react-router'
-                    ? 'app/routes/home.tsx'
-                    : 'src/routes/index.tsx';
+                  : app.framework === 'astro'
+                    ? 'src/App.tsx'
+                    : app.framework === 'react-router'
+                      ? 'app/routes/home.tsx'
+                      : 'src/routes/index.tsx';
           expect(await read(`${dir}/${entry}`)).toContain(
             app.framework === 'expo'
               ? `<Text>${app.name}</Text>`

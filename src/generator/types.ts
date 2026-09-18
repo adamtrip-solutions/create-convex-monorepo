@@ -3,7 +3,8 @@ export type Framework =
   | 'vite'
   | 'tanstack-start'
   | 'react-router'
-  | 'expo';
+  | 'expo'
+  | 'astro';
 export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos';
 export type OAuthProvider = 'github' | 'google';
 export type PackageManagerId = 'pnpm' | 'bun';

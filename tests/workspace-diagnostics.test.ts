@@ -110,7 +110,7 @@ describe('workspace doctor', () => {
     ).toEqual([]);
     expect(JSON.stringify(report)).not.toContain('never-expose-this');
   });
-  it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'])(
+  it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'PUBLIC'])(
     'reports %s signing values in every app environment file without exposing them',
     async (prefix) => {
       const workspace = await fixture('web:next', 'convex-auth');
@@ -932,6 +932,76 @@ describe('upgrade check', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await rejected;
   });
+});
+
+it('checks Astro dependencies, public URL and Clerk binding without requiring a server secret', async () => {
+  const workspace = await fixture('astro', 'clerk');
+  const initial = await doctor(workspace);
+  for (const name of [
+    'astro',
+    '@astrojs/react',
+    '@astrojs/check',
+    '@clerk/astro',
+  ]) {
+    expect(initial.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'dependency-uninstalled',
+        message: `${name} cannot be resolved from apps/web.`,
+      }),
+    );
+  }
+  expect(
+    initial.issues.filter((issue) => issue.code === 'auth-env-missing'),
+  ).toEqual([
+    expect.objectContaining({
+      message: 'apps/web is missing PUBLIC_CLERK_PUBLISHABLE_KEY.',
+    }),
+  ]);
+  await put(
+    workspace.root,
+    'packages/backend/.env.local',
+    'CONVEX_URL=https://example.convex.cloud\n',
+  );
+  await put(
+    workspace.root,
+    'apps/web/.env.local',
+    'PUBLIC_CONVEX_URL=https://example.convex.cloud\nPUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder\n',
+  );
+  const configured = await doctor(workspace);
+  expect(
+    configured.issues.filter((issue) =>
+      ['app-url', 'app-url-mismatch', 'auth-env-missing'].includes(issue.code),
+    ),
+  ).toEqual([]);
+  const path = join(workspace.root, 'apps/web/package.json');
+  const pkg = JSON.parse(await readFile(path, 'utf8'));
+  delete pkg.dependencies['@clerk/astro'];
+  await writeFile(path, JSON.stringify(pkg));
+  expect((await doctor(workspace)).issues).toContainEqual(
+    expect.objectContaining({
+      code: 'dependency-missing',
+      message: 'apps/web does not declare @clerk/astro.',
+    }),
+  );
+});
+
+it('reports missing Astro Clerk integration and middleware files', async () => {
+  const workspace = await fixture('astro', 'clerk');
+  for (const file of [
+    'astro.config.mjs',
+    'auth.config.mjs',
+    'src/middleware.ts',
+  ])
+    await rm(join(workspace.root, 'apps/web', file));
+  expect(
+    (await doctor(workspace)).issues
+      .filter((issue) => issue.code === 'astro-config-missing')
+      .map((issue) => issue.message),
+  ).toEqual([
+    'apps/web/astro.config.mjs is missing.',
+    'apps/web/auth.config.mjs is missing.',
+    'apps/web/src/middleware.ts is missing.',
+  ]);
 });
 
 it.each([

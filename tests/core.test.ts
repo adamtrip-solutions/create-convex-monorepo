@@ -78,7 +78,7 @@ describe('options', () => {
   it.each([
     { apps: 'next,' },
     { apps: 'x:next,x:vite' },
-    { apps: 'astro' },
+    { apps: 'unsupported' },
     { apps: 'backend:next' },
     { apps: 'eslint-config:vite' },
     { apps: [] },
@@ -340,6 +340,27 @@ describe('setup recovery and cancellation', () => {
   });
 });
 
+it.each(['none', 'clerk', 'convex-auth'])(
+  'selects Astro with every framework and %s auth',
+  (auth) => {
+    const raw = parseCommand([
+      '--apps',
+      'astro,next,vite,tanstack-start,expo,router:react-router,island:astro',
+      '--auth',
+      auth,
+    ]).raw;
+    expect(normalizeOptions(raw).apps).toEqual([
+      { name: 'web', framework: 'astro' },
+      { name: 'app', framework: 'next' },
+      { name: 'admin', framework: 'vite' },
+      { name: 'app-2', framework: 'tanstack-start' },
+      { name: 'mobile', framework: 'expo' },
+      { name: 'router', framework: 'react-router' },
+      { name: 'island', framework: 'astro' },
+    ]);
+    expect(selectTemplate('astro').label).toBe('Astro + React island');
+  },
+);
 it('installs bun projects with the selected package manager', async () => {
   const install = vi
     .spyOn(packageManager.bun, 'install')
@@ -354,3 +375,24 @@ it('installs bun projects with the selected package manager', async () => {
   expect(install).toHaveBeenCalledWith(root, undefined);
   expect(other).not.toHaveBeenCalled();
 });
+
+// Unsupported combinations must fail in normalization, before generation writes.
+it.each(['pnpm', 'bun'])(
+  'rejects WorkOS with static Astro before writing a %s project',
+  async (packageManager) => {
+    const options = {
+      name: 'unsupported',
+      apps: 'astro',
+      auth: 'workos',
+      packageManager,
+    };
+    expect(() => normalizeOptions(options)).toThrow(
+      'The Astro template uses static output',
+    );
+    const cwd = await temp();
+    await expect(generateProject(options, { cwd })).rejects.toThrow(
+      'is not supported by this generator for framework "astro"',
+    );
+    expect(await readdir(cwd)).toEqual([]);
+  },
+);

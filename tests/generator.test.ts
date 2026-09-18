@@ -497,9 +497,13 @@ describe('generated project golden matrix', () => {
           const env = await read(`${dir}/.env.clerk.example`);
           expect(env).toContain(`${prefix}_CLERK_PUBLISHABLE_KEY=\n`);
           expect(env).not.toMatch(
-            /(?:NEXT_PUBLIC|VITE|EXPO_PUBLIC)_CLERK_SECRET_KEY\s*=/,
+            /(?:NEXT_PUBLIC|VITE|EXPO_PUBLIC|PUBLIC)_CLERK_SECRET_KEY\s*=/,
           );
-          if (framework === 'expo' || framework === 'vite')
+          if (
+            framework === 'expo' ||
+            framework === 'vite' ||
+            framework === 'astro'
+          )
             expect(env).not.toContain('CLERK_SECRET_KEY=');
           expect(providers).not.toContain('CLERK_SECRET_KEY');
         } else {
@@ -515,6 +519,41 @@ describe('generated project golden matrix', () => {
           expect(await read(`${dir}/src/app/page.tsx`)).toContain(
             '<Providers>',
           );
+        } else if (framework === 'astro') {
+          expect(app.dependencies).toMatchObject({
+            astro: versions.astro,
+            '@astrojs/react': versions.astroReact,
+          });
+          expect(app.devDependencies?.['@astrojs/check']).toBe(
+            versions.astroCheck,
+          );
+          expect(app.scripts).toMatchObject({
+            dev: `astro dev --port ${3000 + config.apps.findIndex((entry) => entry.name === name)}`,
+            build: 'astro build',
+            preview: 'astro preview',
+            typecheck: 'astro check',
+          });
+          expect(await read(`${dir}/astro.config.mjs`)).toContain(
+            "output: 'static'",
+          );
+          expect(await read(`${dir}/src/pages/index.astro`)).toContain(
+            '<App client:only="react" />',
+          );
+          expect(await read(`${dir}/src/App.tsx`)).toContain('<Providers>');
+          expect(providers).toContain('import.meta.env.PUBLIC_CONVEX_URL');
+          expect(await read('README.md')).toContain('PUBLIC_CONVEX_URL');
+          if (scenario.auth === 'clerk') {
+            expect(providers).toContain("from '@clerk/astro/react'");
+            expect(providers).not.toContain('<ClerkProvider');
+            expect(await read(`${dir}/auth.config.mjs`)).toContain('clerk()');
+            expect(await read(`${dir}/src/middleware.ts`)).toContain(
+              'clerkMiddleware()',
+            );
+          } else {
+            expect(await read(`${dir}/auth.config.mjs`)).toBe(
+              'export default [];\n',
+            );
+          }
         } else if (framework === 'tanstack-start') {
           expect(app.scripts?.typecheck).toBe('tsr generate && tsc --noEmit');
           expect(await read(`${dir}/vite.config.ts`)).toContain(
