@@ -61,6 +61,15 @@ jobs:
             auth: none
           - apps: tanstack-start
             auth: none
+          - apps: react-router
+            auth: none
+          - apps: react-router,expo
+            auth: clerk
+          - apps: react-router,vite
+            auth: convex-auth
+          - apps: react-router,vite
+            auth: convex-auth
+            packageManager: bun
           - apps: expo
             auth: none
           - apps: next,expo
@@ -79,6 +88,45 @@ jobs:
             auth: convex-auth
           - apps: vite,tanstack-start
             auth: convex-auth
+          - apps: next,vite,tanstack-start,react-router,expo
+            auth: convex-auth
+            example: none
+          - apps: next,vite,tanstack-start,react-router,expo
+            auth: none
+            example: none
+          - apps: next,vite,tanstack-start,react-router,expo
+            auth: clerk
+            example: none
+          - apps: next,admin:vite,portal:tanstack-start,router:react-router,expo
+            auth: clerk
+            example: messages
+            workspaceCommands: '1'
+          - apps: next,admin:vite,portal:tanstack-start,router:react-router,expo
+            auth: clerk
+            example: none
+            workspaceCommands: '1'
+          - apps: next,vite,tanstack-start,expo
+            auth: none
+            packageManager: bun
+          - apps: next,vite,tanstack-start,expo
+            auth: clerk
+            packageManager: bun
+          - apps: next,vite,tanstack-start,expo
+            auth: convex-auth
+            packageManager: bun
+          - apps: next,vite,tanstack-start,expo
+            auth: none
+            example: none
+            packageManager: bun
+          - apps: next,vite,tanstack-start,expo
+            auth: clerk
+            example: none
+            packageManager: bun
+            workspaceCommands: '1'
+          - apps: next,vite,tanstack-start,expo
+            auth: convex-auth
+            example: none
+            packageManager: bun
           - apps: next,vite,tanstack-start,expo
             auth: convex-auth
             example: none
@@ -96,28 +144,6 @@ jobs:
             auth: clerk
             example: none
             workspaceCommands: '1'
-          - apps: next,vite,tanstack-start,expo
-            auth: none
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: clerk
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: convex-auth
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: none
-            example: none
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: clerk
-            example: none
-            packageManager: bun
-            workspaceCommands: '1'
-          - apps: next,vite,tanstack-start,expo
-            auth: convex-auth
-            example: none
-            packageManager: bun
           - apps: next,vite,tanstack-start
             auth: workos
             example: messages

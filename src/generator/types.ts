@@ -1,4 +1,9 @@
-export type Framework = 'next' | 'vite' | 'tanstack-start' | 'expo';
+export type Framework =
+  | 'next'
+  | 'vite'
+  | 'tanstack-start'
+  | 'react-router'
+  | 'expo';
 export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos';
 export type PackageManagerId = 'pnpm' | 'bun';
 export type Example = 'none' | 'messages';

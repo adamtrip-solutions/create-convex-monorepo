@@ -463,6 +463,70 @@ describe('generated project golden matrix', () => {
           expect(await read(`${dir}/src/routes/index.tsx`)).toContain(
             "createFileRoute('/')",
           );
+        } else if (framework === 'react-router') {
+          expect(app.scripts).toMatchObject({
+            dev: 'react-router dev',
+            build: 'react-router build',
+            start: 'react-router-serve ./build/server/index.js',
+            typecheck: 'react-router typegen && tsc',
+            lint: 'eslint .',
+          });
+          for (const dependency of [
+            'react-router',
+            '@react-router/node',
+            '@react-router/serve',
+          ])
+            expect(app.dependencies).toHaveProperty(dependency);
+          expect(app.devDependencies).toHaveProperty('@react-router/dev');
+          expect(await json(`${dir}/turbo.json`)).toEqual({
+            extends: ['//'],
+            tasks: { build: { outputs: ['build/**'] } },
+          });
+          expect(await read(`${dir}/.gitignore`)).toBe(
+            '/.react-router/\n/build/\n',
+          );
+          expect(await read(`${dir}/eslint.config.js`)).toContain(
+            '**/.react-router/**',
+          );
+          expect(await read(`${dir}/eslint.config.js`)).toContain(
+            '**/build/**',
+          );
+
+          expect(await read(`${dir}/react-router.config.ts`)).toContain(
+            'ssr: true',
+          );
+          expect(await read(`${dir}/react-router.config.ts`)).toContain(
+            'v8_middleware: true',
+          );
+          expect(await read(`${dir}/vite.config.ts`)).toContain(
+            'reactRouter()',
+          );
+          expect(await read(`${dir}/app/routes.ts`)).toContain(
+            "index('routes/home.tsx')",
+          );
+          const rootEntry = await read(`${dir}/app/root.tsx`);
+          expect(rootEntry).toContain('<Providers>');
+          expect(rootEntry).toContain('<Outlet');
+          expect(rootEntry).toContain('../src/auth.server');
+          const route = await read(`${dir}/app/routes/home.tsx`);
+          expect(route).toContain('<AuthControls');
+          expect(route).not.toMatch(
+            /export (?:async )?function loader|export const loader/,
+          );
+          expect(providers).toContain('import.meta.env.VITE_CONVEX_URL');
+          const serverAuth = await read(`${dir}/src/auth.server.ts`);
+          if (scenario.auth === 'clerk') {
+            expect(serverAuth).toContain('rootAuthLoader');
+            expect(serverAuth).toContain('clerkMiddleware');
+            expect(serverAuth).toContain('@clerk/react-router/server');
+            expect(await read(`${dir}/.env.clerk.example`)).toContain(
+              'CLERK_SECRET_KEY=',
+            );
+            expect(providers).toContain('useRouteLoaderData');
+            expect(providers).toContain('loaderData={loaderData}');
+          } else {
+            expect(serverAuth).not.toContain('@clerk/');
+          }
         } else if (framework === 'expo') {
           expect(app.dependencies).toMatchObject({
             expo: versions.expo,
