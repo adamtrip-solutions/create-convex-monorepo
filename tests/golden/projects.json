@@ -114,5 +114,83 @@
     "auth": "convex-auth",
     "example": "none",
     "expected": [["web", "vite", "VITE", "@convex-dev/auth"]]
+  },
+  {
+    "label": "Convex Auth OAuth github,google all frameworks messages",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "example": "messages",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Convex Auth OAuth github all frameworks messages",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "github",
+    "example": "messages",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Convex Auth OAuth google all frameworks messages",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "google",
+    "example": "messages",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Convex Auth OAuth github,google all frameworks none",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "example": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Convex Auth OAuth github all frameworks none",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "github",
+    "example": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Convex Auth OAuth google all frameworks none",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "oauth": "google",
+    "example": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "@convex-dev/auth"],
+      ["admin", "vite", "VITE", "@convex-dev/auth"],
+      ["app", "tanstack-start", "VITE", "@convex-dev/auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@convex-dev/auth"]
+    ]
   }
 ]

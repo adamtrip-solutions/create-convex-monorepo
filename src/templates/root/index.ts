@@ -34,6 +34,19 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
       ),
     );
     scripts['convex:auth-keys'] = 'node scripts/convex-auth-keys.mjs';
+    if (options.oauth?.length) {
+      await ctx.write(
+        'scripts/convex-auth-site.mjs',
+        await readFile(
+          new URL(
+            '../../../assets/setup/convex-auth-site.mjs',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      );
+      scripts['convex:auth-site'] = 'node scripts/convex-auth-site.mjs';
+    }
   }
   for (const app of options.apps)
     scripts[`dev:${app.name}`] = `pnpm --filter @${scope}/${app.name} dev`;
@@ -94,6 +107,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     monorepo: 'turbo',
     apps: options.apps,
     auth: options.auth,
+    ...(options.oauth?.length ? { oauth: options.oauth } : {}),
     example: options.example,
   });
   await ctx.json('packages/typescript-config/package.json', {
@@ -183,7 +197,7 @@ Expo uses Google OAuth. Enable Google's connection and the Native API in Clerk. 
 ${options.example === 'messages' ? 'The backend checks identity and uses an owner index to keep messages private. All frontends share the same identity and messages when signed into the same account.' : 'Clerk is configured, but there are no backend functions yet. Check ctx.auth.getUserIdentity() and enforce authorization in each protected function you add.'}
 `
     : options.auth === 'convex-auth'
-      ? convexAuthSetup(scope, options.example === 'messages')
+      ? convexAuthSetup(scope, options.example === 'messages', options.oauth)
       : options.example === 'none'
         ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run pnpm convex:dev to regenerate the shared API.\n`
         : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.

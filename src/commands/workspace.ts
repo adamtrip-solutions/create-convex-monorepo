@@ -1,6 +1,11 @@
 import * as prompts from '@clack/prompts';
 import { parseArgs } from 'node:util';
-import { frameworks, validateProjectName } from '../generator/options.js';
+import {
+  frameworks,
+  normalizeOAuthProviders,
+  oauthProviders,
+  validateProjectName,
+} from '../generator/options.js';
 import type { Example, Framework } from '../generator/types.js';
 import { pnpm } from '../package-manager/index.js';
 import { loadWorkspace } from '../workspace/project.js';
@@ -20,6 +25,7 @@ Manage an existing Convex monorepo from its root or any subdirectory.
     --example <name>        none or messages (defaults to workspace example)
   add package [name]        Add a blank shared TypeScript package
   add auth [clerk|convex-auth]  Add authentication
+    --oauth <providers>     github,google (Convex Auth only)
   doctor [--json]           Check workspace configuration and setup
   env sync [--app name]     Copy public Convex URLs to frontend env files
   upgrade                  Update exact dependency pins to the tested baseline
@@ -57,6 +63,7 @@ export interface WorkspaceCommand {
   framework?: Framework;
   example?: Example;
   provider?: 'clerk' | 'convex-auth';
+  oauth?: string | readonly string[];
   app?: string;
   install?: boolean;
   yes: boolean;
@@ -74,6 +81,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
       version: { type: 'boolean', short: 'v' },
       framework: { type: 'string' },
       example: { type: 'string' },
+      oauth: { type: 'string' },
       app: { type: 'string' },
       install: { type: 'boolean' },
       'no-install': { type: 'boolean' },
@@ -108,7 +116,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     } else if (second === 'auth') {
       command = 'add-auth';
       maximum = 3;
-      allowed = addFlags;
+      allowed = [...addFlags, 'oauth'];
     } else
       throw new Error(
         'Use add app [name], add package [name], or add auth [clerk|convex-auth].',
@@ -161,6 +169,8 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     third !== 'convex-auth'
   )
     throw new Error('Choose add auth clerk or add auth convex-auth.');
+  if (values.oauth !== undefined && third !== undefined)
+    normalizeOAuthProviders(values.oauth, third);
   return {
     command,
     help: !!values.help || (command === 'help' && !values.version),
@@ -182,6 +192,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     ...(values.example !== undefined
       ? { example: values.example as Example }
       : {}),
+    ...(values.oauth !== undefined ? { oauth: values.oauth } : {}),
     ...(values.app !== undefined ? { app: values.app } : {}),
     ...(values.install || values['no-install']
       ? { install: !values['no-install'] }
@@ -279,6 +290,26 @@ export async function runWorkspace(
         : workspace.config.auth;
   }
   if (
+    options.command === 'add-auth' &&
+    options.provider === 'convex-auth' &&
+    workspace.config.auth === 'none' &&
+    options.oauth === undefined &&
+    interactive
+  ) {
+    const selected = answer(
+      await prompts.multiselect({
+        message: 'OAuth providers?',
+        options: oauthProviders.map((value) => ({
+          value,
+          label: value === 'github' ? 'GitHub' : 'Google',
+        })),
+        initialValues: [],
+        required: false,
+      }),
+    );
+    if (selected.length) options.oauth = selected;
+  }
+  if (
     options.command === 'add-app' &&
     options.example === undefined &&
     interactive
@@ -344,7 +375,11 @@ export async function runWorkspace(
             })
           : options.command === 'add-package'
             ? await planAddPackage(workspace, { name: options.name! })
-            : await planAddAuth(workspace, options.provider!);
+            : options.oauth !== undefined
+              ? await planAddAuth(workspace, options.provider!, {
+                  oauth: options.oauth,
+                })
+              : await planAddAuth(workspace, options.provider!);
   console.log(
     options.dryRun ? 'Dry run. Planned changes:' : 'Planned changes:',
   );

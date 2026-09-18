@@ -4,6 +4,7 @@ import { generateProject } from '../generator/index.js';
 import {
   frameworks,
   normalizeOptions,
+  oauthProviders,
   validateProjectName,
   type RawOptions,
 } from '../generator/options.js';
@@ -21,6 +22,7 @@ upgrade --check. No global or project installation is required.
   --apps <list>             next,vite,tanstack-start,expo or web:next,admin:vite
   --example <name>         messages (default) or none for blank apps
   --auth <provider>         none (default), clerk, or convex-auth
+  --oauth <providers>       github,google (requires --auth convex-auth)
   --package-manager <name>  pnpm (v0.1)
   --install / --no-install  Install generated dependencies
   --init-convex / --no-init-convex  Set up Convex and link URLs (requires install)
@@ -45,6 +47,7 @@ export function parseCommand(args: string[]): {
     options: {
       apps: { type: 'string' },
       auth: { type: 'string' },
+      oauth: { type: 'string' },
       example: { type: 'string' },
       'package-manager': { type: 'string' },
       'init-convex': { type: 'boolean' },
@@ -77,6 +80,7 @@ export function parseCommand(args: string[]): {
   if (positionals[0] !== undefined) raw.name = positionals[0];
   if (values.apps !== undefined) raw.apps = values.apps;
   if (values.auth !== undefined) raw.auth = values.auth;
+  if (values.oauth !== undefined) raw.oauth = values.oauth;
   if (values.example !== undefined) raw.example = values.example;
   if (values['package-manager'] !== undefined)
     raw.packageManager = values['package-manager'];
@@ -179,6 +183,18 @@ export async function runCreate(
             { value: 'clerk', label: 'Clerk' },
             { value: 'convex-auth', label: 'Convex Auth (email + password)' },
           ],
+        }),
+      );
+    if (raw.auth === 'convex-auth' && raw.oauth === undefined)
+      raw.oauth = answer(
+        await prompts.multiselect({
+          message: 'OAuth providers?',
+          options: oauthProviders.map((value) => ({
+            value,
+            label: value === 'github' ? 'GitHub' : 'Google',
+          })),
+          initialValues: [],
+          required: false,
         }),
       );
     if (raw.example === undefined)

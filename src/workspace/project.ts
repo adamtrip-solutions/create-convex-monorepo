@@ -1,7 +1,12 @@
 import { lstat, readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { normalizeOptions, validateProjectName } from '../generator/options.js';
-import type { AppSpec, Auth, Example } from '../generator/types.js';
+import type {
+  AppSpec,
+  Auth,
+  Example,
+  OAuthProvider,
+} from '../generator/types.js';
 
 export interface WorkspaceApp extends AppSpec {
   example?: Example;
@@ -15,6 +20,7 @@ export interface WorkspaceConfig {
   apps: WorkspaceApp[];
   packages?: Array<{ name: string }>;
   auth: Auth;
+  oauth?: OAuthProvider[];
   example: Example;
 }
 export interface Workspace {
@@ -112,6 +118,14 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     throw new Error(
       'Invalid convex-monorepo.json. Expected a named pnpm/Turborepo workspace with applications and a supported auth provider.',
     );
+  if (
+    value.oauth !== undefined &&
+    (!Array.isArray(value.oauth) ||
+      value.oauth.some((provider: unknown) => typeof provider !== 'string'))
+  )
+    throw new Error(
+      'Invalid oauth list in convex-monorepo.json. Expected an array of provider names.',
+    );
   if (value.packages !== undefined && !Array.isArray(value.packages))
     throw new Error(
       'Invalid packages list in convex-monorepo.json. Expected an array.',
@@ -159,6 +173,7 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     name: value.name,
     apps,
     auth: String(value.auth),
+    ...(value.oauth === undefined ? {} : { oauth: value.oauth as string[] }),
     ...(value.example === undefined ? {} : { example: String(value.example) }),
   });
   return {
@@ -170,6 +185,7 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     apps,
     packages,
     auth: options.auth,
+    ...(options.oauth ? { oauth: options.oauth } : {}),
     example: options.example,
   };
 }

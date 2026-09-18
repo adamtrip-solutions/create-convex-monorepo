@@ -10,7 +10,10 @@ import {
   equivalentGeneratedFile,
   formatGeneratedFile,
 } from '../generator/format.js';
-import { validateProjectName } from '../generator/options.js';
+import {
+  normalizeOAuthProviders,
+  validateProjectName,
+} from '../generator/options.js';
 import { versions } from '../templates/versions.js';
 import { readBackendEnvironment } from './env.js';
 import {
@@ -230,16 +233,27 @@ export async function planAddApp(
         ? ['auth.config.ts']
         : ['auth.config.ts', 'auth.ts', 'http.ts'];
     const label = workspace.config.auth === 'clerk' ? 'Clerk' : 'Convex Auth';
+    const baseline = workspace.config.oauth?.length
+      ? await render(
+          workspace,
+          workspace.config.apps,
+          example,
+          workspace.config.auth,
+        )
+      : generated;
     for (const name of files) {
       const path = `packages/backend/convex/${name}`;
-      if (
-        !(await equivalentGeneratedFile(
+      const current = await guardedRead(workspace, plan, path);
+      if (!(await equivalentGeneratedFile(path, current, baseline.get(path))))
+        throw new Error(
+          `Incompatible ${label} configuration in ${path}. Restore the generated configuration before adding an app, or integrate it manually.`,
+        );
+      if (baseline.get(path) !== generated.get(path))
+        plan.changes.push({
           path,
-          await guardedRead(workspace, plan, path),
-          generated.get(path),
-        ))
-      )
-        throw new Error(`Incompatible ${label} configuration in ${path}.`);
+          before: current,
+          after: retainNewlines(generated.get(path)!, current),
+        });
     }
   }
   for (const [path, after] of generated) {
@@ -569,9 +583,15 @@ async function patchAuthSchema(
 export async function planAddAuth(
   workspace: Workspace,
   provider: 'clerk' | 'convex-auth',
+  options: { oauth?: string | readonly string[] } = {},
 ): Promise<ChangePlan> {
   if (provider !== 'clerk' && provider !== 'convex-auth')
     throw new Error('Choose add auth clerk or add auth convex-auth.');
+  if (options.oauth !== undefined && workspace.config.auth !== 'none')
+    throw new Error(
+      'Authentication is already configured. Adding OAuth to an existing workspace requires manual edits. See the README OAuth instructions. No files were changed.',
+    );
+  const oauth = normalizeOAuthProviders(options.oauth, provider);
   const label = (auth: 'clerk' | 'convex-auth') =>
     auth === 'clerk' ? 'Clerk' : 'Convex Auth';
   if (workspace.config.auth !== 'none' && workspace.config.auth !== provider)
@@ -584,18 +604,18 @@ export async function planAddAuth(
     return plan;
   }
   await verifyWorkspace(workspace, plan);
-  const first = workspace.config.apps[0]!;
   const backendBefore = await render(
     workspace,
-    [first],
+    workspace.config.apps,
     workspace.config.example,
     'none',
   );
   const backendAfter = await render(
     workspace,
-    [first],
+    workspace.config.apps,
     workspace.config.example,
     provider,
+    oauth,
   );
   if (provider === 'clerk' && workspace.config.example === 'messages')
     await verifyMessages(workspace, plan, backendBefore);
@@ -647,6 +667,7 @@ export async function planAddAuth(
           'packages/backend/.env.convex-auth.example',
           'packages/backend/package.json',
           'scripts/convex-auth-keys.mjs',
+          'scripts/convex-auth-site.mjs',
           'package.json',
         ]
     ).includes(path),
@@ -697,9 +718,40 @@ export async function planAddAuth(
     );
   }
   for (const app of workspace.config.apps) {
+    if (oauth.length && app.framework === 'expo') {
+      const path = `apps/${app.name}/app.json`;
+      const current = await guardedRead(workspace, plan, path);
+      const expectedScheme = `ccm-${workspace.config.name}-${app.name}`;
+      let scheme: unknown;
+      try {
+        scheme = object(
+          object(JSON.parse(current ?? '{}'), path).expo,
+          path,
+        ).scheme;
+      } catch {
+        throw new Error(
+          `Conflict in ${path}: OAuth requires a valid app.json with expo.scheme set to "${expectedScheme}". No files were changed.`,
+        );
+      }
+      if (scheme !== expectedScheme)
+        throw new Error(
+          `Conflict in ${path}: OAuth requires expo.scheme to be "${expectedScheme}". Update the scheme before rerunning, or configure OAuth manually for your custom scheme. No files were changed.`,
+        );
+    }
     const example = app.example ?? workspace.config.example;
-    const baseline = await render(workspace, [app], example, 'none');
-    const target = await render(workspace, [app], example, provider);
+    const baseline = await render(
+      workspace,
+      workspace.config.apps,
+      example,
+      'none',
+    );
+    const target = await render(
+      workspace,
+      workspace.config.apps,
+      example,
+      provider,
+      oauth,
+    );
     await patchFiles(baseline, target, (path) =>
       path.startsWith(`apps/${app.name}/`),
     );
@@ -717,7 +769,10 @@ export async function planAddAuth(
     );
   if (existing === null)
     plan.changes.push({ path: setupPath, before: null, after: setup });
-  await metadata(workspace, plan, { auth: provider });
+  await metadata(workspace, plan, {
+    auth: provider,
+    ...(oauth.length ? { oauth } : {}),
+  });
   plan.notes.push(
     provider === 'clerk'
       ? 'Run pnpm install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.'

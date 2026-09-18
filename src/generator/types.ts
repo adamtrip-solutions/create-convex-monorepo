@@ -1,5 +1,6 @@
 export type Framework = 'next' | 'vite' | 'tanstack-start' | 'expo';
 export type Auth = 'none' | 'clerk' | 'convex-auth';
+export type OAuthProvider = 'github' | 'google';
 export type Example = 'none' | 'messages';
 export interface AppSpec {
   name: string;
@@ -9,6 +10,7 @@ export interface ProjectOptions {
   name: string;
   apps: AppSpec[];
   auth: Auth;
+  oauth?: OAuthProvider[];
   example: Example;
   packageManager: 'pnpm';
   install: boolean;

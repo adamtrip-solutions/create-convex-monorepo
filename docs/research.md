@@ -88,3 +88,11 @@ Clerk's issuer must exist on the deployment before its auth configuration can be
 ## Blank backend
 
 Verified `defineSchema({})` with the installed Convex 1.45.0 CLI using a normal anonymous local `convex dev --once`. It pushes successfully without registered functions. The official output uses `ApiFromModules<{}>` and derives the data model from the empty schema. Blank generation copies those artifacts unchanged from `assets/backend-blank`; it does not remove imports from the messages example's generated declarations. Keeping a schema preserves strict table-name types as users add tables. [Convex schemas](https://docs.convex.dev/database/schemas), [generated API](https://docs.convex.dev/generated-api/api).
+
+## Convex Auth OAuth
+
+The pinned `@convex-dev/auth@0.0.95` package exports Password but has no GitHub or Google provider modules. OAuth imports use `@auth/core/providers/github` and `@auth/core/providers/google`, matching the [Convex Auth OAuth guide](https://labs.convex.dev/auth/config/oauth), [GitHub configuration](https://labs.convex.dev/auth/config/oauth/github), and [Google configuration](https://labs.convex.dev/auth/config/oauth/google).
+
+The React Native tab of the OAuth guide describes the two calls to `signIn`: first obtain the provider URL, then exchange the returned code after `openAuthSessionAsync` succeeds. Our template uses `expo-linking` with the existing app scheme. Multiple frontend schemes need an explicit [redirect callback](https://labs.convex.dev/auth/api_reference/server#callbacksredirect); the default restricts destinations to SITE_URL. Generated callbacks allow exact native return URLs plus the configured web origin.
+
+The npm registry reported `expo-web-browser@57.0.3` and `expo-linking@57.0.10` as latest stable on 2026-09-18. These are pinned only for OAuth-enabled Convex Auth Expo apps. Current [Expo authentication guidance](https://docs.expo.dev/guides/authentication/) requires a development build because Expo Go cannot customize the app scheme. The provider callback remains the HTTPS Convex URL; the app scheme is the subsequent Convex-to-app redirect. See [WebBrowser](https://docs.expo.dev/versions/latest/sdk/webbrowser/) and [Linking](https://docs.expo.dev/versions/latest/sdk/linking/).

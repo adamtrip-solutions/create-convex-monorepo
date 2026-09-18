@@ -9,9 +9,15 @@ import { generateProject, normalizeOptions } from '../dist/index.js';
 const apps =
   process.env.CCM_APPS ?? 'next,admin:vite,portal:tanstack-start,expo';
 const auth = process.env.CCM_AUTH ?? 'none';
+const oauth = process.env.CCM_OAUTH || undefined;
 const example = process.env.CCM_EXAMPLE ?? 'messages';
 const workspaceCommands = process.env.CCM_WORKSPACE_COMMANDS === '1';
-const selections = normalizeOptions({ apps, auth, example }).apps;
+const selections = normalizeOptions({
+  apps,
+  auth,
+  example,
+  ...(oauth ? { oauth } : {}),
+}).apps;
 const directory = await mkdtemp(join(tmpdir(), 'ccm-e2e-'));
 const project = await generateProject(
   {
@@ -19,6 +25,7 @@ const project = await generateProject(
     apps: workspaceCommands ? selections.slice(0, 1) : apps,
     auth: workspaceCommands && auth === 'clerk' ? 'none' : auth,
     example,
+    ...(oauth ? { oauth } : {}),
   },
   { cwd: directory },
 );
