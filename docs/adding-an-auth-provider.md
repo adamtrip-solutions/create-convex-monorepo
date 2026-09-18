@@ -39,10 +39,18 @@ Cover both starter-content choices in adapter tests. Blank projects retain authe
 
 ## Installing auth after generation
 
-Existing-workspace auth installation renders the no-auth baseline and the selected provider, then plans their differences. The public commands are `add auth clerk`, `add auth convex-auth`, and `add auth workos`; adding another provider also requires extending CLI selection, metadata validation, doctor dependency checks, and `planAddAuth`.
+Existing-workspace auth installation renders the no-auth baseline and the selected provider, then plans their differences. The public commands are `add auth clerk`, `add auth convex-auth`, `add auth workos`, and `add auth better-auth`; adding another provider also requires extending CLI selection, metadata validation, doctor dependency checks, and `planAddAuth`.
 
 Define the backend files the provider may add or change. Do not broaden the planner to overwrite every backend difference: schemas, user functions, and Convex generated internals remain under project ownership. Convex Auth adds `authTables` to a generated schema or conservatively patches a single `defineSchema` call with an object literal; unsupported shapes produce instructions for manual edits. Customized HTTP routers require a manual `auth.addHttpRoutes(http)` call. Generated types refresh on the next `pnpm convex:dev` or `convex codegen`. For changed app source files, require an unchanged baseline or return an actionable conflict. Merge manifest entries without replacing unrelated dependencies or scripts. Generate a separate setup guide instead of replacing the project's README. Convex Auth also adds the signing-key script and root command; follow `CONVEX_AUTH_SETUP.md` after running `pnpm install` and `pnpm convex:auth-keys`.
 
 Test installation on existing apps for every framework and starter choice, customized-source conflicts, dependency conflicts, repeat installation, stored-data implications, and cancellation. A provider migration between identities needs a separate design; it is not implied by adding an auth adapter.
 
 WorkOS adds `WORKOS_SETUP.md`, preserves the existing README, and merges its Turbo environment entries without replacing unrelated settings. Keep callback ports tied to each app's position when rendering the auth diff. Doctor checks the framework SDK and the server SDK peer; upgrade derives the pins from the same manifests.
+
+## Component providers
+
+Better Auth uses the official `@convex-dev/better-auth` component. Follow `scripts/better-auth-assets.ts` when refreshing its messages and blank assets. Never edit `_generated` output by hand. Record the component version and codegen provenance with the assets. Component dependencies belong in the central version pins, including a compatible Better Auth release when the registry latest exceeds the component peer range.
+
+Keep component tables out of the application schema. Add component registration through `convex.config.ts` and return an actionable conflict for an existing config that needs editing. Keep generated internals under project ownership when adding auth to an existing workspace; document the required codegen refresh. Configure deployment secrets through a generated root helper that does not print or store them, and account for every frontend origin and native scheme on the shared backend.
+
+Test browser and native plugin selection separately. Better Auth uses `convexClient` in all clients, `crossDomainClient` in browsers, and `expoClient` with SecureStore on native platforms. Next.js, TanStack Start, and React Router remain client-only. Astro uses the same browser client inside its React island and an empty `auth.config.mjs` integration list. The blank starter can expose auth functions while retaining an empty application schema, so its type assertions must distinguish auth modules from example modules.

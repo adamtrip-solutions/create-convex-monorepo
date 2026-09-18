@@ -1,3 +1,10 @@
+import betterAuthTest from '@convex-dev/better-auth/test';
+import betterAuthSchema from './.generated/better-auth/packages/backend/convex/schema';
+import {
+  api as betterAuthApi,
+  components as betterAuthComponents,
+} from './.generated/better-auth/packages/backend/convex/_generated/api';
+
 import workosSchema from './.generated/workos/packages/backend/convex/schema';
 import { api as workosApi } from './.generated/workos/packages/backend/convex/_generated/api';
 import { convexTest } from 'convex-test';
@@ -124,6 +131,121 @@ test('Convex Auth users own messages across sessions and cannot read another use
   expect(await bob.query(convexAuthApi.messages.list, {})).toMatchObject([
     { body: 'bob private', owner: bobId },
   ]);
+});
+
+const betterAuthModules = import.meta.glob(
+  './.generated/better-auth/packages/backend/convex/**/*.{js,ts}',
+);
+
+function betterAuthBackend() {
+  const t = convexTest(betterAuthSchema, betterAuthModules);
+  betterAuthTest.register(t);
+  return t;
+}
+
+async function betterAuthUser(
+  t: ReturnType<typeof betterAuthBackend>,
+  name: string,
+) {
+  const now = Date.now();
+  const user = (await t.mutation(
+    betterAuthComponents.betterAuth.adapter.create,
+    {
+      input: {
+        model: 'user',
+        data: {
+          name,
+          email: `${name}@example.com`,
+          emailVerified: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+    },
+  )) as { _id: string };
+  return user._id;
+}
+
+async function betterAuthSession(
+  t: ReturnType<typeof betterAuthBackend>,
+  userId: string,
+  expiresAt = Date.now() + 60_000,
+) {
+  const now = Date.now();
+  const session = (await t.mutation(
+    betterAuthComponents.betterAuth.adapter.create,
+    {
+      input: {
+        model: 'session',
+        data: {
+          userId,
+          token: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+          expiresAt,
+        },
+      },
+    },
+  )) as { _id: string };
+  return {
+    subject: userId,
+    sessionId: session._id,
+    issuer: 'https://example.convex.site',
+  };
+}
+
+test('Better Auth backend rejects unauthenticated reads and writes', async () => {
+  const t = betterAuthBackend();
+  await expect(t.query(betterAuthApi.messages.list, {})).rejects.toThrow(
+    'Unauthenticated',
+  );
+  await expect(
+    t.mutation(betterAuthApi.messages.send, { body: 'no' }),
+  ).rejects.toThrow('Unauthenticated');
+  expect(await t.run((ctx) => ctx.db.query('messages').take(1))).toEqual([]);
+});
+
+test('Better Auth component users own messages across sessions and cannot read another user', async () => {
+  const t = betterAuthBackend();
+  const aliceId = await betterAuthUser(t, 'alice');
+  const bobId = await betterAuthUser(t, 'bob');
+  const alice = t.withIdentity(await betterAuthSession(t, aliceId));
+  const returningAlice = t.withIdentity(await betterAuthSession(t, aliceId));
+  const bob = t.withIdentity(await betterAuthSession(t, bobId));
+  await alice.mutation(betterAuthApi.messages.send, { body: 'alice private' });
+  expect(await bob.query(betterAuthApi.messages.list, {})).toEqual([]);
+  await bob.mutation(betterAuthApi.messages.send, { body: 'bob private' });
+  expect(
+    await returningAlice.query(betterAuthApi.messages.list, {}),
+  ).toMatchObject([{ body: 'alice private', owner: aliceId }]);
+  expect(await bob.query(betterAuthApi.messages.list, {})).toMatchObject([
+    { body: 'bob private', owner: bobId },
+  ]);
+});
+
+test('Better Auth backend rejects expired and deleted component sessions', async () => {
+  const t = betterAuthBackend();
+  const userId = await betterAuthUser(t, 'alice');
+  const expired = t.withIdentity(
+    await betterAuthSession(t, userId, Date.now() - 1000),
+  );
+  const deletedIdentity = await betterAuthSession(t, userId);
+  await t.mutation(betterAuthComponents.betterAuth.adapter.deleteOne, {
+    input: {
+      model: 'session',
+      where: [{ field: '_id', value: deletedIdentity.sessionId }],
+    },
+  });
+  const deleted = t.withIdentity(deletedIdentity);
+  for (const client of [expired, deleted]) {
+    await expect(client.query(betterAuthApi.messages.list, {})).rejects.toThrow(
+      'Unauthenticated',
+    );
+    await expect(
+      client.mutation(betterAuthApi.messages.send, { body: 'no' }),
+    ).rejects.toThrow('Unauthenticated');
+  }
+  expect(await t.run((ctx) => ctx.db.query('messages').take(1))).toEqual([]);
 });
 
 const workosModules = import.meta.glob(

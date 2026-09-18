@@ -88,7 +88,7 @@ describe('options', () => {
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
-  it.each(['none', 'clerk', 'convex-auth', 'workos'])(
+  it.each(['none', 'clerk', 'convex-auth', 'workos', 'better-auth'])(
     'accepts %s auth through CLI options',
     (auth) => {
       expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(
@@ -409,7 +409,7 @@ describe('Nuxt options', () => {
       expect(selectTemplate('nuxt').id).toBe('nuxt');
     },
   );
-  it.each(['clerk', 'convex-auth', 'workos'])(
+  it.each(['clerk', 'convex-auth', 'workos', 'better-auth'])(
     'rejects Nuxt with %s before creating files',
     async (auth) => {
       const cwd = await temp();

@@ -31,6 +31,27 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
   }
 }
 
+for (const packageManager of ['pnpm', 'bun'] as const) {
+  for (const apps of [
+    'next,vite,tanstack-start,expo',
+    'next,vite,tanstack-start,react-router,expo',
+    'astro,react-router',
+  ]) {
+    for (const example of ['messages', 'none']) {
+      const label = `${packageManager === 'bun' ? 'Bun ' : ''}${apps === 'astro,react-router' ? 'Astro + React Router' : `All ${apps.includes('react-router') ? 'five' : 'four'}`} + Better Auth (${example})`;
+      if (!scenarios.some((scenario) => scenario.label === label))
+        scenarios.push({
+          label,
+          apps,
+          auth: 'better-auth',
+          example,
+          ...(packageManager === 'bun' ? { packageManager } : {}),
+          expected: [],
+        });
+    }
+  }
+}
+
 // Preserve the Astro feature scenarios and exercise both package managers.
 for (const packageManager of ['pnpm', 'bun'] as const) {
   const astroScenarios = [
@@ -127,7 +148,7 @@ try {
           await readFile(join(root, 'apps', name, 'package.json'), 'utf8'),
         );
         const sdk = Object.keys(manifest.dependencies).find((dependency) =>
-          /^(?:@clerk\/|@convex-dev\/auth$|@workos(?:-inc)?\/authkit)/.test(
+          /^(?:@clerk\/|@convex-dev\/auth$|better-auth$|@workos(?:-inc)?\/authkit)/.test(
             dependency,
           ),
         );

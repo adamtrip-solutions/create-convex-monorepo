@@ -38,11 +38,15 @@ The add planner uses the same template as project creation. It copies the new ap
 
 ## Nuxt and Vue
 
-Nuxt supports auth `none` only. Clerk, Convex Auth, and WorkOS have no integrated Vue binding here, so Nuxt rejects them and Convex Auth OAuth. `validateCompatibility` rejects other providers during option normalization and before `add auth` plans files, including when Nuxt is not the first app. Add-app validation uses the workspace's existing auth.
+Nuxt supports auth `none` only. Clerk, Convex Auth, WorkOS, and Better Auth have no integrated Vue binding here, so Nuxt rejects them and Convex Auth OAuth. `validateCompatibility` rejects other providers during option normalization and before `add auth` plans files, including when Nuxt is not the first app. Add-app validation uses the workspace's existing auth.
 
 The none adapter selects Vue output through `uiRuntime`. Install `convex-vue` in a `.client.ts` plugin, and mount query components inside `ClientOnly`. Keep `ssr: true`; neither server rendering nor production builds should query Convex. Read `runtimeConfig.public.convexUrl`, populated by `NUXT_PUBLIC_CONVEX_URL`. Include that prefix in URL linking, doctor secret checks, and Turbo environment inputs.
 
 The Nuxt app uses `srcDir: 'src/'` so the shared `src/convex-api.type-test.ts` belongs to its compiler program. `nuxt prepare && vue-tsc --noEmit` uses the generated Nuxt tsconfig without a frontend `rootDir`. Lint composes `eslint-plugin-vue` essential rules with the shared TypeScript rules, using `vue-eslint-parser` and the TypeScript parser for script blocks. Ignore `.nuxt` and `.output` in lint, formatting, and git.
+
+## Better Auth bindings
+
+For Better Auth, provide a statically accessed public `CONVEX_SITE_URL` alongside `CONVEX_URL` with the framework's environment prefix. Browser clients use `ConvexBetterAuthProvider` with the Convex and cross-domain client plugins. Expo uses the Expo client plugin and SecureStore on native platforms, selecting the cross-domain plugin on web. Include both starters in generated-project typecheck, lint, and build checks, with JavaScript exports for Expo.
 
 ## React Router root authentication
 

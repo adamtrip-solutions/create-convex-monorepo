@@ -9,3 +9,5 @@ pnpm-lock.yaml
 tests/.generated
 # Managed by release-please.
 CHANGELOG.md
+assets/backend-better-auth/convex/_generated
+assets/backend-blank-better-auth/convex/_generated

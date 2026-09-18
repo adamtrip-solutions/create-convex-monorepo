@@ -24,7 +24,7 @@ Manage an existing Convex monorepo from its root or any subdirectory.
     --framework <name>      next, vite, tanstack-start, react-router, expo, astro, or nuxt
     --example <name>        none or messages (defaults to workspace example)
   add package [name]        Add a blank shared TypeScript package
-  add auth [clerk|convex-auth|workos]  Add authentication
+  add auth [clerk|convex-auth|workos|better-auth]  Add authentication
     --oauth <providers>     github,google (Convex Auth only)
   doctor [--json]           Check workspace configuration and setup
   env sync [--app name]     Copy public Convex URLs to frontend env files
@@ -42,7 +42,7 @@ Add, upgrade, and env sync options:
   --version, -v            Show CLI version
 
 Without a terminal, add app requires a name and --framework; add package
-requires a name; add auth requires clerk, convex-auth, or workos. Installation is off unless --install or --yes is passed.
+requires a name; add auth requires clerk, convex-auth, workos, or better-auth. Installation is off unless --install or --yes is passed.
 Existing files are never forced.
 `;
 
@@ -62,7 +62,7 @@ export interface WorkspaceCommand {
   name?: string;
   framework?: Framework;
   example?: Example;
-  provider?: 'clerk' | 'convex-auth' | 'workos';
+  provider?: 'clerk' | 'convex-auth' | 'workos' | 'better-auth';
   oauth?: string | readonly string[];
   app?: string;
   install?: boolean;
@@ -119,7 +119,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
       allowed = [...addFlags, 'oauth'];
     } else
       throw new Error(
-        'Use add app [name], add package [name], or add auth [clerk|convex-auth|workos].',
+        'Use add app [name], add package [name], or add auth [clerk|convex-auth|workos|better-auth].',
       );
   } else if (first === 'doctor') {
     command = 'doctor';
@@ -167,10 +167,11 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     third !== undefined &&
     third !== 'clerk' &&
     third !== 'convex-auth' &&
-    third !== 'workos'
+    third !== 'workos' &&
+    third !== 'better-auth'
   )
     throw new Error(
-      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
+      'Choose add auth clerk, add auth convex-auth, add auth workos, or add auth better-auth.',
     );
   if (values.oauth !== undefined && third !== undefined)
     normalizeOAuthProviders(values.oauth, third);
@@ -187,7 +188,10 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
       ? { name: third }
       : {}),
     ...(command === 'add-auth' &&
-    (third === 'clerk' || third === 'convex-auth' || third === 'workos')
+    (third === 'clerk' ||
+      third === 'convex-auth' ||
+      third === 'workos' ||
+      third === 'better-auth')
       ? { provider: third }
       : {}),
     ...(values.framework !== undefined
@@ -229,7 +233,7 @@ export async function runWorkspace(
   if (options.command === 'add') {
     if (!interactive)
       throw new Error(
-        'Choose add app <name> --framework <name>, add package <name>, or add auth <clerk|convex-auth|workos> when prompts are disabled.',
+        'Choose add app <name> --framework <name>, add package <name>, or add auth <clerk|convex-auth|workos|better-auth> when prompts are disabled.',
       );
     options.command = answer(
       await prompts.select({
@@ -280,7 +284,7 @@ export async function runWorkspace(
   }
   if (options.command === 'add-auth' && !options.provider && !interactive)
     throw new Error(
-      'Without prompts, use add auth <clerk|convex-auth|workos>.',
+      'Without prompts, use add auth <clerk|convex-auth|workos|better-auth>.',
     );
   signal?.throwIfAborted();
   const workspace = await loadWorkspace(process.cwd());
@@ -293,6 +297,7 @@ export async function runWorkspace(
               options: [
                 { value: 'clerk' as const, label: 'Clerk' },
                 { value: 'convex-auth' as const, label: 'Convex Auth' },
+                { value: 'better-auth' as const, label: 'Better Auth' },
                 { value: 'workos' as const, label: 'WorkOS AuthKit' },
               ],
             }),

@@ -12,6 +12,13 @@ export const versions = {
   vueEslintParser: '10.4.1',
   prettier: '3.8.3',
   convex: '1.45.0',
+  convexBetterAuth: '0.12.5',
+  betterAuth: '1.6.15',
+  betterAuthExpo: '1.6.15',
+  expoSecureStore: '57.0.4',
+  expoNetwork: '57.0.2',
+  expoConstants: '57.0.18',
+
   workosNode: '10.13.0',
   workosNext: '4.3.2',
   workosReact: '0.16.2',

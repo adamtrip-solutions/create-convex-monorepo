@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { parsers } from 'prettier/plugins/typescript';
 import type { ParserOptions } from 'prettier';
 import { normalizeOptions } from '../generator/index.js';
-import type { Example, Framework } from '../generator/types.js';
+import type { Auth, Example, Framework } from '../generator/types.js';
 import { readText, type Workspace } from './project.js';
 import type { ChangePlan } from './changes.js';
 import {
@@ -487,15 +487,24 @@ export async function planAddApp(
   if (example === 'messages') await verifyMessages(workspace, plan, generated);
   if (workspace.config.auth !== 'none') {
     const files =
-      workspace.config.auth !== 'convex-auth'
+      workspace.config.auth === 'clerk' || workspace.config.auth === 'workos'
         ? ['auth.config.ts']
-        : ['auth.config.ts', 'auth.ts', 'http.ts'];
+        : [
+            'auth.config.ts',
+            'auth.ts',
+            'http.ts',
+            ...(workspace.config.auth === 'better-auth'
+              ? ['convex.config.ts']
+              : []),
+          ];
     const label =
       workspace.config.auth === 'clerk'
         ? 'Clerk'
-        : workspace.config.auth === 'workos'
-          ? 'WorkOS AuthKit'
-          : 'Convex Auth';
+        : workspace.config.auth === 'better-auth'
+          ? 'Better Auth'
+          : workspace.config.auth === 'workos'
+            ? 'WorkOS AuthKit'
+            : 'Convex Auth';
     const baseline = workspace.config.oauth?.length
       ? await render(
           workspace,
@@ -507,7 +516,11 @@ export async function planAddApp(
     for (const name of files) {
       const path = `packages/backend/convex/${name}`;
       const current = await guardedRead(workspace, plan, path);
-      if (!(await equivalentGeneratedFile(path, current, baseline.get(path))))
+      if (
+        !(workspace.config.auth === 'better-auth' && name === 'convex.config.ts'
+          ? current !== null && (await hasBetterAuthComponent(current, path))
+          : await equivalentGeneratedFile(path, current, baseline.get(path)))
+      )
         throw new Error(
           `Incompatible ${label} configuration in ${path}. Restore the generated configuration before adding an app, or integrate it manually.`,
         );
@@ -612,6 +625,10 @@ export async function planAddApp(
   if (workspace.config.auth === 'clerk')
     plan.notes.push(
       `Add the Clerk keys listed in apps/${app.name}/.env.clerk.example.`,
+    );
+  if (workspace.config.auth === 'better-auth')
+    plan.notes.push(
+      `Set the public CONVEX_SITE_URL listed in apps/${app.name}/.env.better-auth.example. Add this app's origin or Expo scheme to deployment BETTER_AUTH_TRUSTED_ORIGINS, then follow the Better Auth setup instructions.`,
     );
   if (workspace.config.auth === 'workos')
     plan.notes.push(
@@ -885,18 +902,112 @@ async function patchAuthSchema(
   );
 }
 
+async function hasBetterAuthComponent(
+  source: string,
+  path: string,
+): Promise<boolean> {
+  type Node = {
+    type?: string;
+    name?: string;
+    value?: unknown;
+    importKind?: string;
+    body?: Node[];
+    source?: Node;
+    specifiers?: Node[];
+    local?: Node;
+    imported?: Node;
+    declaration?: Node;
+    declarations?: Node[];
+    id?: Node;
+    init?: Node;
+    callee?: Node;
+    object?: Node;
+    property?: Node;
+    computed?: boolean;
+    arguments?: Node[];
+    expression?: Node;
+  };
+  try {
+    const program = (await parsers.typescript.parse(source, {
+      filepath: path,
+    } as ParserOptions)) as Node;
+    const body = program.body ?? [];
+    const components = new Set(
+      body
+        .filter(
+          (node) =>
+            node.type === 'ImportDeclaration' &&
+            node.source?.value === '@convex-dev/better-auth/convex.config' &&
+            node.importKind !== 'type',
+        )
+        .flatMap((node) => node.specifiers ?? [])
+        .filter((node) => node.type === 'ImportDefaultSpecifier')
+        .map((node) => node.local?.name),
+    );
+    const factories = new Set(
+      body
+        .filter(
+          (node) =>
+            node.type === 'ImportDeclaration' &&
+            node.source?.value === 'convex/server' &&
+            node.importKind !== 'type',
+        )
+        .flatMap((node) => node.specifiers ?? [])
+        .filter(
+          (node) =>
+            node.type === 'ImportSpecifier' &&
+            node.imported?.name === 'defineApp' &&
+            node.importKind !== 'type',
+        )
+        .map((node) => node.local?.name),
+    );
+    const exported = body.find(
+      (node) => node.type === 'ExportDefaultDeclaration',
+    )?.declaration;
+    if (exported?.type !== 'Identifier') return false;
+    const declaration = body
+      .filter((node) => node.type === 'VariableDeclaration')
+      .flatMap((node) => node.declarations ?? [])
+      .find((node) => node.id?.name === exported.name);
+    if (
+      declaration?.init?.type !== 'CallExpression' ||
+      declaration.init.callee?.type !== 'Identifier' ||
+      !factories.has(declaration.init.callee.name)
+    )
+      return false;
+    return body.some((node) => {
+      const call =
+        node.type === 'ExpressionStatement' ? node.expression : undefined;
+      return (
+        call?.type === 'CallExpression' &&
+        call.callee?.type === 'MemberExpression' &&
+        call.callee.computed !== true &&
+        call.callee.object?.type === 'Identifier' &&
+        call.callee.object.name === exported.name &&
+        call.callee.property?.name === 'use' &&
+        call.arguments?.length === 1 &&
+        call.arguments[0]?.type === 'Identifier' &&
+        components.has(call.arguments[0].name)
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function planAddAuth(
   workspace: Workspace,
-  provider: 'clerk' | 'convex-auth' | 'workos',
+  provider: Exclude<Auth, 'none'>,
   options: { oauth?: string | readonly string[] } = {},
 ): Promise<ChangePlan> {
   if (
     provider !== 'clerk' &&
     provider !== 'convex-auth' &&
+    provider !== 'better-auth' &&
     provider !== 'workos'
   )
     throw new Error(
-      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
+      'Choose add auth clerk, add auth convex-auth, add auth workos, or add auth better-auth.',
     );
   if (options.oauth !== undefined && workspace.config.auth !== 'none')
     throw new Error(
@@ -904,8 +1015,14 @@ export async function planAddAuth(
     );
   validateCompatibility(workspace.config.apps, provider);
   const oauth = normalizeOAuthProviders(options.oauth, provider);
-  const label = (auth: 'clerk' | 'convex-auth' | 'workos') =>
-    auth === 'clerk' ? 'Clerk' : auth === 'workos' ? 'WorkOS' : 'Convex Auth';
+  const label = (auth: Exclude<Auth, 'none'>) =>
+    auth === 'clerk'
+      ? 'Clerk'
+      : auth === 'better-auth'
+        ? 'Better Auth'
+        : auth === 'workos'
+          ? 'WorkOS'
+          : 'Convex Auth';
   if (workspace.config.auth !== 'none' && workspace.config.auth !== provider)
     throw new Error(
       `${label(workspace.config.auth)} is already configured. Switching authentication providers requires a manual migration.`,
@@ -962,6 +1079,19 @@ export async function planAddAuth(
         plan.guards!.push({ path, contents: current });
         continue;
       }
+      if (
+        provider === 'better-auth' &&
+        path === 'packages/backend/convex/convex.config.ts' &&
+        current !== null
+      ) {
+        if (await hasBetterAuthComponent(current, path)) {
+          plan.guards!.push({ path, contents: current });
+          continue;
+        }
+        throw new Error(
+          `Conflict in ${path}: add "import betterAuth from '@convex-dev/better-auth/convex.config';" and "app.use(betterAuth);" to the exported Convex app, then rerun add auth better-auth. No files were changed.`,
+        );
+      }
       let next = target;
       if (
         (path === 'package.json' || path.endsWith('/package.json')) &&
@@ -972,7 +1102,9 @@ export async function planAddAuth(
       else if (!(await equivalentGeneratedFile(path, current, baseline)))
         throw new Error(
           path === 'packages/backend/convex/http.ts'
-            ? `Conflict in ${path}: call auth.addHttpRoutes(http) manually in your existing router. No files were changed.`
+            ? provider === 'better-auth'
+              ? `Conflict in ${path}: import { authComponent, createAuth } from './auth' and call authComponent.registerRoutes(http, createAuth, { cors: true }) manually in your existing router. No files were changed.`
+              : `Conflict in ${path}: call auth.addHttpRoutes(http) manually in your existing router. No files were changed.`
             : `Conflict in ${path}: file is customized or already exists. No files were changed.`,
         );
       plan.changes.push({
@@ -983,23 +1115,35 @@ export async function planAddAuth(
     }
   }
   await patchFiles(backendBefore, backendAfter, (path) =>
-    (provider !== 'convex-auth'
+    (provider === 'clerk' || provider === 'workos'
       ? [
           'packages/backend/convex/access.ts',
           'packages/backend/convex/auth.config.ts',
           `packages/backend/.env.${provider}.example`,
         ]
-      : [
-          'packages/backend/convex/access.ts',
-          'packages/backend/convex/auth.ts',
-          'packages/backend/convex/http.ts',
-          'packages/backend/convex/auth.config.ts',
-          'packages/backend/.env.convex-auth.example',
-          'packages/backend/package.json',
-          'scripts/convex-auth-keys.mjs',
-          'scripts/convex-auth-site.mjs',
-          'package.json',
-        ]
+      : provider === 'better-auth'
+        ? [
+            'packages/backend/convex/access.ts',
+            'packages/backend/convex/auth.ts',
+            'packages/backend/convex/http.ts',
+            'packages/backend/convex/auth.config.ts',
+            'packages/backend/convex/convex.config.ts',
+            'packages/backend/.env.better-auth.example',
+            'packages/backend/package.json',
+            'scripts/better-auth-env.mjs',
+            'package.json',
+          ]
+        : [
+            'packages/backend/convex/access.ts',
+            'packages/backend/convex/auth.ts',
+            'packages/backend/convex/http.ts',
+            'packages/backend/convex/auth.config.ts',
+            'packages/backend/.env.convex-auth.example',
+            'packages/backend/package.json',
+            'scripts/convex-auth-keys.mjs',
+            'scripts/convex-auth-site.mjs',
+            'package.json',
+          ]
     ).includes(path),
   );
   if (provider === 'convex-auth') {
@@ -1025,6 +1169,8 @@ export async function planAddAuth(
         before: current,
         after: retainNewlines(next, current),
       });
+  }
+  if (provider === 'convex-auth' || provider === 'better-auth') {
     const ignorePath = '.gitignore';
     const ignore = await guardedRead(workspace, plan, ignorePath);
     if (
@@ -1041,10 +1187,10 @@ export async function planAddAuth(
       });
     else
       plan.notes.push(
-        'Add !.env.convex-auth.example to your customized .gitignore so the backend environment example can be committed.',
+        `Add !.env.${provider}.example to your customized .gitignore so the backend environment example can be committed.`,
       );
     plan.notes.push(
-      `Generated types refresh on the next ${scriptCommand(workspace.config.packageManager, 'convex:dev')} or convex codegen. Sign-in needs ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}.`,
+      `Generated types refresh on the next ${scriptCommand(workspace.config.packageManager, 'convex:dev')} or convex codegen. Sign-in needs ${scriptCommand(workspace.config.packageManager, provider === 'better-auth' ? 'convex:better-auth-env' : 'convex:auth-keys')}.`,
     );
   }
   if (provider === 'workos') {
@@ -1149,7 +1295,16 @@ export async function planAddAuth(
       path.startsWith(`apps/${app.name}/`),
     );
   }
-  const readme = backendAfter.get('README.md')!;
+  const setupFiles =
+    provider === 'better-auth'
+      ? await render(
+          workspace,
+          workspace.config.apps,
+          workspace.config.example,
+          provider,
+        )
+      : backendAfter;
+  const readme = setupFiles.get('README.md')!;
   const start = readme.indexOf(`## ${label(provider)} setup`);
   const end = readme.indexOf('\n## Shared backend types', start);
   if (start === -1 || end === -1)
@@ -1160,7 +1315,9 @@ export async function planAddAuth(
       ? 'CLERK_SETUP.md'
       : provider === 'workos'
         ? 'WORKOS_SETUP.md'
-        : 'CONVEX_AUTH_SETUP.md';
+        : provider === 'better-auth'
+          ? 'BETTER_AUTH_SETUP.md'
+          : 'CONVEX_AUTH_SETUP.md';
   const existing = await guardedRead(workspace, plan, setupPath);
   if (existing !== null && existing !== setup)
     throw new Error(
@@ -1177,7 +1334,9 @@ export async function planAddAuth(
       ? `Run ${workspace.config.packageManager} install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.`
       : provider === 'workos'
         ? `Run ${workspace.config.packageManager} install and follow WORKOS_SETUP.md to configure AuthKit and the Convex issuer.`
-        : `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}, and follow CONVEX_AUTH_SETUP.md.`,
+        : provider === 'better-auth'
+          ? `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:better-auth-env')}, and follow BETTER_AUTH_SETUP.md.`
+          : `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}, and follow CONVEX_AUTH_SETUP.md.`,
   );
   return plan;
 }

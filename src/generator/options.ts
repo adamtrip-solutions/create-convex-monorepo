@@ -1,3 +1,4 @@
+import { uiRuntime } from '../integrations/auth/shared.js';
 import { workosBindings } from '../integrations/auth/workos/index.js';
 import type {
   AppSpec,
@@ -82,10 +83,11 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     auth !== 'none' &&
     auth !== 'clerk' &&
     auth !== 'convex-auth' &&
-    auth !== 'workos'
+    auth !== 'workos' &&
+    auth !== 'better-auth'
   )
     throw new Error(
-      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, or workos.`,
+      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, workos, or better-auth.`,
     );
   const oauth = normalizeOAuthProviders(raw.oauth, auth);
   const used = new Set<string>();
@@ -162,7 +164,7 @@ export function validateCompatibility(
   apps: readonly AppSpec[],
   auth: Auth,
 ): void {
-  if (auth !== 'none' && apps.some((app) => app.framework === 'nuxt'))
+  if (auth !== 'none' && apps.some((app) => uiRuntime(app) !== 'react'))
     throw new Error(
       'Nuxt supports only auth none. Remove Nuxt or choose --auth none.',
     );

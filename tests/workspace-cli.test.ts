@@ -91,7 +91,7 @@ afterEach(() => {
 });
 
 describe('workspace argument parsing', () => {
-  it.each(['clerk', 'convex-auth', 'workos'])(
+  it.each(['clerk', 'convex-auth', 'workos', 'better-auth'])(
     'parses %s installation',
     (provider) => {
       expect(parseWorkspaceCommand(['add', 'auth', provider])).toMatchObject({
@@ -102,7 +102,7 @@ describe('workspace argument parsing', () => {
   );
   it('names all supported providers for an invalid provider', () => {
     expect(() => parseWorkspaceCommand(['add', 'auth', 'other'])).toThrow(
-      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
+      'Choose add auth clerk, add auth convex-auth, add auth workos, or add auth better-auth.',
     );
   });
 
@@ -551,7 +551,7 @@ describe('upgrade mutations', () => {
   });
 });
 
-it.each(['clerk', 'convex-auth', 'workos'])(
+it.each(['clerk', 'convex-auth', 'workos', 'better-auth'])(
   'offers and dispatches %s interactively',
   async (provider) => {
     process.stdin.isTTY = true;
@@ -566,6 +566,7 @@ it.each(['clerk', 'convex-auth', 'workos'])(
         options: [
           { value: 'clerk', label: 'Clerk' },
           { value: 'convex-auth', label: 'Convex Auth' },
+          { value: 'better-auth', label: 'Better Auth' },
           { value: 'workos', label: 'WorkOS AuthKit' },
         ],
       }),
@@ -602,7 +603,7 @@ it('installs Convex Auth dependencies after applying the plan', async () => {
     mocks.install.mock.invocationCallOrder[0]!,
   );
 });
-it.each(['clerk', 'convex-auth', 'workos'])(
+it.each(['clerk', 'convex-auth', 'workos', 'better-auth'])(
   'uses configured %s for an interactive repeat',
   async (auth) => {
     process.stdin.isTTY = true;
@@ -628,6 +629,8 @@ it('routes OAuth options to auth installation', async () => {
 });
 it.each([
   ['add', 'auth', 'clerk', '--oauth', 'github'],
+  ['add', 'auth', 'workos', '--oauth', 'github'],
+  ['add', 'auth', 'better-auth', '--oauth', 'github'],
   ['add', 'auth', 'convex-auth', '--oauth', 'other'],
   ['add', 'app', 'mobile', '--framework', 'expo', '--oauth', 'github'],
 ])('rejects misplaced or invalid OAuth arguments %j', (...args) => {
