@@ -1,3 +1,4 @@
+import { scriptCommand } from '../../../package-manager/index.js';
 import type { AuthAdapter } from '../../../generator/types.js';
 import { versions as v } from '../../../templates/versions.js';
 import { platform } from '../shared.js';
@@ -52,8 +53,8 @@ export async function getOwner(ctx: QueryCtx | MutationCtx): Promise<string> {
     }
     await ctx.write(
       'packages/backend/.env.convex-auth.example',
-      `# Run pnpm convex:setup, then pnpm convex:auth-keys to set the signing keys.
-# Use pnpm convex:auth-keys --prod for production. The script never stores keys locally.
+      `# Run ${scriptCommand(ctx.options.packageManager, 'convex:setup')}, then ${scriptCommand(ctx.options.packageManager, 'convex:auth-keys')} to set the signing keys.
+# Use ${scriptCommand(ctx.options.packageManager, 'convex:auth-keys')} --prod for production. The script never stores keys locally.
 # Never put JWT_PRIVATE_KEY, JWKS, or SITE_URL in frontend env files.
 # JWT_PRIVATE_KEY and JWKS are required for sign-in. See README.md for setup.
 # JWT_PRIVATE_KEY=<generated RSA private key>

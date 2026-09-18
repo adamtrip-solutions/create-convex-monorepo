@@ -1,3 +1,8 @@
+import {
+  scriptCommand,
+  workspaceScript,
+  workspaceExec,
+} from '../../package-manager/index.js';
 import { readFile } from 'node:fs/promises';
 import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
@@ -8,6 +13,10 @@ import { convexAuthSetup } from '../../integrations/auth/convex-auth/setup.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   const { options, scope } = ctx;
+  const manager = options.packageManager;
+  const run = (script: string) => scriptCommand(manager, script);
+  const exec = (name: string, command: string) =>
+    workspaceExec(manager, scope, name, command);
   await ctx.write(
     'scripts/convex-setup.mjs',
     await readFile(
@@ -17,7 +26,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   );
   const scripts: Record<string, string> = {
     dev: `turbo run dev --ui=stream --concurrency=${options.apps.length + 2}`,
-    'convex:dev': `pnpm --filter @${scope}/backend dev`,
+    'convex:dev': workspaceScript(manager, scope, 'backend', 'dev'),
     'convex:setup': 'node scripts/convex-setup.mjs',
     'convex:link': 'node scripts/convex-setup.mjs --link-only',
     build: 'turbo run build',
@@ -37,13 +46,24 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     scripts['convex:auth-keys'] = 'node scripts/convex-auth-keys.mjs';
   }
   for (const app of options.apps)
-    scripts[`dev:${app.name}`] = `pnpm --filter @${scope}/${app.name} dev`;
+    scripts[`dev:${app.name}`] = workspaceScript(
+      manager,
+      scope,
+      app.name,
+      'dev',
+    );
   await ctx.json('package.json', {
     name: options.name,
     private: true,
     version: '0.0.0',
     type: 'module',
-    packageManager: `pnpm@${v.pnpm}`,
+    packageManager: `${manager}@${v[manager]}`,
+    ...(manager === 'bun'
+      ? {
+          workspaces: ['apps/*', 'packages/*'],
+          trustedDependencies: ['esbuild', 'sharp', 'unrs-resolver'],
+        }
+      : {}),
     engines: { node: '>=22.12.0' },
     scripts,
     devDependencies: { turbo: v.turbo, prettier: v.prettier },
@@ -51,12 +71,13 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   await ctx.json('.prettierrc.json', formattingOptions);
   await ctx.write(
     '.prettierignore',
-    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.output/\n**/dist/\n**/.turbo/\npnpm-lock.yaml\n.env*\n**/.env*\n',
+    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.output/\n**/dist/\n**/.turbo/\nbun.lock\npnpm-lock.yaml\n.env*\n**/.env*\n',
   );
-  await ctx.write(
-    'pnpm-workspace.yaml',
-    "packages:\n  - 'apps/*'\n  - 'packages/*'\n\nonlyBuiltDependencies:\n  - esbuild\n  - sharp\n  - unrs-resolver\n",
-  );
+  if (manager === 'pnpm')
+    await ctx.write(
+      'pnpm-workspace.yaml',
+      "packages:\n  - 'apps/*'\n  - 'packages/*'\n\nonlyBuiltDependencies:\n  - esbuild\n  - sharp\n  - unrs-resolver\n",
+    );
   await ctx.json('turbo.json', {
     $schema: 'https://turborepo.com/schema.json',
     tasks: {
@@ -156,16 +177,28 @@ export default tseslint.config(
 
 ${options.apps.map((a) => a.framework).join(', ')} applications share one Convex backend in packages/backend.
 
-## First run
+## Install and run
 
-Use Node 22.12+ and pnpm ${v.pnpm}.
+Use Node 22.12+ and ${manager} ${v[manager]}. Commit ${manager === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml'} after installation.
 
 \`\`\`sh
-pnpm install
-pnpm convex:setup
+${manager} install
+${run('convex:setup')}
 \`\`\`
 
-The setup command runs Convex in its own package and asks you to select or create a deployment. After a successful push, it copies only CONVEX_URL from packages/backend/.env.local into each app's .env.local using the public variable below. Other settings are preserved. If initialization ran during generation, you can go straight to pnpm dev. Keep backend environment files private. Run pnpm convex:link to refresh frontend URLs after switching deployments; restart the apps after linking. Use a cloud development deployment for physical phones; localhost on a phone is the phone itself.
+The setup command runs Convex in its own package and asks you to select or create a deployment. After a successful push, it copies only CONVEX_URL from packages/backend/.env.local into each app's .env.local using the public variable below. Other settings are preserved. If initialization ran during generation, you can go straight to ${run('dev')}. Keep backend environment files private. Run ${run('convex:link')} to refresh frontend URLs after switching deployments; restart the apps after linking. Use a cloud development deployment for physical phones; localhost on a phone is the phone itself.
+
+\`\`\`sh
+${run('dev')}
+${options.apps.map((a) => run(`dev:${a.name}`)).join('\n')}
+${run('convex:dev')}
+${run('typecheck')}
+${run('lint')}
+${run('format:check')}
+${run('build')}
+\`\`\`
+
+${run('dev')} starts one backend watcher and all apps with streamed Turbo logs. Run setup first so authentication prompts run in a normal terminal. Individual dev commands only start that app; keep convex:dev running separately. Mobile can also use its ios/android scripts. Expo build exports native JavaScript; it is not an Xcode or Gradle binary build.
 
 | Application | Public URL variable |
 | --- | --- |
@@ -178,38 +211,24 @@ ${
 Use one Clerk application across all frontends. Create a JWT template named convex using Clerk's Convex preset. Set the issuer on the Convex deployment before the first setup push:
 
 \`\`\`sh
-pnpm --filter @${scope}/backend exec convex env set CLERK_JWT_ISSUER_DOMAIN https://your-instance.clerk.accounts.dev
+${exec('backend', 'convex env set CLERK_JWT_ISSUER_DOMAIN')} https://your-instance.clerk.accounts.dev
 \`\`\`
 
-On a new deployment, run pnpm convex:setup to select it. If the first push asks for CLERK_JWT_ISSUER_DOMAIN, set it in another terminal with the command above and rerun setup. Repeat this for production. Append each app's .env.clerk.example to its .env.local. These files name publishable keys and any server-only secrets. Never put CLERK_SECRET_KEY in a VITE_, EXPO_PUBLIC_ or NEXT_PUBLIC_ variable.
+On a new deployment, run ${run('convex:setup')} to select it. If the first push asks for CLERK_JWT_ISSUER_DOMAIN, set it in another terminal with the command above and rerun setup. Repeat this for production. Append each app's .env.clerk.example to its .env.local. These files name publishable keys and any server-only secrets. Never put CLERK_SECRET_KEY in a VITE_, EXPO_PUBLIC_ or NEXT_PUBLIC_ variable.
 
 Expo uses Google OAuth. Enable Google's connection and the Native API in Clerk. Register each mobile scheme redirect listed in that app's .env.clerk.example in Clerk Native applications. Use a development build for a stable app scheme. SecureStore persists the token. Additional MFA or session tasks need a custom flow before production rollout.
 
 ${options.example === 'messages' ? 'The backend checks identity and uses an owner index to keep messages private. All frontends share the same identity and messages when signed into the same account.' : 'Clerk is configured, but there are no backend functions yet. Check ctx.auth.getUserIdentity() and enforce authorization in each protected function you add.'}
 `
     : options.auth === 'workos'
-      ? workosSetup(scope, options.example === 'messages')
+      ? workosSetup(scope, options.example === 'messages', manager)
       : options.auth === 'convex-auth'
-        ? convexAuthSetup(scope, options.example === 'messages')
+        ? convexAuthSetup(scope, options.example === 'messages', manager)
         : options.example === 'none'
-          ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run pnpm convex:dev to regenerate the shared API.\n`
+          ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run ${run('convex:dev')} to regenerate the shared API.\n`
           : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
 `
 }
-## Development
-
-\`\`\`sh
-pnpm dev
-${options.apps.map((a) => `pnpm dev:${a.name}`).join('\n')}
-pnpm convex:dev
-pnpm typecheck
-pnpm lint
-pnpm format:check
-pnpm build
-\`\`\`
-
-pnpm dev starts one backend watcher and all apps with streamed Turbo logs. Run setup first so authentication prompts run in a normal terminal. Individual dev commands only start that app; keep convex:dev running separately. Mobile can also use its ios/android scripts. Expo build exports native JavaScript; it is not an Xcode or Gradle binary build.
-
 ## Shared backend types
 
 \`\`\`ts
@@ -223,9 +242,9 @@ TanStack Start uses client Convex hooks. Server-side data preloading is not conf
 
 ## Deployment and troubleshooting
 
-Deploy the backend explicitly with pnpm --filter @${scope}/backend exec convex deploy, then set each hosting provider's matching public URL and build that app. Never use production deploy keys for local development. Public variables are embedded at build time; rebuild after changing them.
+Deploy the backend explicitly with ${exec('backend', 'convex deploy')}, then set each hosting provider's matching public URL and build that app. Never use production deploy keys for local development. Public variables are embedded at build time; rebuild after changing them.
 
-A missing URL screen means that app's .env.local needs its framework-specific URL. ${options.auth === 'workos' ? 'For sign-in failures, check the WorkOS client ID, redirect configuration, server environment and Convex issuer. See the WorkOS setup section.' : options.auth === 'convex-auth' ? 'For sign-in failures, check JWT_PRIVATE_KEY and JWKS on the selected deployment and confirm auth.config.ts, auth.ts, and http.ts were pushed.' : 'Authentication failures usually mean the Clerk convex JWT template or deployment issuer is missing.'} If generated types are missing, run convex:dev from the backend package and verify that .d.ts files are committed. Metro cache problems after dependency changes can be cleared with pnpm --filter @${scope}/${options.apps.find((a) => a.framework === 'expo')?.name ?? options.apps[0]?.name} exec expo start --clear when using Expo. No symlink resolver overrides should be needed.
+A missing URL screen means that app's .env.local needs its framework-specific URL. ${options.auth === 'workos' ? 'For sign-in failures, check the WorkOS client ID, redirect configuration, server environment and Convex issuer. See the WorkOS setup section.' : options.auth === 'convex-auth' ? 'For sign-in failures, check JWT_PRIVATE_KEY and JWKS on the selected deployment and confirm auth.config.ts, auth.ts, and http.ts were pushed.' : 'Authentication failures usually mean the Clerk convex JWT template or deployment issuer is missing.'} If generated types are missing, run convex:dev from the backend package and verify that .d.ts files are committed. Metro cache problems after dependency changes can be cleared with ${exec(options.apps.find((a) => a.framework === 'expo')?.name ?? options.apps[0]!.name, 'expo start --clear')} when using Expo. No symlink resolver overrides should be needed.
 `,
   );
 }

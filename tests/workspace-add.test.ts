@@ -37,12 +37,14 @@ async function fixture(
   example: Example = 'messages',
   auth: Auth = 'none',
   framework: Framework = 'next',
+  packageManager: 'pnpm' | 'bun' = 'pnpm',
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-add-test-'));
   temporary.push(cwd);
   const root = await generateProject(
     {
       name: 'sample',
+      packageManager,
       apps: [{ name: 'web', framework }],
       example,
       auth,
@@ -1741,3 +1743,88 @@ it('rejects adding Expo to a WorkOS workspace', async () => {
     planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
   ).rejects.toThrow(/expo/i);
 });
+
+describe.each<Example>(['none', 'messages'])(
+  'bun workspace with %s starter',
+  (example) => {
+    it('adds apps and packages with bun commands and preserves metadata', async () => {
+      let workspace = await fixture(example, 'none', 'vite', 'bun');
+      const appPlan = await planAddApp(workspace, {
+        name: 'added',
+        framework: 'next',
+      });
+      expect(appPlan.notes.join('\n')).toContain('bun install');
+      expect(appPlan.notes.join('\n')).toContain('bun run convex:setup');
+      await applyPlan(appPlan);
+      workspace = await loadWorkspace(workspace.root);
+      expect(workspace.config).toMatchObject({
+        version: 1,
+        packageManager: 'bun',
+      });
+      const manifest = JSON.parse(
+        await readFile(join(workspace.root, 'package.json'), 'utf8'),
+      );
+      expect(manifest.scripts['dev:added']).toBe(
+        'bun run --filter @sample/added dev',
+      );
+      const packagePlan = await planAddPackage(workspace, { name: 'shared' });
+      expect(packagePlan.notes).toContain(
+        'Add "@sample/shared": "workspace:*" to each app that should import it, then run bun install.',
+      );
+      await applyPlan(packagePlan);
+      expect((await loadWorkspace(workspace.root)).config.packageManager).toBe(
+        'bun',
+      );
+    });
+    it.each(['clerk', 'convex-auth', 'workos'] as const)(
+      'adds %s with bun setup guidance',
+      async (provider) => {
+        const workspace = await fixture(example, 'none', 'vite', 'bun');
+        const plan = await planAddAuth(workspace, provider);
+        const guide = plan.changes.find((change) =>
+          change.path.endsWith('_SETUP.md'),
+        )!.after;
+        expect(guide).toContain('bun install');
+        expect(guide).not.toContain('pnpm');
+        expect(plan.notes.join('\n')).toContain('bun install');
+        if (provider === 'workos') {
+          expect(guide).toContain(
+            'bun run --cwd packages/backend convex env set WORKOS_CLIENT_ID',
+          );
+          expect(guide).toContain('bun run convex:setup');
+          expect(plan.notes.join('\n')).toContain('WORKOS_SETUP.md');
+        }
+        if (provider === 'convex-auth')
+          expect(plan.notes.join('\n')).toContain('bun run convex:auth-keys');
+        await applyPlan(plan);
+        expect((await loadWorkspace(workspace.root)).config).toMatchObject({
+          auth: provider,
+          packageManager: 'bun',
+        });
+      },
+    );
+    it('rejects a customized bun workspace layout before writing', async () => {
+      const workspace = await fixture(example, 'none', 'vite', 'bun');
+      const path = join(workspace.root, 'package.json');
+      const manifest = JSON.parse(await readFile(path, 'utf8'));
+      manifest.workspaces = ['apps/*'];
+      await writeFile(path, JSON.stringify(manifest));
+      const before = await snapshot(workspace.root);
+      await expect(
+        planAddPackage(workspace, { name: 'shared' }),
+      ).rejects.toThrow('Unsupported package.json workspaces');
+      expect(await snapshot(workspace.root)).toEqual(before);
+    });
+  },
+);
+it.each(['npm', 'yarn', 'unknown'])(
+  'rejects unsupported metadata manager %s',
+  async (packageManager) => {
+    const workspace = await fixture('none', 'none', 'vite', 'bun');
+    expect(() =>
+      parseWorkspaceConfig({ ...workspace.rawConfig, packageManager }),
+    ).toThrow(
+      `Unsupported package manager in convex-monorepo.json: ${packageManager}`,
+    );
+  },
+);

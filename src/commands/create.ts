@@ -7,11 +7,12 @@ import {
   validateProjectName,
   type RawOptions,
 } from '../generator/options.js';
+import { scriptCommand } from '../package-manager/index.js';
 import type { AppSpec } from '../generator/types.js';
 
 export const help = `create-convex-monorepo [project-name] [options]
 
-Generate a pnpm + Turborepo workspace sharing one Convex backend.
+Generate a pnpm or bun + Turborepo workspace sharing one Convex backend.
 
 Use create <project-name> to explicitly create a project, including names such
 as add or doctor. Inside an existing workspace, running without arguments opens
@@ -21,7 +22,7 @@ upgrade --check. No global or project installation is required.
   --apps <list>             next,vite,tanstack-start,expo or web:next,admin:vite
   --example <name>         messages (default) or none for blank apps
   --auth <provider>         none (default), clerk, convex-auth, or workos
-  --package-manager <name>  pnpm (v0.1)
+  --package-manager <name>  pnpm (default) or bun
   --install / --no-install  Install generated dependencies
   --init-convex / --no-init-convex  Set up Convex and link URLs (requires install)
   --git / --no-git          Initialize a git repository
@@ -122,7 +123,11 @@ export async function runCreate(
       raw.packageManager = answer(
         await prompts.select({
           message: 'Package manager?',
-          options: [{ value: 'pnpm', label: 'pnpm' }],
+          initialValue: 'pnpm',
+          options: [
+            { value: 'pnpm', label: 'pnpm' },
+            { value: 'bun', label: 'bun' },
+          ],
         }),
       );
     if (!raw.apps) {
@@ -223,7 +228,8 @@ export async function runCreate(
     ...(signal ? { signal } : {}),
     onProgress: (message) => console.log(`✓ ${message}`),
   });
+  const run = (script: string) => scriptCommand(options.packageManager, script);
   console.log(
-    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : '  pnpm install\n'}${options.initConvex ? '  pnpm dev' : '  pnpm convex:setup\n  pnpm dev'}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'workos' ? '\nAdd WorkOS settings from .env.workos.example and complete the auth setup in README.md.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
+    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : `  ${options.packageManager} install\n`}${options.initConvex ? `  ${run('dev')}` : `  ${run('convex:setup')}\n  ${run('dev')}`}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'workos' ? '\nAdd WorkOS settings from .env.workos.example and complete the auth setup in README.md.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
   );
 }

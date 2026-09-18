@@ -1,4 +1,13 @@
-export function workosSetup(scope: string, messages: boolean): string {
+import type { PackageManagerId } from '../../../generator/types.js';
+import {
+  scriptCommand,
+  workspaceExec,
+} from '../../../package-manager/index.js';
+export function workosSetup(
+  scope: string,
+  messages: boolean,
+  manager: PackageManagerId = 'pnpm',
+): string {
   return `## WorkOS setup
 
 Use one WorkOS environment across these frontends so the same account has the same identity. In the WorkOS dashboard, configure each app's redirect URI, initiate login URI at /sign-in, and allowed sign-out URI at its origin. Next.js and TanStack Start use /callback; Vite returns to /. Use the actual development ports listed in each app's .env.workos.example. Register every app's origin, including its development port and production origin, as an allowed [sign-out URI](https://workos.com/docs/authkit/sessions#sign-out-uris). The sign-out controls pass window.location.origin as returnTo so users return to the app they signed out of. Add Vite's origin to the allowed CORS origins. For production Vite apps, configure a custom Authentication API domain on the same site and set VITE_WORKOS_API_HOSTNAME to its hostname.
@@ -10,11 +19,11 @@ Keep the app-specific WORKOS_COOKIE_NAME=wos-session-<app name> from each server
 Set the client ID and AuthKit issuer on the Convex deployment:
 
 \`\`\`sh
-pnpm --filter @${scope}/backend exec convex env set WORKOS_CLIENT_ID client_your_client_id
-pnpm --filter @${scope}/backend exec convex env set WORKOS_AUTHKIT_ISSUER_DOMAIN https://api.workos.com/user_management/client_your_client_id
+${workspaceExec(manager, scope, 'backend', 'convex env set WORKOS_CLIENT_ID')} client_your_client_id
+${workspaceExec(manager, scope, 'backend', 'convex env set WORKOS_AUTHKIT_ISSUER_DOMAIN')} https://api.workos.com/user_management/client_your_client_id
 \`\`\`
 
-Use the exact client-specific issuer URL, including /user_management/ and your real client ID. In WorkOS, edit the session JWT template to include an aud claim equal to that same client ID, for example { "aud": "client_your_client_id" }. Preserve any existing claims. Sign out and back in after changing the template. Session tokens omit aud by default, so this step is required for auth.config.ts, which uses WORKOS_CLIENT_ID as applicationID. A plain https://api.workos.com/ URL or the hosted sign-in page URL is not this issuer. See packages/backend/.env.workos.example. On a fresh deployment, run pnpm convex:setup to select it. If the push asks for those variables, set them in another terminal and rerun setup. Configure production separately. This starter uses OIDC discovery with domain/applicationID validation. Convex's current AuthKit guide instead shows customJwt providers with explicit JWKS URLs and support for audience-less session tokens; do not copy that setup partially into this configuration.
+Use the exact client-specific issuer URL, including /user_management/ and your real client ID. In WorkOS, edit the session JWT template to include an aud claim equal to that same client ID, for example { "aud": "client_your_client_id" }. Preserve any existing claims. Sign out and back in after changing the template. Session tokens omit aud by default, so this step is required for auth.config.ts, which uses WORKOS_CLIENT_ID as applicationID. A plain https://api.workos.com/ URL or the hosted sign-in page URL is not this issuer. See packages/backend/.env.workos.example. On a fresh deployment, run ${scriptCommand(manager, 'convex:setup')} to select it. If the push asks for those variables, set them in another terminal and rerun setup. Configure production separately. This starter uses OIDC discovery with domain/applicationID validation. Convex's current AuthKit guide instead shows customJwt providers with explicit JWKS URLs and support for audience-less session tokens; do not copy that setup partially into this configuration.
 
 The frontend SDK supplies an access token through ConvexProviderWithAuth. Protected children wait until Convex validates the token. Next.js and TanStack Start use server-managed sessions, but this starter does not preload authenticated Convex queries during SSR. Hosted AuthKit controls the enabled sign-in methods.
 

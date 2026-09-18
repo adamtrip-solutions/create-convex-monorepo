@@ -84,6 +84,7 @@ describe('options', () => {
     { apps: [] },
     { auth: 'custom' },
     { packageManager: 'npm' },
+    { packageManager: 'yarn' },
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
@@ -93,6 +94,28 @@ describe('options', () => {
       expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(
         auth,
       );
+    },
+  );
+  it.each(['pnpm', 'bun'])(
+    'accepts %s through the package-manager flag',
+    (manager) => {
+      expect(
+        normalizeOptions(parseCommand(['--package-manager', manager]).raw)
+          .packageManager,
+      ).toBe(manager);
+    },
+  );
+  it('defaults to pnpm', () => {
+    expect(normalizeOptions({}).packageManager).toBe('pnpm');
+  });
+  it.each(['npm', 'yarn'])(
+    'rejects %s before creating files',
+    async (manager) => {
+      const cwd = await temp();
+      await expect(
+        generateProject({ name: 'invalid', packageManager: manager }, { cwd }),
+      ).rejects.toThrow('Choose pnpm or bun');
+      expect(await readdir(cwd)).toEqual([]);
     },
   );
   it('selects framework adapters', () =>
@@ -293,4 +316,19 @@ describe('setup recovery and cancellation', () => {
     expect(await readdir(target)).toEqual(['user-file']);
     expect(await readFile(join(target, 'user-file'), 'utf8')).toBe('keep me');
   });
+});
+
+it('installs bun projects with the selected package manager', async () => {
+  const install = vi
+    .spyOn(packageManager.bun, 'install')
+    .mockResolvedValueOnce();
+  const other = vi
+    .spyOn(packageManager.pnpm, 'install')
+    .mockResolvedValueOnce();
+  const root = await generateProject(
+    { name: 'bun-install', apps: 'vite', packageManager: 'bun', install: true },
+    { cwd: await temp() },
+  );
+  expect(install).toHaveBeenCalledWith(root, undefined);
+  expect(other).not.toHaveBeenCalled();
 });

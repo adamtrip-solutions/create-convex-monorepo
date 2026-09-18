@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   upgrade: vi.fn(),
   planUpgrade: vi.fn(),
   install: vi.fn(),
+  bunInstall: vi.fn(),
   select: vi.fn(),
   text: vi.fn(),
   confirm: vi.fn(),
@@ -35,7 +36,10 @@ vi.mock('../src/workspace/upgrade.js', () => ({
   planUpgrade: mocks.planUpgrade,
 }));
 vi.mock('../src/package-manager/index.js', () => ({
-  pnpm: { install: mocks.install },
+  packageManagers: {
+    pnpm: { install: mocks.install },
+    bun: { install: mocks.bunInstall },
+  },
 }));
 import {
   parseWorkspaceCommand,
@@ -44,7 +48,7 @@ import {
 
 const workspace = {
   root: '/workspace',
-  config: { example: 'messages', auth: 'none' },
+  config: { example: 'messages', auth: 'none', packageManager: 'pnpm' },
 };
 const plan = {
   root: '/workspace',
@@ -606,3 +610,18 @@ it.each(['clerk', 'convex-auth', 'workos'])(
     expect(mocks.install).not.toHaveBeenCalled();
   },
 );
+
+it.each([
+  ['add', 'app', 'admin', '--framework', 'vite', '--install'],
+  ['add', 'package', 'shared', '--install'],
+  ['add', 'auth', 'clerk', '--install'],
+  ['upgrade', '--install'],
+])('installs bun workspace changes with bun: %s', async (...args) => {
+  mocks.load.mockResolvedValue({
+    ...workspace,
+    config: { ...workspace.config, packageManager: 'bun' },
+  });
+  await runWorkspace(args, '0.1.0');
+  expect(mocks.bunInstall).toHaveBeenCalledWith('/workspace', undefined);
+  expect(mocks.install).not.toHaveBeenCalled();
+});
