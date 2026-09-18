@@ -89,6 +89,43 @@ Clerk's issuer must exist on the deployment before its auth configuration can be
 
 Verified `defineSchema({})` with the installed Convex 1.45.0 CLI using a normal anonymous local `convex dev --once`. It pushes successfully without registered functions. The official output uses `ApiFromModules<{}>` and derives the data model from the empty schema. Blank generation copies those artifacts unchanged from `assets/backend-blank`; it does not remove imports from the messages example's generated declarations. Keeping a schema preserves strict table-name types as users add tables. [Convex schemas](https://docs.convex.dev/database/schemas), [generated API](https://docs.convex.dev/generated-api/api).
 
+## WorkOS AuthKit
+
+Investigated 2026-09-18 against the npm registry, official WorkOS SDK source, and current Convex documentation. `npm view <package> version` returned these stable releases, now pinned in `src/templates/versions.ts`:
+
+| Framework                     | Official package                       | Version |
+| ----------------------------- | -------------------------------------- | ------- |
+| Next.js                       | `@workos-inc/authkit-nextjs`           | 4.3.2   |
+| React / Vite                  | `@workos-inc/authkit-react`            | 0.16.2  |
+| TanStack Start                | `@workos/authkit-tanstack-react-start` | 0.11.1  |
+| Next.js and Start server peer | `@workos-inc/node`                     | 10.13.0 |
+
+The Start package uses the `@workos` scope. The guessed `@workos-inc/authkit-tanstack-react-start` name returned npm 404. Published package manifests identify WorkOS's repositories and declare compatible React, Next.js, and Start peer ranges. Both server SDKs require the Node SDK peer. Sources: [SDK catalog](https://workos.com/docs/sdks), [Next SDK](https://github.com/workos/authkit-nextjs), [React SDK](https://github.com/workos/authkit-react), [Start SDK](https://github.com/workos/authkit-tanstack-start), and [npm registry metadata](https://registry.npmjs.org/@workos/authkit-tanstack-react-start/latest).
+
+No official Expo or React Native AuthKit SDK appeared in the catalog or npm search. WorkOS lists native Android and iOS SDKs separately. Its [Expo integration guide](https://workos.com/docs/integrations/react-native-expo) describes manually combining SSO API calls with Expo AuthSession and WebBrowser, rather than installing an AuthKit SDK. This adapter rejects Expo during normalization, including mixed workspaces and later `add app` or `add auth` operations. It does not use a community SDK.
+
+### Tokens and ownership
+
+The [Convex integration guide](https://docs.convex.dev/auth/authkit/add-to-app) documents `ConvexProviderWithAuthKit` for React and a `ConvexProviderWithAuth` bridge for the server SDKs. This adapter uses the latter contract throughout. Vite calls `useAuth().getAccessToken({ forceRefresh })`. Next.js and Start call `useAccessToken().getAccessToken()` or `refresh()` when Convex forces renewal. Protected children mount only inside `Authenticated`, after Convex validates the token. The frontend SDK's user state alone does not authorize a query.
+
+WorkOS's `sub` is the user ID. The messages adapter stores `identity.subject` from `ctx.auth.getUserIdentity()`, rejects missing identities, and keeps the existing owner index. Clerk uses `tokenIdentifier`; Convex Auth uses its `users` table ID. Provider replacement therefore needs a stored-data migration and remains unsupported. Backend tests cover unauthenticated reads and writes, distinct users, and two sessions with the same subject.
+
+### Issuer and audience decision
+
+The requested configuration uses the issuer URL as `domain` and `WORKOS_CLIENT_ID` as `applicationID`. This differs from Convex's current guide, which shows two `customJwt` providers with explicit per-client JWKS URLs, one shared issuer with an audience and one client-specific issuer without an audience.
+
+To retain the requested OIDC configuration, use the exact client-specific issuer `https://api.workos.com/user_management/<clientId>` and configure the WorkOS session JWT template with `aud` equal to that client ID. WorkOS session access tokens omit `aud` by default. WorkOS explicitly permits setting it in a JWT template. A hosted sign-in domain is not interchangeable with the token issuer. See [WorkOS token validation](https://workos.com/blog/verify-workos-access-tokens-in-your-own-api) and [session token and discovery behavior](https://workos.com/docs/cli/emulate#oidc-discovery).
+
+WorkOS documents a client-specific OIDC discovery endpoint. Its discovery document omits two fields that strict OIDC libraries can require. Independent source review confirmed that [Convex's authentication verifier](https://github.com/get-convex/convex-backend/blob/main/crates/authentication/src/lib.rs) uses its [openidconnect fork](https://github.com/get-convex/openidconnect-rs/blob/15a9c551eafcf3b60d307feb94332352ac56c099/src/discovery/mod.rs), which defaults those fields, and enables RS256 explicitly. This supports the domain configuration with the audience setup above. Live discovery for a real WorkOS environment and a credentialed sign-in were not tested. The setup guide requires that audience configuration rather than claiming the default WorkOS token works unchanged.
+
+### Framework wiring and verification
+
+Next.js uses `authkitProxy` in `src/proxy.ts`, callback and sign-in route handlers, and the SDK's client `signOut`. Start uses its official request middleware, callback and sign-in server routes, and client hooks. Registering a Start instance replaces its default middleware stack, so the adapter also registers `createCsrfMiddleware` for server functions as required by the WorkOS SDK guide. Neither integration preloads authenticated Convex queries during SSR.
+
+Every app receives a public prefixed client ID. The Next.js and Start SDKs also read `WORKOS_CLIENT_ID` without a prefix. Their API key and cookie password remain server-only. Vite gets neither secret; production SPAs use the SDK's custom Authentication API hostname setting. Each environment example names the callback for that app's actual port. The add-auth planner preserves those ports, writes `WORKOS_SETUP.md`, and merges the required Turbo environment entries.
+
+Clean built-CLI generation with `--install`, followed by `pnpm typecheck`, `pnpm lint`, and `pnpm build`, passed for Next.js, Vite, and TanStack Start with both `messages` and `none`. Tests use syntactically valid dummy frontend configuration and do not contact an authenticated WorkOS account or deploy Convex. These checks verify installation, types, and production bundling; hosted sign-in and live JWT validation still require a configured environment.
+
 ## Bun workspaces
 
 Investigated 2026-09-18. `npm view bun version` returned 1.4.2, matching the installed binary. The generated root pins that version and declares `workspaces: ["apps/*", "packages/*"]`. Workspace dependencies retain `workspace:*`. Bun 1.4.2 uses isolated installs for new workspaces by default, with dependencies linked through `node_modules/.bun`. No hoisting or Metro resolver override was needed in these fixtures. [Bun workspaces](https://bun.sh/docs/pm/workspaces), [isolated installs](https://bun.sh/docs/pm/isolated-installs).

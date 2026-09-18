@@ -1559,6 +1559,192 @@ it('respects per-app blank overrides when adding Convex Auth', async () => {
 });
 
 describe.each<Example>(['none', 'messages'])(
+  'add WorkOS with %s content',
+  (example) => {
+    it.each<Framework>(['next', 'vite', 'tanstack-start'])(
+      'adds %s with dry run and repeat no-op',
+      async (framework) => {
+        const workspace = await fixture(example, 'none', framework);
+        const before = await snapshot(workspace.root);
+        const plan = await planAddAuth(workspace, 'workos');
+        await applyPlan(plan, { dryRun: true });
+        expect(await snapshot(workspace.root)).toEqual(before);
+        await applyPlan(plan);
+        const after = await snapshot(workspace.root);
+        for (const path of Object.keys(before).filter(
+          (path) =>
+            path.includes('/_generated/') ||
+            path.endsWith('/schema.ts') ||
+            path.endsWith('/messages.ts') ||
+            path === 'README.md',
+        ))
+          expect(after[path], path).toBe(before[path]);
+        expect(after['WORKOS_SETUP.md']).toContain('## WorkOS setup');
+        expect(after['WORKOS_SETUP.md']).toContain('WORKOS_COOKIE_NAME');
+        expect(after['WORKOS_SETUP.md']).toContain(
+          'https://workos.com/docs/authkit/sessions#sign-out-uris',
+        );
+        if (framework === 'next') {
+          expect(after['apps/web/src/proxy.ts']).toContain('authkitProxy');
+          expect(after['apps/web/src/middleware.ts']).toBeUndefined();
+          expect(after['apps/web/middleware.ts']).toBeUndefined();
+        }
+        expect(after['apps/web/.env.workos.example']).toBeDefined();
+        expect(after['packages/backend/.env.workos.example']).toBeDefined();
+        expect(after['apps/web/src/auth-controls.tsx']).toContain('workos');
+        if (example === 'messages')
+          expect(after['packages/backend/convex/access.ts']).toContain(
+            'identity.subject',
+          );
+        else expect(after['packages/backend/convex/access.ts']).toBeUndefined();
+        const turbo = JSON.parse(after['turbo.json']!);
+        expect(turbo.tasks.dev.passThroughEnv).toContain('WORKOS_*');
+        expect(turbo.tasks.build.passThroughEnv).toContain('WORKOS_*');
+        expect(after['.gitignore']).toContain('!.env.workos.example');
+        expect(
+          (await planAddAuth(await loadWorkspace(workspace.root), 'workos'))
+            .changes,
+        ).toEqual([]);
+      },
+    );
+  },
+);
+
+it.each([
+  'apps/web/src/providers.tsx',
+  'apps/web/src/auth-controls.tsx',
+  'packages/backend/convex/access.ts',
+  'packages/backend/convex/auth.config.ts',
+])('refuses customized %s when adding WorkOS', async (path) => {
+  const workspace = await fixture();
+  await writeFile(join(workspace.root, path), '// Custom code\n');
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'workos')).rejects.toThrow(path);
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it.each(['src/middleware.ts', 'middleware.ts'])(
+  'refuses existing Next.js %s before adding WorkOS without writes',
+  async (relativePath) => {
+    const workspace = await fixture();
+    const path = `apps/web/${relativePath}`;
+    await writeFile(
+      join(workspace.root, path),
+      '// Custom middleware\nexport default function middleware() {}\n',
+    );
+    const before = await snapshot(workspace.root);
+    await expect(planAddAuth(workspace, 'workos')).rejects.toThrow(
+      `Conflict in ${path}: manually migrate this middleware to apps/web/src/proxy.ts and integrate WorkOS AuthKit with authkitProxy. Next.js 16 cannot use both middleware.ts and proxy.ts. No files were changed.`,
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it.each(['src/middleware.ts', 'middleware.ts'])(
+  'refuses Next.js %s added after WorkOS planning without writes',
+  async (relativePath) => {
+    const workspace = await fixture();
+    const plan = await planAddAuth(workspace, 'workos');
+    const path = `apps/web/${relativePath}`;
+    await writeFile(join(workspace.root, path), '// Concurrent middleware\n');
+    const before = await snapshot(workspace.root);
+    await expect(applyPlan(plan)).rejects.toThrow(
+      `Workspace changed while planning: ${path}`,
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it.each<Auth>(['clerk', 'convex-auth'])(
+  'refuses WorkOS replacement of %s',
+  async (auth) => {
+    const workspace = await fixture('none', auth);
+    const before = await snapshot(workspace.root);
+    await expect(planAddAuth(workspace, 'workos')).rejects.toThrow(
+      'manual migration',
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it('validates every framework before adding WorkOS', async () => {
+  let workspace = await fixture();
+  await applyPlan(
+    await planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
+  );
+  workspace = await loadWorkspace(workspace.root);
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'workos')).rejects.toThrow(/expo/i);
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it('preserves customized root settings and per-app ports while adding WorkOS', async () => {
+  let workspace = await fixture();
+  await applyPlan(
+    await planAddApp(workspace, {
+      name: 'admin',
+      framework: 'next',
+      example: 'none',
+    }),
+  );
+  workspace = await loadWorkspace(workspace.root);
+  const turboPath = join(workspace.root, 'turbo.json');
+  const turbo = JSON.parse(await readFile(turboPath, 'utf8'));
+  turbo.tasks.dev.passThroughEnv.push('CUSTOM_SECRET');
+  turbo.tasks.build.custom = 'preserved';
+  await writeFile(turboPath, JSON.stringify(turbo));
+  await writeFile(
+    join(workspace.root, '.gitignore'),
+    '# Custom ignore\n.env*\ncustom-output/\n',
+  );
+  await applyPlan(await planAddAuth(workspace, 'workos'));
+  const after = await snapshot(workspace.root);
+  const updated = JSON.parse(after['turbo.json']!);
+  expect(updated.tasks.dev.passThroughEnv).toContain('CUSTOM_SECRET');
+  expect(updated.tasks.build.custom).toBe('preserved');
+  expect(after['.gitignore']).toContain('custom-output/');
+  expect(after['apps/admin/.env.workos.example']).toContain('3001');
+  expect(after['apps/web/.env.workos.example']).toContain(
+    'WORKOS_COOKIE_NAME=wos-session-web\n',
+  );
+  expect(after['apps/admin/.env.workos.example']).toContain(
+    'WORKOS_COOKIE_NAME=wos-session-admin\n',
+  );
+  expect(after['apps/admin/src/messages.tsx']).toBeUndefined();
+});
+
+it('rejects incompatible Turbo environment configuration before adding WorkOS', async () => {
+  const workspace = await fixture();
+  const path = join(workspace.root, 'turbo.json');
+  const turbo = JSON.parse(await readFile(path, 'utf8'));
+  turbo.tasks.dev.passThroughEnv = 'CUSTOM_SECRET';
+  await writeFile(path, JSON.stringify(turbo));
+  const before = await snapshot(workspace.root);
+  await expect(planAddAuth(workspace, 'workos')).rejects.toThrow(
+    'tasks.dev.passThroughEnv',
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
+
+it.each<Framework>(['next', 'vite', 'tanstack-start'])(
+  'adds a %s app to a WorkOS workspace',
+  async (framework) => {
+    const workspace = await fixture('messages', 'workos');
+    await applyPlan(await planAddApp(workspace, { name: 'admin', framework }));
+    expect(
+      (await loadWorkspace(workspace.root)).config.apps.at(-1)?.framework,
+    ).toBe(framework);
+  },
+);
+
+it('rejects adding Expo to a WorkOS workspace', async () => {
+  const workspace = await fixture('messages', 'workos');
+  await expect(
+    planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
+  ).rejects.toThrow(/expo/i);
+});
+
+describe.each<Example>(['none', 'messages'])(
   'bun workspace with %s starter',
   (example) => {
     it('adds apps and packages with bun commands and preserves metadata', async () => {
@@ -1590,7 +1776,7 @@ describe.each<Example>(['none', 'messages'])(
         'bun',
       );
     });
-    it.each(['clerk', 'convex-auth'] as const)(
+    it.each(['clerk', 'convex-auth', 'workos'] as const)(
       'adds %s with bun setup guidance',
       async (provider) => {
         const workspace = await fixture(example, 'none', 'vite', 'bun');
@@ -1601,6 +1787,13 @@ describe.each<Example>(['none', 'messages'])(
         expect(guide).toContain('bun install');
         expect(guide).not.toContain('pnpm');
         expect(plan.notes.join('\n')).toContain('bun install');
+        if (provider === 'workos') {
+          expect(guide).toContain(
+            'bun run --cwd packages/backend convex env set WORKOS_CLIENT_ID',
+          );
+          expect(guide).toContain('bun run convex:setup');
+          expect(plan.notes.join('\n')).toContain('WORKOS_SETUP.md');
+        }
         if (provider === 'convex-auth')
           expect(plan.notes.join('\n')).toContain('bun run convex:auth-keys');
         await applyPlan(plan);

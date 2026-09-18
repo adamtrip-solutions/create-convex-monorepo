@@ -70,6 +70,7 @@ describe('create binary dispatch', () => {
   it.each([
     ['add', 'app', 'admin', '--framework', 'vite', '--dry-run'],
     ['add', 'auth', 'clerk', '--no-install'],
+    ['add', 'auth', 'workos', '--dry-run'],
     ['add', 'package', 'shared', '--no-install'],
     ['doctor', '--json'],
     ['env', 'sync', '--app', 'web'],
@@ -94,7 +95,7 @@ describe('create binary dispatch', () => {
     ['doctor', '--force'],
     ['env', 'sync', '--install'],
     ['upgrade', '--json'],
-    ['add', 'auth', 'workos'],
+    ['add', 'auth', 'unknown'],
     ['--help', '--unknown'],
   ])('does not bypass argument validation for %j', async (...args) => {
     await expect(runEntry(args, '0.3.0')).rejects.toThrow();

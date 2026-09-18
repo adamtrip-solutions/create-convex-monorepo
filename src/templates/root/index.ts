@@ -8,6 +8,7 @@ import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
 import { versions as v } from '../versions.js';
 import { formattingOptions } from '../../generator/format.js';
+import { workosSetup } from '../../integrations/auth/workos/setup.js';
 import { convexAuthSetup } from '../../integrations/auth/convex-auth/setup.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
@@ -86,6 +87,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
         passThroughEnv: [
           'CONVEX_*',
           'CLERK_*',
+          ...(options.auth === 'workos' ? ['WORKOS_*'] : []),
           'NEXT_PUBLIC_*',
           'VITE_*',
           'EXPO_PUBLIC_*',
@@ -96,7 +98,10 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
         inputs: ['$TURBO_DEFAULT$', '.env*'],
         outputs: ['.next/**', '!.next/cache/**', 'dist/**', '.output/**'],
         env: ['NEXT_PUBLIC_*', 'VITE_*', 'EXPO_PUBLIC_*'],
-        passThroughEnv: ['CLERK_SECRET_KEY'],
+        passThroughEnv: [
+          'CLERK_SECRET_KEY',
+          ...(options.auth === 'workos' ? ['WORKOS_*'] : []),
+        ],
       },
       [`@${scope}/backend#build`]: { outputs: [] },
       typecheck: { dependsOn: ['^typecheck'], outputs: [] },
@@ -105,7 +110,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   });
   await ctx.write(
     '.gitignore',
-    `node_modules/\n.turbo/\n.next/\n.output/\ndist/\n.expo/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
+    `node_modules/\n.turbo/\n.next/\n.output/\ndist/\n.expo/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'workos' ? '!.env.workos.example\n' : ''}${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
   );
   await ctx.json('convex-monorepo.json', {
     version: 1,
@@ -215,11 +220,13 @@ Expo uses Google OAuth. Enable Google's connection and the Native API in Clerk. 
 
 ${options.example === 'messages' ? 'The backend checks identity and uses an owner index to keep messages private. All frontends share the same identity and messages when signed into the same account.' : 'Clerk is configured, but there are no backend functions yet. Check ctx.auth.getUserIdentity() and enforce authorization in each protected function you add.'}
 `
-    : options.auth === 'convex-auth'
-      ? convexAuthSetup(scope, options.example === 'messages', manager)
-      : options.example === 'none'
-        ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run ${run('convex:dev')} to regenerate the shared API.\n`
-        : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
+    : options.auth === 'workos'
+      ? workosSetup(scope, options.example === 'messages', manager)
+      : options.auth === 'convex-auth'
+        ? convexAuthSetup(scope, options.example === 'messages', manager)
+        : options.example === 'none'
+          ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run ${run('convex:dev')} to regenerate the shared API.\n`
+          : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
 `
 }
 ## Shared backend types
@@ -237,7 +244,7 @@ TanStack Start uses client Convex hooks. Server-side data preloading is not conf
 
 Deploy the backend explicitly with ${exec('backend', 'convex deploy')}, then set each hosting provider's matching public URL and build that app. Never use production deploy keys for local development. Public variables are embedded at build time; rebuild after changing them.
 
-A missing URL screen means that app's .env.local needs its framework-specific URL. ${options.auth === 'convex-auth' ? 'For sign-in failures, check JWT_PRIVATE_KEY and JWKS on the selected deployment and confirm auth.config.ts, auth.ts, and http.ts were pushed.' : 'Authentication failures usually mean the Clerk convex JWT template or deployment issuer is missing.'} If generated types are missing, run convex:dev from the backend package and verify that .d.ts files are committed. Metro cache problems after dependency changes can be cleared with ${exec(options.apps.find((a) => a.framework === 'expo')?.name ?? options.apps[0]!.name, 'expo start --clear')} when using Expo. No symlink resolver overrides should be needed.
+A missing URL screen means that app's .env.local needs its framework-specific URL. ${options.auth === 'workos' ? 'For sign-in failures, check the WorkOS client ID, redirect configuration, server environment and Convex issuer. See the WorkOS setup section.' : options.auth === 'convex-auth' ? 'For sign-in failures, check JWT_PRIVATE_KEY and JWKS on the selected deployment and confirm auth.config.ts, auth.ts, and http.ts were pushed.' : 'Authentication failures usually mean the Clerk convex JWT template or deployment issuer is missing.'} If generated types are missing, run convex:dev from the backend package and verify that .d.ts files are committed. Metro cache problems after dependency changes can be cleared with ${exec(options.apps.find((a) => a.framework === 'expo')?.name ?? options.apps[0]!.name, 'expo start --clear')} when using Expo. No symlink resolver overrides should be needed.
 `,
   );
 }

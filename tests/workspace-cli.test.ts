@@ -88,15 +88,18 @@ afterEach(() => {
 });
 
 describe('workspace argument parsing', () => {
-  it.each(['clerk', 'convex-auth'])('parses %s installation', (provider) => {
-    expect(parseWorkspaceCommand(['add', 'auth', provider])).toMatchObject({
-      command: 'add-auth',
-      provider,
-    });
-  });
-  it('names both supported providers for an invalid provider', () => {
+  it.each(['clerk', 'convex-auth', 'workos'])(
+    'parses %s installation',
+    (provider) => {
+      expect(parseWorkspaceCommand(['add', 'auth', provider])).toMatchObject({
+        command: 'add-auth',
+        provider,
+      });
+    },
+  );
+  it('names all supported providers for an invalid provider', () => {
     expect(() => parseWorkspaceCommand(['add', 'auth', 'other'])).toThrow(
-      'Choose add auth clerk or add auth convex-auth.',
+      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
     );
   });
 
@@ -542,7 +545,7 @@ describe('upgrade mutations', () => {
   });
 });
 
-it.each(['clerk', 'convex-auth'])(
+it.each(['clerk', 'convex-auth', 'workos'])(
   'offers and dispatches %s interactively',
   async (provider) => {
     process.stdin.isTTY = true;
@@ -557,6 +560,7 @@ it.each(['clerk', 'convex-auth'])(
         options: [
           { value: 'clerk', label: 'Clerk' },
           { value: 'convex-auth', label: 'Convex Auth' },
+          { value: 'workos', label: 'WorkOS AuthKit' },
         ],
       }),
     );
@@ -592,7 +596,7 @@ it('installs Convex Auth dependencies after applying the plan', async () => {
     mocks.install.mock.invocationCallOrder[0]!,
   );
 });
-it.each(['clerk', 'convex-auth'])(
+it.each(['clerk', 'convex-auth', 'workos'])(
   'uses configured %s for an interactive repeat',
   async (auth) => {
     process.stdin.isTTY = true;

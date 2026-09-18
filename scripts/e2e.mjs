@@ -230,6 +230,24 @@ export type MissingModule = typeof api.notAModule;
       if (app.framework === 'next' || app.framework === 'tanstack-start')
         lines.push('CLERK_SECRET_KEY=sk_test_not_a_real_secret');
     }
+    if (auth === 'workos') {
+      lines.push(`${prefix}_WORKOS_CLIENT_ID=client_test_fixture`);
+      const server = app.framework !== 'vite';
+      const redirectVariable =
+        app.framework === 'tanstack-start'
+          ? 'WORKOS_REDIRECT_URI'
+          : `${prefix}_WORKOS_REDIRECT_URI`;
+      lines.push(
+        `${redirectVariable}=http://localhost:${3000 + config.apps.indexOf(app)}${server ? '/callback' : '/'}`,
+      );
+      if (server)
+        lines.push(
+          'WORKOS_CLIENT_ID=client_test_fixture',
+          `WORKOS_COOKIE_NAME=wos-session-${app.name}`,
+          'WORKOS_API_KEY=sk_test_not_a_real_secret',
+          'WORKOS_COOKIE_PASSWORD=not-a-real-cookie-password-32-characters',
+        );
+    }
     await writeFile(
       join(project, 'apps', app.name, '.env.local'),
       lines.join('\n') + '\n',
@@ -264,6 +282,7 @@ export type MissingModule = typeof api.notAModule;
         'Messages must contain 1 to 1000 characters.',
         'by_owner',
         'sk_test_not_a_real_secret',
+        'not-a-real-cookie-password-32-characters',
       ]) {
         if (contents.includes(Buffer.from(forbidden)))
           throw new Error(

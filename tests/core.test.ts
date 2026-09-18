@@ -88,7 +88,7 @@ describe('options', () => {
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
-  it.each(['none', 'clerk', 'convex-auth'])(
+  it.each(['none', 'clerk', 'convex-auth', 'workos'])(
     'accepts %s auth through CLI options',
     (auth) => {
       expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(
@@ -173,6 +173,17 @@ describe('context', () => {
   });
 });
 describe('generation safety', () => {
+  it.each(['expo', 'next,expo', 'expo,vite', 'tanstack-start,mobile:expo'])(
+    'rejects unsupported WorkOS apps %s before writing output',
+    async (apps) => {
+      const cwd = await temp();
+      await expect(
+        generateProject({ name: 'unsupported', apps, auth: 'workos' }, { cwd }),
+      ).rejects.toThrow(/expo/i);
+      expect(await readdir(cwd)).toEqual([]);
+    },
+  );
+
   it('refuses nonempty directories without modifying files', async () => {
     const cwd = await temp();
     await mkdir(join(cwd, 'existing'));
