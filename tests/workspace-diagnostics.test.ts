@@ -24,11 +24,22 @@ afterEach(async () => {
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
-async function fixture(apps = 'web:next,mobile:expo', auth = 'none') {
+async function fixture(
+  apps = 'web:next,mobile:expo',
+  auth = 'none',
+  packageManager: 'pnpm' | 'bun' = 'pnpm',
+) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-doctor-'));
   roots.push(cwd);
   const root = await generateProject(
-    { name: 'diagnostics', apps, auth, install: false, git: false },
+    {
+      name: 'diagnostics',
+      apps,
+      auth,
+      packageManager,
+      install: false,
+      git: false,
+    },
     { cwd },
   );
   return loadWorkspace(root);
@@ -781,4 +792,98 @@ it('reports missing Astro Clerk integration and middleware files', async () => {
     'apps/web/auth.config.mjs is missing.',
     'apps/web/src/middleware.ts is missing.',
   ]);
+});
+
+it.each([
+  ['next', '@workos-inc/authkit-nextjs'],
+  ['next', '@workos-inc/node'],
+  ['tanstack-start', '@workos-inc/node'],
+  ['vite', '@workos-inc/authkit-react'],
+  ['tanstack-start', '@workos/authkit-tanstack-react-start'],
+])(
+  'checks the official WorkOS dependency for %s',
+  async (framework, dependency) => {
+    const workspace = await fixture(`web:${framework}`, 'workos');
+    const path = join(workspace.root, 'apps/web/package.json');
+    const pkg = JSON.parse(await readFile(path, 'utf8'));
+    delete pkg.dependencies[dependency!];
+    await writeFile(path, JSON.stringify(pkg));
+    await rm(join(workspace.root, 'packages/backend/convex/auth.config.ts'));
+    const result = await doctor(workspace);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dependency-missing',
+          message: `apps/web does not declare ${dependency}.`,
+        }),
+        expect.objectContaining({ code: 'auth-config-missing' }),
+        expect.objectContaining({
+          code: 'auth-env-missing',
+          message: expect.stringContaining('WORKOS_CLIENT_ID'),
+        }),
+      ]),
+    );
+  },
+);
+
+it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'])(
+  'reports public WorkOS secrets with %s without exposing values',
+  async (prefix) => {
+    const workspace = await fixture('web:next', 'workos');
+    await put(
+      workspace.root,
+      'apps/web/.env.production',
+      `${prefix}_WORKOS_API_KEY=private-api\n${prefix}_WORKOS_COOKIE_PASSWORD=private-cookie\n`,
+    );
+    const result = await doctor(workspace);
+    const issues = result.issues.filter(
+      (issue) => issue.code === 'public-secret',
+    );
+    expect(issues).toHaveLength(2);
+    expect(issues.map((issue) => issue.message)).toEqual([
+      'apps/web exposes WORKOS_API_KEY through a public environment variable.',
+      'apps/web exposes WORKOS_COOKIE_PASSWORD through a public environment variable.',
+    ]);
+    expect(JSON.stringify(result)).not.toContain('private-api');
+    expect(JSON.stringify(result)).not.toContain('private-cookie');
+  },
+);
+
+it('checks bun lockfiles, version pins, layout, and setup commands', async () => {
+  const workspace = await fixture('web:vite', 'none', 'bun');
+  let report = await doctor(workspace);
+  expect(report.checks).toContain(
+    `Tested package manager: bun@${versions.bun}.`,
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({
+      code: 'lockfile-missing',
+      message: 'bun.lock is missing.',
+    }),
+  );
+  expect(report.issues.map((issue) => issue.fix).join('\n')).toContain(
+    'bun run convex:setup',
+  );
+  expect(JSON.stringify(report)).not.toContain('pnpm');
+  await put(workspace.root, 'bun.lock', '{}');
+  const manifest = JSON.parse(
+    await readFile(join(workspace.root, 'package.json'), 'utf8'),
+  );
+  manifest.packageManager = 'bun@1.0.0';
+  manifest.workspaces = ['apps/*'];
+  await put(workspace.root, 'package.json', JSON.stringify(manifest));
+  report = await doctor(workspace);
+  expect(report.checks).toContain('bun.lock exists.');
+  expect(report.issues.some((issue) => issue.code === 'lockfile-missing')).toBe(
+    false,
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({
+      code: 'package-manager-baseline',
+      fix: 'Run npx create-convex-monorepo@latest upgrade, then bun install.',
+    }),
+  );
+  expect(report.issues).toContainEqual(
+    expect.objectContaining({ code: 'workspace-package-excluded' }),
+  );
 });

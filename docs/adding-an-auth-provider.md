@@ -14,6 +14,8 @@ The none adapter demonstrates file ownership. The Clerk adapter demonstrates a b
 
 For Astro, also write `auth.config.mjs` with the integration list consumed by `astro.config.mjs`. Providers that need no Astro integration export an empty list. Clerk supplies its official integration and middleware, and imports `useAuth` from `@clerk/astro/react` without a React `ClerkProvider`.
 
+WorkOS AuthKit is the third adapter and supports Next.js, Vite, and TanStack Start. It owns a ConvexProviderWithAuth token bridge, server callback routes where required, and `.env.workos.example`. Expo and Astro are rejected during normalization through the WorkOS bindings map. Astro has an [official SDK](https://github.com/workos/authkit-astro), but it requires a server adapter and on-demand rendering, which the static Astro template does not configure. Ownership uses `identity.subject`, unlike Clerk and Convex Auth.
+
 Convex Auth is the second adapter; its independent provider writer lives in `src/integrations/auth/convex-auth/providers.ts`.
 
 `writeProviders` currently implements no-auth and Clerk-compatible provider wiring. A provider with a different session protocol should supply its own provider module or extend that helper with a concrete contract. Do not force an unrelated SDK through Clerk's `useAuth` shape.
@@ -36,8 +38,10 @@ Cover both starter-content choices in adapter tests. Blank projects retain authe
 
 ## Installing auth after generation
 
-Existing-workspace auth installation renders the no-auth baseline and the selected provider, then plans their differences. The public commands are `add auth clerk` and `add auth convex-auth`; adding another provider also requires extending CLI selection, metadata validation, doctor dependency checks, and `planAddAuth`.
+Existing-workspace auth installation renders the no-auth baseline and the selected provider, then plans their differences. The public commands are `add auth clerk`, `add auth convex-auth`, and `add auth workos`; adding another provider also requires extending CLI selection, metadata validation, doctor dependency checks, and `planAddAuth`.
 
 Define the backend files the provider may add or change. Do not broaden the planner to overwrite every backend difference: schemas, user functions, and Convex generated internals remain under project ownership. Convex Auth adds `authTables` to a generated schema or conservatively patches a single `defineSchema` call with an object literal; unsupported shapes produce instructions for manual edits. Customized HTTP routers require a manual `auth.addHttpRoutes(http)` call. Generated types refresh on the next `pnpm convex:dev` or `convex codegen`. For changed app source files, require an unchanged baseline or return an actionable conflict. Merge manifest entries without replacing unrelated dependencies or scripts. Generate a separate setup guide instead of replacing the project's README. Convex Auth also adds the signing-key script and root command; follow `CONVEX_AUTH_SETUP.md` after running `pnpm install` and `pnpm convex:auth-keys`.
 
 Test installation on existing apps for every framework and starter choice, customized-source conflicts, dependency conflicts, repeat installation, stored-data implications, and cancellation. A provider migration between identities needs a separate design; it is not implied by adding an auth adapter.
+
+WorkOS adds `WORKOS_SETUP.md`, preserves the existing README, and merges its Turbo environment entries without replacing unrelated settings. Keep callback ports tied to each app's position when rendering the auth diff. Doctor checks the framework SDK and the server SDK peer; upgrade derives the pins from the same manifests.

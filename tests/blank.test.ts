@@ -17,17 +17,26 @@ it('normalizes example selection and rejects unsupported examples', () => {
   );
 });
 
-describe.each(['none', 'clerk', 'convex-auth'])(
+describe.each(['none', 'clerk', 'convex-auth', 'workos'])(
   'blank projects with %s auth',
   (auth) => {
-    it.each([
-      'next',
-      'vite',
-      'tanstack-start',
-      'expo',
-      'astro',
-      'next,admin:vite,portal:tanstack-start,expo',
-    ])('generates %s without demo code', async (apps) => {
+    it.each(
+      auth === 'workos'
+        ? [
+            'next',
+            'vite',
+            'tanstack-start',
+            'next,admin:vite,portal:tanstack-start',
+          ]
+        : [
+            'next',
+            'vite',
+            'tanstack-start',
+            'expo',
+            'astro',
+            'next,admin:vite,portal:tanstack-start,expo',
+          ],
+    )('generates %s without demo code', async (apps) => {
       const cwd = await mkdtemp(join(tmpdir(), 'ccm-blank-'));
       try {
         const root = await generateProject(
@@ -86,7 +95,9 @@ describe.each(['none', 'clerk', 'convex-auth'])(
               ? 'ConvexProviderWithClerk'
               : auth === 'convex-auth'
                 ? 'ConvexAuthProvider'
-                : 'ConvexProvider',
+                : auth === 'workos'
+                  ? 'ConvexProviderWithAuth'
+                  : 'ConvexProvider',
           );
         }
         expect(files.includes('packages/backend/convex/auth.config.ts')).toBe(

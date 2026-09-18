@@ -84,15 +84,38 @@ describe('options', () => {
     { apps: [] },
     { auth: 'custom' },
     { packageManager: 'npm' },
+    { packageManager: 'yarn' },
   ])('rejects invalid choices %j', (raw) =>
     expect(() => normalizeOptions(raw)).toThrow(),
   );
-  it.each(['none', 'clerk', 'convex-auth'])(
+  it.each(['none', 'clerk', 'convex-auth', 'workos'])(
     'accepts %s auth through CLI options',
     (auth) => {
       expect(normalizeOptions(parseCommand(['--auth', auth]).raw).auth).toBe(
         auth,
       );
+    },
+  );
+  it.each(['pnpm', 'bun'])(
+    'accepts %s through the package-manager flag',
+    (manager) => {
+      expect(
+        normalizeOptions(parseCommand(['--package-manager', manager]).raw)
+          .packageManager,
+      ).toBe(manager);
+    },
+  );
+  it('defaults to pnpm', () => {
+    expect(normalizeOptions({}).packageManager).toBe('pnpm');
+  });
+  it.each(['npm', 'yarn'])(
+    'rejects %s before creating files',
+    async (manager) => {
+      const cwd = await temp();
+      await expect(
+        generateProject({ name: 'invalid', packageManager: manager }, { cwd }),
+      ).rejects.toThrow('Choose pnpm or bun');
+      expect(await readdir(cwd)).toEqual([]);
     },
   );
   it('selects framework adapters', () =>
@@ -150,6 +173,17 @@ describe('context', () => {
   });
 });
 describe('generation safety', () => {
+  it.each(['expo', 'next,expo', 'expo,vite', 'tanstack-start,mobile:expo'])(
+    'rejects unsupported WorkOS apps %s before writing output',
+    async (apps) => {
+      const cwd = await temp();
+      await expect(
+        generateProject({ name: 'unsupported', apps, auth: 'workos' }, { cwd }),
+      ).rejects.toThrow(/expo/i);
+      expect(await readdir(cwd)).toEqual([]);
+    },
+  );
+
   it('refuses nonempty directories without modifying files', async () => {
     const cwd = await temp();
     await mkdir(join(cwd, 'existing'));
@@ -302,5 +336,40 @@ it.each(['none', 'clerk', 'convex-auth'])(
       { name: 'island', framework: 'astro' },
     ]);
     expect(selectTemplate('astro').label).toBe('Astro + React island');
+  },
+);
+it('installs bun projects with the selected package manager', async () => {
+  const install = vi
+    .spyOn(packageManager.bun, 'install')
+    .mockResolvedValueOnce();
+  const other = vi
+    .spyOn(packageManager.pnpm, 'install')
+    .mockResolvedValueOnce();
+  const root = await generateProject(
+    { name: 'bun-install', apps: 'vite', packageManager: 'bun', install: true },
+    { cwd: await temp() },
+  );
+  expect(install).toHaveBeenCalledWith(root, undefined);
+  expect(other).not.toHaveBeenCalled();
+});
+
+// Unsupported combinations must fail in normalization, before generation writes.
+it.each(['pnpm', 'bun'])(
+  'rejects WorkOS with static Astro before writing a %s project',
+  async (packageManager) => {
+    const options = {
+      name: 'unsupported',
+      apps: 'astro',
+      auth: 'workos',
+      packageManager,
+    };
+    expect(() => normalizeOptions(options)).toThrow(
+      'the Astro template uses static output',
+    );
+    const cwd = await temp();
+    await expect(generateProject(options, { cwd })).rejects.toThrow(
+      'does not support framework "astro"',
+    );
+    expect(await readdir(cwd)).toEqual([]);
   },
 );

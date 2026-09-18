@@ -16,6 +16,7 @@ interface Golden {
   apps: string;
   auth: string;
   example?: string;
+  packageManager?: 'pnpm' | 'bun';
   expected: [string, string, string, string | null][];
 }
 const scenarios: Golden[] = JSON.parse(
@@ -49,6 +50,7 @@ describe('generated project golden matrix', () => {
     try {
       const root = await generateProject(
         {
+          packageManager: scenario.packageManager ?? 'pnpm',
           name: 'golden-app',
           apps: scenario.apps,
           auth: scenario.auth,
@@ -58,6 +60,8 @@ describe('generated project golden matrix', () => {
         },
         { cwd },
       );
+      const manager = scenario.packageManager ?? 'pnpm';
+      const run = manager === 'bun' ? 'bun run' : 'pnpm';
       const read = (path: string) => readFile(join(root, path), 'utf8');
       const json = async <T>(path: string): Promise<T> =>
         JSON.parse(await read(path));
@@ -73,11 +77,11 @@ describe('generated project golden matrix', () => {
           ),
         );
         expect(await read('README.md')).toContain(
-          'pnpm convex:auth-keys --prod',
+          `${run} convex:auth-keys --prod`,
         );
         expect(
           await read('packages/backend/.env.convex-auth.example'),
-        ).toContain('pnpm convex:auth-keys');
+        ).toContain(`${run} convex:auth-keys`);
       } else {
         expect(manifest.scripts).not.toHaveProperty('convex:auth-keys');
         expect(await readdir(join(root, 'scripts'))).not.toContain(
@@ -96,17 +100,30 @@ describe('generated project golden matrix', () => {
       expect(manifest).toMatchObject({
         name: 'golden-app',
         private: true,
-        packageManager: `pnpm@${versions.pnpm}`,
+        packageManager: `${manager}@${versions[manager]}`,
         scripts: {
           dev: `turbo run dev --ui=stream --concurrency=${config.apps.length + 2}`,
           build: 'turbo run build',
           typecheck: 'turbo run typecheck',
           lint: 'turbo run lint',
-          'convex:dev': 'pnpm --filter @golden-app/backend dev',
+          'convex:dev': `${run} --filter @golden-app/backend dev`,
         },
       });
-      expect(await read('pnpm-workspace.yaml')).toContain("'apps/*'");
-      expect(await read('pnpm-workspace.yaml')).toContain("'packages/*'");
+      expect(config.packageManager).toBe(manager);
+      if (manager === 'bun') {
+        expect(manifest.workspaces).toEqual(['apps/*', 'packages/*']);
+        expect(await readdir(root)).not.toContain('pnpm-workspace.yaml');
+        expect(await read('.gitignore')).not.toContain('bun.lock');
+        const readme = await read('README.md');
+        expect(readme).toContain('bun install');
+        expect(readme).toContain('bun run dev');
+        expect(readme).not.toContain('pnpm');
+        expect(readme.match(/## Install and run/g)).toHaveLength(1);
+        expect(readme).not.toContain('## Development');
+      } else {
+        expect(await read('pnpm-workspace.yaml')).toContain("'apps/*'");
+        expect(await read('pnpm-workspace.yaml')).toContain("'packages/*'");
+      }
       expect((await readdir(join(root, 'packages'))).sort()).toEqual([
         'backend',
         'eslint-config',
@@ -176,6 +193,11 @@ describe('generated project golden matrix', () => {
           expect(
             await read('packages/backend/convex/auth.config.ts'),
           ).toContain("applicationID: 'convex'");
+        } else if (scenario.auth === 'workos') {
+          expect(access).toContain('ctx.auth.getUserIdentity()');
+          expect(access).toMatch(/if \(!identity\) throw/);
+          expect(access).toContain('return identity.subject');
+          expect(access).not.toContain('tokenIdentifier');
         } else if (scenario.auth === 'convex-auth') {
           expect(access).toContain('getAuthUserId(ctx)');
           expect(access).toContain('Promise<string>');
@@ -211,6 +233,38 @@ describe('generated project golden matrix', () => {
           expect(deploymentEnv).toContain(variable);
         expect(await read('README.md')).toContain('## Convex Auth setup');
       }
+      if (scenario.auth === 'workos') {
+        const readme = await read('README.md');
+        expect(readme).toContain(`${run} convex:setup`);
+        expect(readme).toContain(
+          manager === 'bun'
+            ? 'bun run --cwd packages/backend convex env set WORKOS_CLIENT_ID'
+            : 'pnpm --filter @golden-app/backend exec convex env set WORKOS_CLIENT_ID',
+        );
+        if (manager === 'bun') expect(readme).not.toContain('pnpm');
+        expect(await read('packages/backend/convex/auth.config.ts')).toContain(
+          'WORKOS_CLIENT_ID',
+        );
+        expect(await read('packages/backend/.env.workos.example')).toContain(
+          'WORKOS_CLIENT_ID',
+        );
+        expect(await read('README.md')).toContain('## WorkOS setup');
+        expect(await read('README.md')).toContain('WORKOS_COOKIE_NAME');
+        expect(await read('README.md')).toContain(
+          'https://workos.com/docs/authkit/sessions#sign-out-uris',
+        );
+        expect(await read('README.md')).toContain('session JWT template');
+        expect(await read('README.md')).toContain(
+          'aud claim equal to that same client ID',
+        );
+        expect(await read('packages/backend/convex/auth.config.ts')).toContain(
+          'applicationID: clientId',
+        );
+        expect(await read('packages/backend/.env.workos.example')).toContain(
+          'https://api.workos.com/user_management/client_',
+        );
+        expect(await read('.gitignore')).toContain('!.env.workos.example');
+      }
       for (const [name, framework, prefix, sdk] of scenario.expected) {
         const dir = `apps/${name}`;
         const app = await json<PackageManifest>(`${dir}/package.json`);
@@ -234,7 +288,7 @@ describe('generated project golden matrix', () => {
           );
         }
         expect(manifest.scripts?.[`dev:${name}`]).toBe(
-          `pnpm --filter @golden-app/${name} dev`,
+          `${run} --filter @golden-app/${name} dev`,
         );
         expect(await read(`${dir}/.env.example`)).toContain(
           `${prefix}_CONVEX_URL=\n`,
@@ -307,6 +361,73 @@ describe('generated project golden matrix', () => {
               'proxy.ts',
             );
             expect(providers).not.toContain('@convex-dev/auth/nextjs');
+          }
+        } else if (scenario.auth === 'workos') {
+          const pin =
+            framework === 'next'
+              ? versions.workosNext
+              : framework === 'vite'
+                ? versions.workosReact
+                : versions.workosTanstack;
+          expect(app.dependencies).toHaveProperty(sdk!, pin);
+          expect(providers).toContain('ConvexProviderWithAuth');
+          expect(providers).toContain('<Authenticated>');
+          expect(providers).toContain('<AuthLoading>');
+          expect(providers).toContain('<Unauthenticated>');
+          expect(providers).toContain('<AuthControls');
+          expect(providers).not.toMatch(
+            /WORKOS_API_KEY|WORKOS_COOKIE_PASSWORD/,
+          );
+          const env = await read(`${dir}/.env.workos.example`);
+          expect(env).toContain(`${prefix}_WORKOS_CLIENT_ID=\n`);
+          expect(env).not.toMatch(
+            /(?:NEXT_PUBLIC|VITE|EXPO_PUBLIC)_WORKOS_(?:API_KEY|COOKIE_PASSWORD)\s*=/,
+          );
+          if (framework === 'vite') {
+            expect(env).not.toMatch(
+              /WORKOS_API_KEY=|WORKOS_COOKIE_PASSWORD=|WORKOS_COOKIE_NAME=/,
+            );
+            expect(providers).toContain('getAccessToken');
+            const controls = await read(`${dir}/src/auth-controls.tsx`);
+            expect(controls).toContain('if (!url)');
+            expect(controls).toContain('Reload sign-in');
+            expect(controls).toContain('finally');
+          } else {
+            expect(app.dependencies).toHaveProperty(
+              '@workos-inc/node',
+              versions.workosNode,
+            );
+            expect(env).toContain('WORKOS_API_KEY=');
+            expect(env).toContain('WORKOS_COOKIE_PASSWORD=');
+            expect(env).toContain(`WORKOS_COOKIE_NAME=wos-session-${name}\n`);
+            expect(providers).toContain('useAccessToken');
+          }
+          const controls = await read(`${dir}/src/auth-controls.tsx`);
+          expect(controls).toMatch(/signIn|sign-in/);
+          expect(controls).toContain(
+            'signOut({ returnTo: window.location.origin })',
+          );
+          expect(controls).toMatch(/loading/i);
+          expect(controls).toContain('error');
+          expect(controls).not.toContain('alert(');
+          if (framework === 'next') {
+            expect(await read(`${dir}/src/proxy.ts`)).toContain('authkitProxy');
+            expect(await read(`${dir}/src/app/callback/route.ts`)).toContain(
+              'handleAuth',
+            );
+            expect(await read(`${dir}/src/app/sign-in/route.ts`)).toContain(
+              'getSignInUrl',
+            );
+          } else if (framework === 'tanstack-start') {
+            expect(await read(`${dir}/src/start.ts`)).toContain(
+              'authkitMiddleware',
+            );
+            expect(await read(`${dir}/src/routes/callback.tsx`)).toContain(
+              'handleCallbackRoute',
+            );
+            expect(await read(`${dir}/src/routes/sign-in.tsx`)).toContain(
+              'getSignInUrl',
+            );
           }
         } else if (sdk) {
           expect(app.dependencies).toHaveProperty(sdk);

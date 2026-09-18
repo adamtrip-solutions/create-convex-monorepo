@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   upgrade: vi.fn(),
   planUpgrade: vi.fn(),
   install: vi.fn(),
+  bunInstall: vi.fn(),
   select: vi.fn(),
   text: vi.fn(),
   confirm: vi.fn(),
@@ -35,7 +36,10 @@ vi.mock('../src/workspace/upgrade.js', () => ({
   planUpgrade: mocks.planUpgrade,
 }));
 vi.mock('../src/package-manager/index.js', () => ({
-  pnpm: { install: mocks.install },
+  packageManagers: {
+    pnpm: { install: mocks.install },
+    bun: { install: mocks.bunInstall },
+  },
 }));
 import {
   parseWorkspaceCommand,
@@ -44,7 +48,7 @@ import {
 
 const workspace = {
   root: '/workspace',
-  config: { example: 'messages', auth: 'none' },
+  config: { example: 'messages', auth: 'none', packageManager: 'pnpm' },
 };
 const plan = {
   root: '/workspace',
@@ -84,15 +88,18 @@ afterEach(() => {
 });
 
 describe('workspace argument parsing', () => {
-  it.each(['clerk', 'convex-auth'])('parses %s installation', (provider) => {
-    expect(parseWorkspaceCommand(['add', 'auth', provider])).toMatchObject({
-      command: 'add-auth',
-      provider,
-    });
-  });
-  it('names both supported providers for an invalid provider', () => {
+  it.each(['clerk', 'convex-auth', 'workos'])(
+    'parses %s installation',
+    (provider) => {
+      expect(parseWorkspaceCommand(['add', 'auth', provider])).toMatchObject({
+        command: 'add-auth',
+        provider,
+      });
+    },
+  );
+  it('names all supported providers for an invalid provider', () => {
     expect(() => parseWorkspaceCommand(['add', 'auth', 'other'])).toThrow(
-      'Choose add auth clerk or add auth convex-auth.',
+      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
     );
   });
 
@@ -538,7 +545,7 @@ describe('upgrade mutations', () => {
   });
 });
 
-it.each(['clerk', 'convex-auth'])(
+it.each(['clerk', 'convex-auth', 'workos'])(
   'offers and dispatches %s interactively',
   async (provider) => {
     process.stdin.isTTY = true;
@@ -553,6 +560,7 @@ it.each(['clerk', 'convex-auth'])(
         options: [
           { value: 'clerk', label: 'Clerk' },
           { value: 'convex-auth', label: 'Convex Auth' },
+          { value: 'workos', label: 'WorkOS AuthKit' },
         ],
       }),
     );
@@ -588,7 +596,7 @@ it('installs Convex Auth dependencies after applying the plan', async () => {
     mocks.install.mock.invocationCallOrder[0]!,
   );
 });
-it.each(['clerk', 'convex-auth'])(
+it.each(['clerk', 'convex-auth', 'workos'])(
   'uses configured %s for an interactive repeat',
   async (auth) => {
     process.stdin.isTTY = true;
@@ -602,3 +610,18 @@ it.each(['clerk', 'convex-auth'])(
     expect(mocks.install).not.toHaveBeenCalled();
   },
 );
+
+it.each([
+  ['add', 'app', 'admin', '--framework', 'vite', '--install'],
+  ['add', 'package', 'shared', '--install'],
+  ['add', 'auth', 'clerk', '--install'],
+  ['upgrade', '--install'],
+])('installs bun workspace changes with bun: %s', async (...args) => {
+  mocks.load.mockResolvedValue({
+    ...workspace,
+    config: { ...workspace.config, packageManager: 'bun' },
+  });
+  await runWorkspace(args, '0.1.0');
+  expect(mocks.bunInstall).toHaveBeenCalledWith('/workspace', undefined);
+  expect(mocks.install).not.toHaveBeenCalled();
+});

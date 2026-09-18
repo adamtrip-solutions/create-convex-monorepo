@@ -21,6 +21,7 @@ import { parseCommand } from '../src/commands/create.js';
 import * as packageManager from '../src/package-manager/index.js';
 import {
   deploymentUrl,
+  detectPackageManager,
   initializeConvex,
   linkEnvironment,
   linkFrontends,
@@ -49,6 +50,101 @@ async function backendEnv(root: string, contents: string) {
   await writeFile(join(root, 'packages/backend/.env.local'), contents);
 }
 
+async function managerMetadata(
+  root: string,
+  configManager: unknown,
+  manifestManager: unknown,
+) {
+  for (const [name, value] of [
+    ['convex-monorepo.json', configManager],
+    ['package.json', manifestManager],
+  ] as const) {
+    const file = join(root, name);
+    const metadata = JSON.parse(await readFile(file, 'utf8'));
+    if (value === undefined) delete metadata.packageManager;
+    else metadata.packageManager = value;
+    await writeFile(file, JSON.stringify(metadata));
+  }
+}
+
+describe('setup package manager detection', () => {
+  it.each([
+    ['bun', 'pnpm@10.0.0', 'bun'],
+    ['pnpm', 'bun@1.3.0', 'pnpm'],
+    [undefined, 'bun@1.3.0', 'bun'],
+    [undefined, 'pnpm@10.0.0', 'pnpm'],
+    ['bun', undefined, 'bun'],
+    [undefined, undefined, 'pnpm'],
+  ])(
+    'resolves config %s and manifest %s to %s',
+    async (config, manifest, expected) => {
+      const { root } = await fixture('next');
+      await managerMetadata(root, config, manifest);
+      await expect(detectPackageManager(root)).resolves.toBe(expected);
+    },
+  );
+  it.each([
+    ['npm', 'pnpm@10.0.0'],
+    ['bun', 'yarn@4.0.0'],
+    [null, 'bun@1.3.0'],
+    [undefined, 123],
+    [undefined, 'bun@'],
+  ])(
+    'rejects unsupported metadata before setup, linking, or auth writes: %s / %s',
+    async (config, manifest) => {
+      const { root } = await fixture('next', 'convex-auth');
+      await managerMetadata(root, config, manifest);
+      await backendEnv(root, 'CONVEX_URL=https://existing.convex.cloud');
+      await fakeConvex(
+        root,
+        "require('node:fs').writeFileSync('called.txt', 'called')",
+      );
+      await expect(initializeConvex(root)).rejects.toThrow(
+        'Unsupported package manager',
+      );
+      await expect(linkFrontends(root)).rejects.toThrow(
+        'Unsupported package manager',
+      );
+      await expect(
+        promisify(execFile)(process.execPath, [
+          join(root, 'scripts/convex-auth-keys.mjs'),
+        ]),
+      ).rejects.toMatchObject({
+        code: 1,
+        stdout: '',
+        stderr: expect.stringContaining('Unsupported package manager'),
+      });
+      await expect(
+        readFile(join(root, 'packages/backend/called.txt')),
+      ).rejects.toThrow();
+      await expect(
+        readFile(join(root, 'apps/web/.env.local')),
+      ).rejects.toThrow();
+      expect(
+        await readFile(join(root, 'packages/backend/.env.local'), 'utf8'),
+      ).toBe('CONVEX_URL=https://existing.convex.cloud');
+    },
+  );
+  it('uses bun retry commands for missing dependencies and URLs', async () => {
+    const { root } = await fixture('next', 'convex-auth');
+    await managerMetadata(root, 'bun', 'bun@1.3.0');
+    await expect(initializeConvex(root)).rejects.toThrow(
+      'Run bun install, then bun run convex:setup.',
+    );
+    await expect(linkFrontends(root)).rejects.toThrow(
+      'Run bun run convex:setup first.',
+    );
+    await expect(
+      promisify(execFile)(process.execPath, [
+        join(root, 'scripts/convex-auth-keys.mjs'),
+      ]),
+    ).rejects.toMatchObject({
+      stderr:
+        'Convex is not installed. Run bun install, then bun run convex:auth-keys.\n',
+    });
+  });
+});
+
 describe('Convex initialization options', () => {
   it('requires explicit setup when accepting defaults noninteractively', () => {
     expect(normalizeOptions({ yes: true })).toMatchObject({
@@ -74,50 +170,67 @@ describe('Convex initialization options', () => {
       'Choose either',
     );
   });
-  it('installs before setup and reports linked URLs only after success', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'ccm-init-'));
-    temporary.push(cwd);
-    const calls: string[] = [];
-    vi.spyOn(packageManager.pnpm, 'install').mockImplementation(async () => {
-      calls.push('install');
-    });
-    vi.spyOn(packageManager, 'runCommand').mockImplementation(
-      async (command, args) => {
-        calls.push(`${command} ${args.join(' ')}`);
-      },
-    );
-    const progress: string[] = [];
-    await generateProject(
-      { name: 'ready', initConvex: true },
-      { cwd, onProgress: (message) => progress.push(message) },
-    );
-    expect(calls).toEqual(['install', 'pnpm convex:setup']);
-    expect(progress).toContain('Initialized Convex and linked frontend URLs');
-  });
-  it('preserves generated files and gives a retry command when initialization fails', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'ccm-init-'));
-    temporary.push(cwd);
-    vi.spyOn(packageManager.pnpm, 'install').mockResolvedValue();
-    vi.spyOn(packageManager, 'runCommand').mockRejectedValue(
-      new Error('Convex setup cancelled'),
-    );
-    const progress: string[] = [];
-    await expect(
-      generateProject(
-        { name: 'kept', initConvex: true },
+  it.each(['pnpm', 'bun'] as const)(
+    'installs %s before setup and reports linked URLs only after success',
+    async (manager) => {
+      const cwd = await mkdtemp(join(tmpdir(), 'ccm-init-'));
+      temporary.push(cwd);
+      const calls: string[] = [];
+      vi.spyOn(
+        packageManager.packageManagers[manager],
+        'install',
+      ).mockImplementation(async () => {
+        calls.push('install');
+      });
+      vi.spyOn(packageManager, 'runCommand').mockImplementation(
+        async (command, args) => {
+          calls.push(`${command} ${args.join(' ')}`);
+        },
+      );
+      const progress: string[] = [];
+      await generateProject(
+        { name: 'ready', initConvex: true, packageManager: manager },
         { cwd, onProgress: (message) => progress.push(message) },
-      ),
-    ).rejects.toThrow('pnpm convex:setup');
-    expect(
-      await readFile(
-        join(cwd, 'kept/packages/backend/convex/schema.ts'),
-        'utf8',
-      ),
-    ).toContain('defineSchema');
-    expect(progress).not.toContain(
-      'Initialized Convex and linked frontend URLs',
-    );
-  });
+      );
+      expect(calls).toEqual([
+        'install',
+        manager === 'bun' ? 'bun run convex:setup' : 'pnpm convex:setup',
+      ]);
+      expect(progress).toContain('Initialized Convex and linked frontend URLs');
+    },
+  );
+  it.each(['pnpm', 'bun'] as const)(
+    'preserves %s files and gives a retry command when initialization fails',
+    async (manager) => {
+      const cwd = await mkdtemp(join(tmpdir(), 'ccm-init-'));
+      temporary.push(cwd);
+      vi.spyOn(
+        packageManager.packageManagers[manager],
+        'install',
+      ).mockResolvedValue();
+      vi.spyOn(packageManager, 'runCommand').mockRejectedValue(
+        new Error('Convex setup cancelled'),
+      );
+      const progress: string[] = [];
+      await expect(
+        generateProject(
+          { name: 'kept', initConvex: true, packageManager: manager },
+          { cwd, onProgress: (message) => progress.push(message) },
+        ),
+      ).rejects.toThrow(
+        manager === 'bun' ? 'bun run convex:setup' : 'pnpm convex:setup',
+      );
+      expect(
+        await readFile(
+          join(cwd, 'kept/packages/backend/convex/schema.ts'),
+          'utf8',
+        ),
+      ).toContain('defineSchema');
+      expect(progress).not.toContain(
+        'Initialized Convex and linked frontend URLs',
+      );
+    },
+  );
 });
 
 describe('public URL linking', () => {
@@ -236,6 +349,37 @@ async function fakeConvex(root: string, code: string) {
 
 describe('Convex Auth key setup', () => {
   const run = promisify(execFile);
+  it.each(['pnpm', 'bun'])(
+    'runs the standalone auth helper for %s beside a legacy setup script',
+    async (manager) => {
+      const { root } = await fixture('next', 'convex-auth');
+      await managerMetadata(root, manager, `${manager}@1.0.0`);
+      const legacySetup =
+        'export async function initializeConvex() {}\nexport async function linkFrontends() {}\n';
+      await writeFile(join(root, 'scripts/convex-setup.mjs'), legacySetup);
+      await fakeConvex(
+        root,
+        `
+      const assert = require('node:assert/strict');
+      assert.deepEqual(process.argv.slice(2, 4), ['env', 'set']);
+      require('node:fs').appendFileSync('calls.txt', process.argv[4] + '\\n');
+      console.error(process.argv.join(' '));
+    `,
+      );
+      await expect(
+        run(process.execPath, [join(root, 'scripts/convex-auth-keys.mjs')]),
+      ).resolves.toEqual({
+        stdout: 'Set JWT_PRIVATE_KEY and JWKS for the selected deployment.\n',
+        stderr: '',
+      });
+      expect(
+        await readFile(join(root, 'packages/backend/calls.txt'), 'utf8'),
+      ).toBe('JWT_PRIVATE_KEY\nJWKS\n');
+      expect(
+        await readFile(join(root, 'scripts/convex-setup.mjs'), 'utf8'),
+      ).toBe(legacySetup);
+    },
+  );
   it('generates a PKCS8 RSA 2048 key and a matching public signing JWKS', () => {
     const { privateKey, jwks } = generateAuthKeys();
     expect(privateKey).toMatch(/^-----BEGIN PRIVATE KEY-----\n/);
@@ -263,18 +407,23 @@ describe('Convex Auth key setup', () => {
       ),
     ).toBe(true);
   });
-  it.each([
-    { args: [], flags: [], deployment: 'the selected deployment' },
-    { args: ['--prod'], flags: ['--prod'], deployment: '--prod' },
-    {
-      args: ['--', '--prod', '--env-file', '.env.production'],
-      flags: ['--prod', '--env-file', '.env.production'],
-      deployment: '--prod',
-    },
-  ])(
-    'runs both installed CLI commands with $args and keeps private values out of files and output',
-    async ({ args, flags, deployment }) => {
+  it.each(
+    [
+      { args: [], flags: [], deployment: 'the selected deployment' },
+      { args: ['--prod'], flags: ['--prod'], deployment: '--prod' },
+      {
+        args: ['--', '--prod', '--env-file', '.env.production'],
+        flags: ['--prod', '--env-file', '.env.production'],
+        deployment: '--prod',
+      },
+    ].flatMap((test) =>
+      ['pnpm', 'bun'].map((manager) => ({ ...test, manager })),
+    ),
+  )(
+    'runs both installed CLI commands for $manager with $args and keeps private values out of files and output',
+    async ({ args, flags, deployment, manager }) => {
       const { root, cwd } = await fixture('next', 'convex-auth');
+      await managerMetadata(root, manager, `${manager}@1.0.0`);
       await fakeConvex(
         root,
         `
@@ -339,10 +488,15 @@ describe('Convex Auth key setup', () => {
         'Convex is not installed. Run pnpm install, then pnpm convex:auth-keys.\n',
     });
   });
-  it.each(['JWT_PRIVATE_KEY', 'JWKS'])(
-    'exits nonzero without printing values when setting %s fails',
-    async (variable) => {
+  it.each(
+    ['JWT_PRIVATE_KEY', 'JWKS'].flatMap((variable) =>
+      ['pnpm', 'bun'].map((manager) => ({ variable, manager })),
+    ),
+  )(
+    'exits nonzero without printing values when setting $variable fails for $manager',
+    async ({ variable, manager }) => {
       const { root } = await fixture('next', 'convex-auth');
+      await managerMetadata(root, manager, `${manager}@1.0.0`);
       await fakeConvex(
         root,
         `
@@ -357,7 +511,7 @@ describe('Convex Auth key setup', () => {
       ).rejects.toMatchObject({
         code: 1,
         stdout: '',
-        stderr: `Convex env set ${variable} failed. Check the deployment configuration and CLI access, then rerun pnpm convex:auth-keys with the same deployment flags to set both values.\n`,
+        stderr: `Convex env set ${variable} failed. Check the deployment configuration and CLI access, then rerun ${manager === 'bun' ? 'bun run' : 'pnpm'} convex:auth-keys with the same deployment flags to set both values.\n`,
       });
       expect(
         await readFile(join(root, 'packages/backend/calls.txt'), 'utf8'),
@@ -370,17 +524,23 @@ describe('Convex Auth key setup', () => {
   );
 });
 
-it('runs the installed Convex CLI in the backend package, then links the URL', async () => {
-  const { root } = await fixture('next');
-  await fakeConvex(
-    root,
-    `const assert=require('node:assert/strict'); assert.deepEqual(process.argv.slice(2),['dev','--once']); require('node:fs').writeFileSync('.env.local','CONVEX_URL=https://live.convex.cloud\\nCONVEX_DEPLOY_KEY=test-only-secret\\n');`,
-  );
-  await initializeConvex(root);
-  expect(
-    parseEnv(await readFile(join(root, 'apps/web/.env.local'), 'utf8')),
-  ).toEqual({ NEXT_PUBLIC_CONVEX_URL: 'https://live.convex.cloud' });
-});
+it.each(['pnpm', 'bun'])(
+  'runs the installed Convex CLI for %s in the backend package, then links the URL',
+  async (manager) => {
+    const { root } = await fixture('next');
+    await fakeConvex(
+      root,
+      `const assert=require('node:assert/strict'); assert.deepEqual(process.argv.slice(2),['dev','--once']); require('node:fs').writeFileSync('.env.local','CONVEX_URL=https://live.convex.cloud\\nCONVEX_DEPLOY_KEY=test-only-secret\\n');`,
+    );
+    await managerMetadata(root, manager, `${manager}@1.0.0`);
+    await promisify(execFile)(process.execPath, [
+      join(root, 'scripts/convex-setup.mjs'),
+    ]);
+    expect(
+      parseEnv(await readFile(join(root, 'apps/web/.env.local'), 'utf8')),
+    ).toEqual({ NEXT_PUBLIC_CONVEX_URL: 'https://live.convex.cloud' });
+  },
+);
 it('does not link a stale URL if the Convex child fails', async () => {
   const { root } = await fixture('next');
   await backendEnv(root, 'CONVEX_URL=https://stale.convex.cloud');

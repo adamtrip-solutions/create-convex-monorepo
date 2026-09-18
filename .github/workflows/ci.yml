@@ -67,6 +67,10 @@ jobs:
           - apps: vite,astro
             auth: none
             workspaceCommands: '1'
+          - apps: vite,astro
+            auth: none
+            workspaceCommands: '1'
+            packageManager: bun
           - apps: vite
             auth: none
           - apps: tanstack-start
@@ -79,6 +83,12 @@ jobs:
             auth: clerk
           - apps: vite,tanstack-start
             auth: clerk
+          - apps: next,vite,tanstack-start
+            auth: workos
+            example: messages
+          - apps: next,vite,tanstack-start
+            auth: workos
+            example: none
           - apps: next,expo
             auth: convex-auth
           - apps: vite,tanstack-start
@@ -100,7 +110,38 @@ jobs:
             auth: clerk
             example: none
             workspaceCommands: '1'
+          - apps: next,vite,tanstack-start,expo
+            auth: none
+            packageManager: bun
+          - apps: next,vite,tanstack-start,expo
+            auth: clerk
+            packageManager: bun
+          - apps: next,vite,tanstack-start,expo
+            auth: convex-auth
+            packageManager: bun
+          - apps: next,vite,tanstack-start,expo
+            auth: none
+            example: none
+            packageManager: bun
+          - apps: next,vite,tanstack-start,expo
+            auth: clerk
+            example: none
+            packageManager: bun
+            workspaceCommands: '1'
+          - apps: next,vite,tanstack-start,expo
+            auth: convex-auth
+            example: none
+            packageManager: bun
+          - apps: next,vite,tanstack-start
+            auth: workos
+            example: messages
+            packageManager: bun
+          - apps: next,vite,tanstack-start
+            auth: workos
+            example: none
+            packageManager: bun
     env:
+      CCM_PACKAGE_MANAGER: ${{ matrix.packageManager || 'pnpm' }}
       CCM_WORKSPACE_COMMANDS: ${{ matrix.workspaceCommands || '0' }}
       CCM_EXAMPLE: ${{ matrix.example || 'messages' }}
       CCM_APPS: ${{ matrix.apps }}
@@ -115,6 +156,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: matrix.packageManager == 'bun'
+        with:
+          bun-version: 1.4.2
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test:e2e

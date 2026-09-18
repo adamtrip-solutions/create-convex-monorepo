@@ -1,5 +1,6 @@
 export type Framework = 'next' | 'vite' | 'tanstack-start' | 'expo' | 'astro';
-export type Auth = 'none' | 'clerk' | 'convex-auth';
+export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos';
+export type PackageManagerId = 'pnpm' | 'bun';
 export type Example = 'none' | 'messages';
 export interface AppSpec {
   name: string;
@@ -10,7 +11,7 @@ export interface ProjectOptions {
   apps: AppSpec[];
   auth: Auth;
   example: Example;
-  packageManager: 'pnpm';
+  packageManager: PackageManagerId;
   install: boolean;
   initConvex: boolean;
   git: boolean;

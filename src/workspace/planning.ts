@@ -22,6 +22,7 @@ export async function render(
     const root = await generateProject(
       {
         name: workspace.config.name,
+        packageManager: workspace.config.packageManager,
         apps,
         example,
         auth,

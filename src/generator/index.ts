@@ -16,7 +16,11 @@ import { generateRoot } from '../templates/root/index.js';
 import { generateBackend } from '../templates/backend/index.js';
 import { appTemplates } from '../templates/apps/index.js';
 import { authAdapters } from '../integrations/auth/index.js';
-import { pnpm, runCommand } from '../package-manager/index.js';
+import {
+  packageManagers,
+  runCommand,
+  scriptCommand,
+} from '../package-manager/index.js';
 import type { AppTemplate, Framework } from './types.js';
 
 export { normalizeOptions, validateProjectName } from './options.js';
@@ -121,10 +125,13 @@ export async function generateProject(
     if (createdTarget) await rmdir(target).catch(() => undefined);
     throw error;
   }
-  let recovery = 'pnpm install';
+  let recovery = `${options.packageManager} install`;
   try {
     if (options.install) {
-      await pnpm.install(target, settings.signal);
+      await packageManagers[options.packageManager].install(
+        target,
+        settings.signal,
+      );
       settings.onProgress?.('Installed dependencies');
     }
     if (options.git) {
@@ -133,9 +140,16 @@ export async function generateProject(
       settings.onProgress?.('Initialized git');
     }
     if (options.initConvex) {
-      recovery = 'pnpm convex:setup';
+      recovery = scriptCommand(options.packageManager, 'convex:setup');
       settings.onProgress?.('Starting Convex setup');
-      await runCommand('pnpm', ['convex:setup'], target, settings.signal);
+      await runCommand(
+        options.packageManager,
+        options.packageManager === 'bun'
+          ? ['run', 'convex:setup']
+          : ['convex:setup'],
+        target,
+        settings.signal,
+      );
       settings.onProgress?.('Initialized Convex and linked frontend URLs');
     }
   } catch (error) {
