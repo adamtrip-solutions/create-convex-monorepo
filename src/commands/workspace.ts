@@ -19,7 +19,7 @@ Manage an existing Convex monorepo from its root or any subdirectory.
     --framework <name>      next, vite, tanstack-start, or expo
     --example <name>        none or messages (defaults to workspace example)
   add package [name]        Add a blank shared TypeScript package
-  add auth [clerk]          Add Clerk authentication
+  add auth [clerk|convex-auth]  Add authentication
   doctor [--json]           Check workspace configuration and setup
   env sync [--app name]     Copy public Convex URLs to frontend env files
   upgrade                  Update exact dependency pins to the tested baseline
@@ -36,7 +36,7 @@ Add, upgrade, and env sync options:
   --version, -v            Show CLI version
 
 Without a terminal, add app requires a name and --framework; add package
-requires a name. Installation is off unless --install or --yes is passed.
+requires a name; add auth requires clerk or convex-auth. Installation is off unless --install or --yes is passed.
 Existing files are never forced.
 `;
 
@@ -56,7 +56,7 @@ export interface WorkspaceCommand {
   name?: string;
   framework?: Framework;
   example?: Example;
-  provider?: 'clerk';
+  provider?: 'clerk' | 'convex-auth';
   app?: string;
   install?: boolean;
   yes: boolean;
@@ -111,7 +111,7 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
       allowed = addFlags;
     } else
       throw new Error(
-        'Use add app [name], add package [name], or add auth [clerk].',
+        'Use add app [name], add package [name], or add auth [clerk|convex-auth].',
       );
   } else if (first === 'doctor') {
     command = 'doctor';
@@ -154,10 +154,13 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     values.example !== 'messages'
   )
     throw new Error('Choose --example none or --example messages.');
-  if (command === 'add-auth' && third !== undefined && third !== 'clerk')
-    throw new Error(
-      'Only Clerk authentication is supported. Use add auth clerk.',
-    );
+  if (
+    command === 'add-auth' &&
+    third !== undefined &&
+    third !== 'clerk' &&
+    third !== 'convex-auth'
+  )
+    throw new Error('Choose add auth clerk or add auth convex-auth.');
   return {
     command,
     help: !!values.help || (command === 'help' && !values.version),
@@ -170,7 +173,9 @@ export function parseWorkspaceCommand(args: string[]): WorkspaceCommand {
     third !== undefined
       ? { name: third }
       : {}),
-    ...(command === 'add-auth' && third === 'clerk' ? { provider: third } : {}),
+    ...(command === 'add-auth' && (third === 'clerk' || third === 'convex-auth')
+      ? { provider: third }
+      : {}),
     ...(values.framework !== undefined
       ? { framework: values.framework as Framework }
       : {}),
@@ -209,7 +214,7 @@ export async function runWorkspace(
   if (options.command === 'add') {
     if (!interactive)
       throw new Error(
-        'Choose add app <name> --framework <name>, add package <name>, or add auth clerk when prompts are disabled.',
+        'Choose add app <name> --framework <name>, add package <name>, or add auth <clerk|convex-auth> when prompts are disabled.',
       );
     options.command = answer(
       await prompts.select({
@@ -217,7 +222,7 @@ export async function runWorkspace(
         options: [
           { value: 'add-app' as const, label: 'Application' },
           { value: 'add-package' as const, label: 'Shared package' },
-          { value: 'add-auth' as const, label: 'Clerk authentication' },
+          { value: 'add-auth' as const, label: 'Authentication' },
         ],
       }),
     );
@@ -255,8 +260,24 @@ export async function runWorkspace(
         'Without prompts, use add app <name> --framework <next|vite|tanstack-start|expo>.',
       );
   }
+  if (options.command === 'add-auth' && !options.provider && !interactive)
+    throw new Error('Without prompts, use add auth <clerk|convex-auth>.');
   signal?.throwIfAborted();
   const workspace = await loadWorkspace(process.cwd());
+  if (options.command === 'add-auth' && !options.provider) {
+    options.provider =
+      workspace.config.auth === 'none'
+        ? answer(
+            await prompts.select({
+              message: 'Authentication provider?',
+              options: [
+                { value: 'clerk' as const, label: 'Clerk' },
+                { value: 'convex-auth' as const, label: 'Convex Auth' },
+              ],
+            }),
+          )
+        : workspace.config.auth;
+  }
   if (
     options.command === 'add-app' &&
     options.example === undefined &&
@@ -323,7 +344,7 @@ export async function runWorkspace(
             })
           : options.command === 'add-package'
             ? await planAddPackage(workspace, { name: options.name! })
-            : await planAddAuth(workspace, 'clerk');
+            : await planAddAuth(workspace, options.provider!);
   console.log(
     options.dryRun ? 'Dry run. Planned changes:' : 'Planned changes:',
   );

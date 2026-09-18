@@ -119,45 +119,73 @@ it('does not load project formatter configuration, format secrets or change upst
 });
 
 // This integration case renders multiple complete projects during auth migration.
-it('adds apps and auth to an unformatted v0.3 starter without rewriting existing backend files', async () => {
-  const root = await generateProject(
-    {
-      name: 'legacy',
-      apps: 'web:next,dashboard:vite,portal:tanstack-start,mobile:expo',
-    },
-    { cwd: await temporary() },
-  );
-  // Captured from the v0.3.0 generator, before formatting was introduced.
-  const legacy: Record<string, string> = JSON.parse(
-    await readFile(
-      new URL('./golden/legacy-unformatted.json', import.meta.url),
-      'utf8',
-    ),
-  );
-  for (const [path, source] of Object.entries(legacy))
-    await writeFile(join(root, path), source);
-  await applyPlan(
-    await planAddApp(await loadWorkspace(root), {
-      name: 'added',
-      framework: 'vite',
-    }),
-  );
-  for (const [path, source] of Object.entries(legacy))
-    expect(await readFile(join(root, path), 'utf8')).toBe(source);
-  await applyPlan(await planAddAuth(await loadWorkspace(root), 'clerk'));
-  for (const app of ['web', 'dashboard', 'portal', 'mobile', 'added']) {
-    const path = `apps/${app}/src/providers.tsx`;
-    const source = await readFile(join(root, path), 'utf8');
-    expect(source).toContain('ConvexProviderWithClerk');
-    expect(await check(source, { ...formattingOptions, filepath: path })).toBe(
-      true,
+it.each(['clerk', 'convex-auth'] as const)(
+  'adds apps and %s auth to an unformatted v0.3 starter while preserving project files',
+  async (auth) => {
+    const root = await generateProject(
+      {
+        name: 'legacy',
+        apps: 'web:next,dashboard:vite,portal:tanstack-start,mobile:expo',
+      },
+      { cwd: await temporary() },
     );
-  }
-  for (const name of ['schema.ts', 'messages.ts']) {
-    const path = `packages/backend/convex/${name}`;
-    expect(await readFile(join(root, path), 'utf8')).toBe(legacy[path]);
-  }
-}, 30_000);
+    // Captured from the v0.3.0 generator, before formatting was introduced.
+    const legacy: Record<string, string> = JSON.parse(
+      await readFile(
+        new URL('./golden/legacy-unformatted.json', import.meta.url),
+        'utf8',
+      ),
+    );
+    for (const [path, source] of Object.entries(legacy))
+      await writeFile(join(root, path), source);
+    await applyPlan(
+      await planAddApp(await loadWorkspace(root), {
+        name: 'added',
+        framework: 'vite',
+      }),
+    );
+    for (const [path, source] of Object.entries(legacy))
+      expect(await readFile(join(root, path), 'utf8')).toBe(source);
+    await applyPlan(await planAddAuth(await loadWorkspace(root), auth));
+    for (const app of ['web', 'dashboard', 'portal', 'mobile', 'added']) {
+      const path = `apps/${app}/src/providers.tsx`;
+      const source = await readFile(join(root, path), 'utf8');
+      expect(source).toContain(
+        auth === 'clerk' ? 'ConvexProviderWithClerk' : 'ConvexAuthProvider',
+      );
+      expect(
+        await check(source, { ...formattingOptions, filepath: path }),
+      ).toBe(true);
+    }
+    for (const name of auth === 'clerk'
+      ? ['schema.ts', 'messages.ts']
+      : ['messages.ts']) {
+      const path = `packages/backend/convex/${name}`;
+      expect(await readFile(join(root, path), 'utf8')).toBe(legacy[path]);
+    }
+    if (auth === 'convex-auth') {
+      const path = 'packages/backend/convex/schema.ts';
+      const source = await readFile(join(root, path), 'utf8');
+      expect(source).toContain('...authTables');
+      expect(
+        await check(source, { ...formattingOptions, filepath: path }),
+      ).toBe(true);
+      for (const path of [
+        'scripts/convex-auth-keys.mjs',
+        'CONVEX_AUTH_SETUP.md',
+      ]) {
+        expect(
+          await check(await readFile(join(root, path), 'utf8'), {
+            ...formattingOptions,
+            filepath: path,
+          }),
+          path,
+        ).toBe(true);
+      }
+    }
+  },
+  30_000,
+);
 
 it('still rejects substantive edits and comments in previously unformatted auth files', async () => {
   const root = await generateProject(

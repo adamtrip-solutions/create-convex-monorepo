@@ -42,7 +42,10 @@ import {
   runWorkspace,
 } from '../src/commands/workspace.js';
 
-const workspace = { root: '/workspace', config: { example: 'messages' } };
+const workspace = {
+  root: '/workspace',
+  config: { example: 'messages', auth: 'none' },
+};
 const plan = {
   root: '/workspace',
   changes: [
@@ -81,9 +84,15 @@ afterEach(() => {
 });
 
 describe('workspace argument parsing', () => {
-  it('keeps Convex Auth installation unsupported and names Clerk', () => {
-    expect(() => parseWorkspaceCommand(['add', 'auth', 'convex-auth'])).toThrow(
-      'Only Clerk authentication is supported. Use add auth clerk.',
+  it.each(['clerk', 'convex-auth'])('parses %s installation', (provider) => {
+    expect(parseWorkspaceCommand(['add', 'auth', provider])).toMatchObject({
+      command: 'add-auth',
+      provider,
+    });
+  });
+  it('names both supported providers for an invalid provider', () => {
+    expect(() => parseWorkspaceCommand(['add', 'auth', 'other'])).toThrow(
+      'Choose add auth clerk or add auth convex-auth.',
     );
   });
 
@@ -91,7 +100,7 @@ describe('workspace argument parsing', () => {
     ['doctor', '--dry-run'],
     ['doctor', '--app', 'web'],
     ['env', 'sync', '--install'],
-    ['add', 'auth', '--framework', 'vite'],
+    ['add', 'auth', 'clerk', '--framework', 'vite'],
     ['add', 'package', 'shared', '--framework', 'vite'],
     ['add', 'package', 'shared', '--example', 'none'],
     ['upgrade', '--check', '--yes'],
@@ -239,6 +248,7 @@ describe('workspace command routing', () => {
     ['add', '--yes'],
     ['add', 'app'],
     ['add', 'package'],
+    ['add', 'auth'],
     ['add', 'app', 'admin'],
     ['add', 'app', '--framework', 'vite'],
   ])('requires explicit app inputs without a terminal %j', async (...args) => {
@@ -292,7 +302,10 @@ describe('workspace command routing', () => {
     },
   );
   it('does not install with yes and no-install', async () => {
-    await runWorkspace(['add', 'auth', '--yes', '--no-install'], '1.2.3');
+    await runWorkspace(
+      ['add', 'auth', 'clerk', '--yes', '--no-install'],
+      '1.2.3',
+    );
     expect(mocks.apply).toHaveBeenCalled();
     expect(mocks.install).not.toHaveBeenCalled();
   });
@@ -301,7 +314,7 @@ describe('workspace command routing', () => {
       new Error('Conflict: apps/web/package.json changed.'),
     );
     await expect(
-      runWorkspace(['add', 'auth', '--yes'], '1.2.3'),
+      runWorkspace(['add', 'auth', 'clerk', '--yes'], '1.2.3'),
     ).rejects.toThrow('Conflict');
     expect(mocks.install).not.toHaveBeenCalled();
   });
@@ -383,7 +396,7 @@ describe('workspace command routing', () => {
   it('does not prompt for installation during an interactive dry run', async () => {
     process.stdin.isTTY = true;
     process.stdout.isTTY = true;
-    await runWorkspace(['add', 'auth', '--dry-run'], '1.2.3');
+    await runWorkspace(['add', 'auth', 'clerk', '--dry-run'], '1.2.3');
     expect(mocks.confirm).not.toHaveBeenCalled();
     expect(mocks.apply).toHaveBeenCalledWith(plan, { dryRun: true });
     expect(mocks.install).not.toHaveBeenCalled();
@@ -392,9 +405,9 @@ describe('workspace command routing', () => {
     process.stdin.isTTY = true;
     process.stdout.isTTY = true;
     mocks.confirm.mockResolvedValueOnce(Symbol('cancel'));
-    await expect(runWorkspace(['add', 'auth'], '1.2.3')).rejects.toThrow(
-      'cancelled',
-    );
+    await expect(
+      runWorkspace(['add', 'auth', 'clerk'], '1.2.3'),
+    ).rejects.toThrow('cancelled');
     expect(mocks.apply).not.toHaveBeenCalled();
     expect(mocks.install).not.toHaveBeenCalled();
   });
@@ -413,7 +426,7 @@ describe('workspace command routing', () => {
   it('explains how to retry installation after files were applied', async () => {
     const failure = new Error('Network unavailable');
     mocks.install.mockRejectedValueOnce(failure);
-    const result = runWorkspace(['add', 'auth', '--install'], '1.2.3');
+    const result = runWorkspace(['add', 'auth', 'clerk', '--install'], '1.2.3');
     await expect(result).rejects.toThrow('Workspace files were updated');
     await expect(result).rejects.toThrow('Run pnpm install');
     await expect(result).rejects.toHaveProperty('cause', failure);
@@ -524,3 +537,68 @@ describe('upgrade mutations', () => {
     expect(mocks.install).not.toHaveBeenCalled();
   });
 });
+
+it.each(['clerk', 'convex-auth'])(
+  'offers and dispatches %s interactively',
+  async (provider) => {
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    mocks.select
+      .mockResolvedValueOnce('add-auth')
+      .mockResolvedValueOnce(provider);
+    await runWorkspace(['add', '--no-install'], '1.2.3');
+    expect(mocks.select).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        message: 'Authentication provider?',
+        options: [
+          { value: 'clerk', label: 'Clerk' },
+          { value: 'convex-auth', label: 'Convex Auth' },
+        ],
+      }),
+    );
+    expect(mocks.auth).toHaveBeenCalledWith(workspace, provider);
+  },
+);
+it('cancels provider selection without planning or writing', async () => {
+  process.stdin.isTTY = true;
+  process.stdout.isTTY = true;
+  mocks.select.mockResolvedValueOnce(Symbol('cancel'));
+  await expect(runWorkspace(['add', 'auth'], '1.2.3')).rejects.toThrow(
+    'cancelled',
+  );
+  expect(mocks.auth).not.toHaveBeenCalled();
+  expect(mocks.apply).not.toHaveBeenCalled();
+});
+it('prints Convex Auth dry-run paths without secrets or installation', async () => {
+  await runWorkspace(
+    ['add', 'auth', 'convex-auth', '--dry-run', '--install'],
+    '1.2.3',
+  );
+  expect(mocks.auth).toHaveBeenCalledWith(workspace, 'convex-auth');
+  expect(mocks.apply).toHaveBeenCalledWith(plan, { dryRun: true });
+  expect(mocks.install).not.toHaveBeenCalled();
+  const output = vi.mocked(console.log).mock.calls.flat().join('\n');
+  expect(output).toContain('apps/admin/.env.local');
+  expect(output).not.toContain('must-not-print');
+});
+it('installs Convex Auth dependencies after applying the plan', async () => {
+  await runWorkspace(['add', 'auth', 'convex-auth', '--install'], '1.2.3');
+  expect(mocks.auth).toHaveBeenCalledWith(workspace, 'convex-auth');
+  expect(mocks.apply.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.install.mock.invocationCallOrder[0]!,
+  );
+});
+it.each(['clerk', 'convex-auth'])(
+  'uses configured %s for an interactive repeat',
+  async (auth) => {
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    const configured = { ...workspace, config: { ...workspace.config, auth } };
+    mocks.load.mockResolvedValueOnce(configured);
+    mocks.auth.mockResolvedValueOnce({ ...plan, changes: [] });
+    await runWorkspace(['add', 'auth'], '1.2.3');
+    expect(mocks.select).not.toHaveBeenCalled();
+    expect(mocks.auth).toHaveBeenCalledWith(configured, auth);
+    expect(mocks.install).not.toHaveBeenCalled();
+  },
+);
