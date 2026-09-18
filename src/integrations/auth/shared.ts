@@ -12,6 +12,7 @@ const runtimes: Record<Framework, UiRuntime> = {
   expo: 'react',
   'react-router': 'react',
   sveltekit: 'svelte',
+  astro: 'react',
 };
 export function uiRuntime(framework: Framework): UiRuntime {
   return runtimes[framework];
@@ -24,13 +25,13 @@ export function platform(app: AppSpec) {
       ? 'NEXT_PUBLIC'
       : native
         ? 'EXPO_PUBLIC'
-        : app.framework === 'sveltekit'
+        : app.framework === 'sveltekit' || app.framework === 'astro'
           ? 'PUBLIC'
           : 'VITE';
   const env = (name: string) =>
-    prefix === 'PUBLIC'
+    app.framework === 'sveltekit'
       ? `PUBLIC_${name}`
-      : `${prefix === 'VITE' ? 'import.meta.env' : 'process.env'}.${prefix}_${name}`;
+      : `${prefix === 'VITE' || prefix === 'PUBLIC' ? 'import.meta.env' : 'process.env'}.${prefix}_${name}`;
   return { native, prefix, env, runtime: uiRuntime(app.framework) };
 }
 
@@ -39,6 +40,7 @@ export async function writeProviders(
   app: AppSpec,
   auth?: {
     sdk: string;
+    integrationManaged?: boolean;
     extraImports?: string;
     providerProps?: string;
   },
@@ -77,7 +79,7 @@ import { ConvexReactClient, ${auth ? 'Authenticated, Unauthenticated, AuthLoadin
 ${native ? "import { Text, View } from 'react-native';" : ''}
 ${
   auth
-    ? `import { ClerkProvider, useAuth } from '${auth.sdk}';
+    ? `import { ${auth.integrationManaged ? '' : 'ClerkProvider, '}useAuth } from '${auth.sdk}';
 import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { AuthControls } from './auth-controls';
 ${auth.extraImports ?? ''}
@@ -91,7 +93,7 @@ export function Providers({ children }: { children: ReactNode }) {
   ${auth ? `const publishableKey = ${env('CLERK_PUBLISHABLE_KEY')};` : ''}
   if (!url) return ${text(`Set ${platform(app).prefix}_CONVEX_URL in this app's .env.local.`)};
   ${auth ? `if (!publishableKey) return ${text(`Set ${platform(app).prefix}_CLERK_PUBLISHABLE_KEY in this app's .env.local.`)};` : ''}
-  return ${auth ? `<ClerkProvider publishableKey={publishableKey} ${routeAuth ? 'loaderData={loaderData}' : ''} ${auth.providerProps ?? ''}>` : ''}<Connection url={url}>{children}</Connection>${auth ? '</ClerkProvider>' : ''};
+  return ${auth && !auth.integrationManaged ? `<ClerkProvider publishableKey={publishableKey} ${routeAuth ? 'loaderData={loaderData}' : ''} ${auth.providerProps ?? ''}>` : ''}<Connection url={url}>{children}</Connection>${auth && !auth.integrationManaged ? '</ClerkProvider>' : ''};
 }
 function Connection({ url, children }: { url: string; children: ReactNode }) {
   const [client] = useState(() => new ConvexReactClient(url${native ? ', { unsavedChangesWarning: false }' : ''}));

@@ -1,6 +1,6 @@
 # create-convex-monorepo
 
-A TypeScript CLI that generates pnpm or bun workspaces. Turborepo runs multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, React Router v7, Expo, SvelteKit, or a combination, with optional Clerk, Convex Auth, or WorkOS AuthKit authentication.
+A TypeScript CLI that generates pnpm or bun workspaces. Turborepo runs multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, React Router v7, Expo, Astro + React island, SvelteKit, or a combination, with optional Clerk, Convex Auth, or WorkOS AuthKit authentication.
 
 The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Choose blank apps or a messages example. The example includes a query and mutation, plus compile-time assertions for the shared API's argument and return types.
 
@@ -88,7 +88,7 @@ Existing pnpm workspaces with metadata version 1, including projects created wit
 
 ### Changes and conflicts
 
-Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app or package paths, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding SvelteKit also updates an unchanged older URL setup script and adds formatter ignores for its generated output; customized setup scripts cause a conflict. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend.
+Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app or package paths, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding SvelteKit also updates an unchanged older URL setup script and adds formatter ignores for its generated output; customized setup scripts cause a conflict. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend. Adding Astro to an older workspace also updates its recognized setup helper, adds `PUBLIC_*` to Turbo settings, and ignores `.astro/` output. A customized setup helper that cannot be upgraded causes a conflict before writes.
 
 Package addition creates plain TypeScript source with shared lint and typecheck settings. Add `"@<scope>/<name>": "workspace:*"` to each consuming app's dependencies, then run `pnpm install`. Next configs are updated when they match the generated config apart from the `transpilePackages` string list, so repeated `add package` calls keep appending. A missing config or any other customization produces a note with the required manual edit. Other frameworks need no config change.
 
@@ -192,8 +192,11 @@ The choice applies to the whole workspace. `--example messages` keeps the existi
 | `react-router`   | React Router v7 framework mode, SSR enabled | `VITE_CONVEX_URL`        | Client React hooks, no server prefetch or data loaders |
 | `expo`           | Expo / React Native                         | `EXPO_PUBLIC_CONVEX_URL` | Client React hooks                                     |
 | `sveltekit`      | SvelteKit with Svelte 5                     | `PUBLIC_CONVEX_URL`      | Client Svelte queries, no server preloading            |
+| `astro`          | Astro + React island                        | `PUBLIC_CONVEX_URL`      | Client React hooks in a client-only island             |
 
 SvelteKit currently supports only `--auth none`, for both starters. It can share a workspace with any of the React frameworks when auth is `none`. Adding SvelteKit to an authenticated workspace or adding auth to a workspace containing SvelteKit fails before files are written.
+
+Astro generates a static page with a React island mounted through `client:only="react"`. Convex and auth run in the browser. Its `typecheck` script uses `astro check`; Clerk uses the official `@clerk/astro` integration and middleware. No SSR adapter is needed for the static page.
 
 Versions are pinned in the templates. React Router follows the Vite framework scaffold with `app/root.tsx`, `app/routes.ts`, and `app/routes/home.tsx`. Its typecheck script generates route types before running TypeScript. Its root loader handles auth only; Convex queries and mutations use the shared client components. Expo's build command exports JavaScript, not native application binaries. See [research and upstream caveats](docs/research.md).
 
@@ -254,7 +257,7 @@ pnpm lint
 pnpm build
 ```
 
-Complete setup in a normal terminal before starting Turbo. Stop a separately running backend watcher before `pnpm dev`, which starts its own. SvelteKit reads `PUBLIC_CONVEX_URL` from `$env/static/public`, so set it before typechecking or building. Its root layout mounts the Svelte Convex provider; messages subscribe with `useQuery`.
+Complete setup in a normal terminal before starting Turbo. Stop a separately running backend watcher before `pnpm dev` or `bun run dev`, which starts its own. SvelteKit reads `PUBLIC_CONVEX_URL` from `$env/static/public`, so set it before typechecking or building. Its root layout mounts the Svelte Convex provider; messages subscribe with `useQuery`.
 
 Public environment values are embedded at build time; rebuild frontends when they change. Backend build checks types and does not deploy.
 
@@ -282,7 +285,8 @@ Dynamic Convex declarations refer to backend source modules. Client TypeScript p
 
 ## Authentication
 
-Next.js, Vite, TanStack Start, React Router, and Expo accept `none`, `clerk`, or `convex-auth` with both starters. SvelteKit accepts only `none`; Clerk, WorkOS, and Convex Auth, including OAuth, are rejected before files are written. Existing no-auth workspaces accept `add auth clerk`, `add auth convex-auth`, or `add auth workos`. All providers support `add app` for their supported frameworks. WorkOS AuthKit supports Next.js, Vite, and TanStack Start with both starters. React Router is also rejected until a generator binding for its official SDK is implemented. Expo is rejected before writing files because no official Expo or React Native AuthKit SDK was found.
+Next.js, Vite, TanStack Start, React Router, Expo, and Astro accept `none`, `clerk`, or `convex-auth` with both starters. SvelteKit accepts only `none`; Clerk, WorkOS, and Convex Auth, including OAuth, are rejected before files are written. SvelteKit uses a Svelte runtime; the auth adapters currently support only React. Existing no-auth workspaces accept `add auth clerk`, `add auth convex-auth`, or `add auth workos`. All providers support `add app` for their supported frameworks. WorkOS AuthKit supports Next.js, Vite, and TanStack Start with both starters. Expo, Astro, and React Router are rejected before writing files. Expo has no official React Native AuthKit SDK. The [official Astro SDK](https://github.com/workos/authkit-astro) requires a server adapter and on-demand rendering; this generator uses static Astro output.
+React Router has an official SDK, but this generator has no binding for it yet.
 
 `--auth convex-auth` and `add auth convex-auth` configure email and password sign-up/sign-in, sign-out, and per-user backend access. Web apps use the client ConvexAuthProvider; Expo persists tokens with expo-secure-store. No frontend public auth keys or password-flow redirect scheme are needed. Next.js, TanStack Start, and React Router do not configure server-side authentication or authenticated SSR. GitHub and Google OAuth are opt-in with `--oauth github,google`. Magic links, email verification, password reset, and MFA are outside this starter.
 
@@ -299,7 +303,7 @@ npx create-convex-monorepo@latest add auth convex-auth --oauth google --install
 
 OAuth supports both package managers. The examples below use pnpm. For bun workspaces, use `bun install`, replace `pnpm <script>` with `bun run <script>`, and replace `pnpm --filter @my-app/backend exec convex` with `bun run --cwd packages/backend convex`. Generated setup instructions use the selected manager.
 
-The interactive OAuth multiselect defaults to none. `--oauth` is valid only with Convex Auth; unknown providers fail before generation. Both starters and all five frameworks support it. Metadata version 1 records the selected providers in an optional `oauth` array. `add auth` accepts this flag only on a no-auth workspace. Adding OAuth to a workspace with authentication already configured requires the manual edits below.
+The interactive OAuth multiselect defaults to none. `--oauth` is valid only with Convex Auth; unknown providers fail before generation. Both starters and all six React frameworks support it, including the Astro React island. SvelteKit rejects Convex Auth and OAuth. Metadata version 1 records the selected providers in an optional `oauth` array. `add auth` accepts this flag only on a no-auth workspace. Adding OAuth to a workspace with authentication already configured requires the manual edits below.
 
 For OAuth, `SITE_URL` is required on the Convex deployment. Generated OAuth workspaces include a helper that leaves signing keys unchanged:
 

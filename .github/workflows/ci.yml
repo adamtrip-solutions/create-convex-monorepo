@@ -73,8 +73,34 @@ jobs:
           - apps: sveltekit,react-router
             auth: none
             example: none
+          - apps: astro,react-router
+            auth: clerk
+          - apps: astro,react-router
+            auth: convex-auth
+            packageManager: bun
+          - apps: astro,react-router
+            auth: convex-auth
+            oauth: github,google
+          - apps: astro,react-router
+            auth: convex-auth
+            oauth: github,google
+            packageManager: bun
           - apps: next
             auth: none
+          - apps: astro
+            auth: none
+          - apps: astro,expo
+            auth: clerk
+          - apps: astro,next
+            auth: convex-auth
+            example: none
+          - apps: vite,astro
+            auth: none
+            workspaceCommands: '1'
+          - apps: vite,astro
+            auth: none
+            workspaceCommands: '1'
+            packageManager: bun
           - apps: vite
             auth: none
           - apps: tanstack-start

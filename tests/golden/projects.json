@@ -622,6 +622,220 @@
     ]
   },
   {
+    "label": "Astro + none (messages)",
+    "apps": "astro",
+    "auth": "none",
+    "example": "messages",
+    "expected": [["web", "astro", "PUBLIC", null]]
+  },
+  {
+    "label": "Astro + none (none)",
+    "apps": "astro",
+    "auth": "none",
+    "example": "none",
+    "expected": [["web", "astro", "PUBLIC", null]]
+  },
+  {
+    "label": "Astro + clerk (messages)",
+    "apps": "astro",
+    "auth": "clerk",
+    "example": "messages",
+    "expected": [["web", "astro", "PUBLIC", "@clerk/astro"]]
+  },
+  {
+    "label": "Astro + clerk (none)",
+    "apps": "astro",
+    "auth": "clerk",
+    "example": "none",
+    "expected": [["web", "astro", "PUBLIC", "@clerk/astro"]]
+  },
+  {
+    "label": "Astro + convex-auth (messages)",
+    "apps": "astro",
+    "auth": "convex-auth",
+    "example": "messages",
+    "expected": [["web", "astro", "PUBLIC", "@convex-dev/auth"]]
+  },
+  {
+    "label": "Astro + convex-auth (none)",
+    "apps": "astro",
+    "auth": "convex-auth",
+    "example": "none",
+    "expected": [["web", "astro", "PUBLIC", "@convex-dev/auth"]]
+  },
+  {
+    "label": "Astro + React Router + Clerk",
+    "apps": "astro,react-router",
+    "auth": "clerk",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@clerk/astro"],
+      ["app", "react-router", "VITE", "@clerk/react-router"]
+    ]
+  },
+  {
+    "label": "Astro + React Router + Convex Auth",
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@convex-dev/auth"],
+      ["app", "react-router", "VITE", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Astro + React Router + Convex Auth OAuth (messages)",
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "example": "messages",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@convex-dev/auth"],
+      ["app", "react-router", "VITE", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Astro + React Router + Convex Auth OAuth (none)",
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "example": "none",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@convex-dev/auth"],
+      ["app", "react-router", "VITE", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Astro + Expo + Clerk",
+    "apps": "astro,expo",
+    "auth": "clerk",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@clerk/astro"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@clerk/expo"]
+    ]
+  },
+  {
+    "label": "Astro + Next + Convex Auth (blank)",
+    "apps": "astro,next",
+    "auth": "convex-auth",
+    "example": "none",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@convex-dev/auth"],
+      ["app", "next", "NEXT_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Bun Astro + none (messages)",
+    "apps": "astro",
+    "auth": "none",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [["web", "astro", "PUBLIC", null]]
+  },
+  {
+    "label": "Bun Astro + none (none)",
+    "apps": "astro",
+    "auth": "none",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [["web", "astro", "PUBLIC", null]]
+  },
+  {
+    "label": "Bun Astro + clerk (messages)",
+    "apps": "astro",
+    "auth": "clerk",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [["web", "astro", "PUBLIC", "@clerk/astro"]]
+  },
+  {
+    "label": "Bun Astro + clerk (none)",
+    "apps": "astro",
+    "auth": "clerk",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [["web", "astro", "PUBLIC", "@clerk/astro"]]
+  },
+  {
+    "label": "Bun Astro + convex-auth (messages)",
+    "apps": "astro",
+    "auth": "convex-auth",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [["web", "astro", "PUBLIC", "@convex-dev/auth"]]
+  },
+  {
+    "label": "Bun Astro + convex-auth (none)",
+    "apps": "astro",
+    "auth": "convex-auth",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [["web", "astro", "PUBLIC", "@convex-dev/auth"]]
+  },
+  {
+    "label": "Bun Astro + React Router + Clerk",
+    "apps": "astro,react-router",
+    "auth": "clerk",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@clerk/astro"],
+      ["app", "react-router", "VITE", "@clerk/react-router"]
+    ]
+  },
+  {
+    "label": "Bun Astro + React Router + Convex Auth",
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@convex-dev/auth"],
+      ["app", "react-router", "VITE", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Bun Astro + React Router + Convex Auth OAuth (messages)",
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@convex-dev/auth"],
+      ["app", "react-router", "VITE", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Bun Astro + React Router + Convex Auth OAuth (none)",
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@convex-dev/auth"],
+      ["app", "react-router", "VITE", "@convex-dev/auth"]
+    ]
+  },
+  {
+    "label": "Bun Astro + Expo + Clerk",
+    "apps": "astro,expo",
+    "auth": "clerk",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@clerk/astro"],
+      ["mobile", "expo", "EXPO_PUBLIC", "@clerk/expo"]
+    ]
+  },
+  {
+    "label": "Bun Astro + Next + Convex Auth (blank)",
+    "apps": "astro,next",
+    "auth": "convex-auth",
+    "example": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "astro", "PUBLIC", "@convex-dev/auth"],
+      ["app", "next", "NEXT_PUBLIC", "@convex-dev/auth"]
+    ]
+  },
+  {
     "label": "SvelteKit messages",
     "apps": "sveltekit",
     "auth": "none",
@@ -648,6 +862,20 @@
       ["app-2", "react-router", "VITE", null],
       ["mobile", "expo", "EXPO_PUBLIC", null],
       ["app-3", "sveltekit", "PUBLIC", null]
+    ]
+  },
+  {
+    "label": "All seven frameworks",
+    "apps": "next,vite,tanstack-start,react-router,expo,sveltekit,astro",
+    "auth": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["app-2", "react-router", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null],
+      ["app-3", "sveltekit", "PUBLIC", null],
+      ["app-4", "astro", "PUBLIC", null]
     ]
   },
   {
@@ -680,6 +908,21 @@
       ["app-2", "react-router", "VITE", null],
       ["mobile", "expo", "EXPO_PUBLIC", null],
       ["app-3", "sveltekit", "PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Bun All seven frameworks",
+    "apps": "next,vite,tanstack-start,react-router,expo,sveltekit,astro",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["app-2", "react-router", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null],
+      ["app-3", "sveltekit", "PUBLIC", null],
+      ["app-4", "astro", "PUBLIC", null]
     ]
   }
 ]

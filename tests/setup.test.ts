@@ -38,7 +38,7 @@ afterEach(async () => {
   );
 });
 async function fixture(
-  apps = 'next,admin:vite,portal:tanstack-start,expo,router:react-router',
+  apps = 'next,admin:vite,portal:tanstack-start,expo,router:react-router,island:astro,svelte:sveltekit',
   auth = 'none',
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-setup-'));
@@ -236,7 +236,7 @@ describe('Convex initialization options', () => {
 describe('public URL linking', () => {
   it('maps all frameworks, respects .env.local precedence, and never copies backend credentials', async () => {
     const { root } = await fixture(
-      'next,admin:vite,portal:tanstack-start,router:react-router,expo,svelte:sveltekit',
+      'next,admin:vite,portal:tanstack-start,router:react-router,expo,svelte:sveltekit,island:astro',
     );
     await writeFile(
       join(root, 'packages/backend/.env'),
@@ -255,6 +255,7 @@ describe('public URL linking', () => {
       ['router', 'VITE_CONVEX_URL'],
       ['mobile', 'EXPO_PUBLIC_CONVEX_URL'],
       ['svelte', 'PUBLIC_CONVEX_URL'],
+      ['island', 'PUBLIC_CONVEX_URL'],
     ]) {
       const text = await readFile(join(root, `apps/${app}/.env.local`), 'utf8');
       expect(parseEnv(text)).toEqual({

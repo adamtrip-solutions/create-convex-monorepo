@@ -203,3 +203,76 @@ Failures found and resolved during implementation:
 - Two legacy-script tests initially used the macOS temporary-directory alias and missed the setup script's existing direct-execution guard. Passing the script's real path fixed the tests. A manually rewritten fixture Turbo JSON needed formatting before its final format check.
 
 Independent technical review found the older-workspace setup, Turbo, and formatter compatibility gap. The implementation and tests were extended, and focused re-review found no remaining material issue. Fable was unavailable, so no independent UI design review was performed; the starter keeps the existing messages and blank content without a visual redesign.
+
+## Astro framework checks
+
+Executed 2026-09-18 on macOS with Node 24.17.0 and pnpm 10.34.5. All five Astro acceptance criteria passed local checks. Windows and hosted GitHub Actions remain CI checks. No commit or push was made.
+
+Repository commands passed:
+
+```sh
+pnpm format
+pnpm lint
+pnpm format:check
+pnpm typecheck
+pnpm test
+pnpm build
+git diff --check
+```
+
+`pnpm test` passed 552 unit tests and 7 backend tests. The independent reviewer ran `pnpm exec tsc -p tsconfig.build.json --noEmit` successfully. Review found older-workspace URL linking and Turbo environment gaps; guarded migrations fixed both, and focused re-review found no unresolved material defects.
+
+The built CLI generated these projects in a fresh temporary directory. Every command installed dependencies successfully:
+
+```sh
+node /tmp/ccm-wt/astro/dist/cli/index.js create astro-none --apps astro --auth none --example messages --no-git --install
+node /tmp/ccm-wt/astro/dist/cli/index.js create astro-clerk --apps astro,expo --auth clerk --example messages --no-git --install
+node /tmp/ccm-wt/astro/dist/cli/index.js create astro-auth --apps astro,next --auth convex-auth --example none --no-git --install
+node /tmp/ccm-wt/astro/dist/cli/index.js create astro-added --apps vite --auth none --example messages --no-git --install
+node /tmp/ccm-wt/astro/dist/cli/index.js create astro-none-blank --apps astro --auth none --example none --no-git --install
+node /tmp/ccm-wt/astro/dist/cli/index.js create astro-clerk-blank --apps astro --auth clerk --example none --no-git --install
+node /tmp/ccm-wt/astro/dist/cli/index.js create astro-auth-messages --apps astro --auth convex-auth --example messages --no-git --install
+```
+
+Within every project, `pnpm typecheck` and `pnpm lint` passed. Production builds passed with these exact commands:
+
+| Project                                           | Build command                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| astro-none, astro-none-blank, astro-auth-messages | `PUBLIC_CONVEX_URL=https://example.convex.cloud pnpm build`                                                                                                                                                                                                                               |
+| astro-clerk                                       | `CI=1 EXPO_NO_TELEMETRY=1 PUBLIC_CONVEX_URL=https://example.convex.cloud PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_dGVzdC5jbGVyay5hY2NvdW50cy5kZXYk EXPO_PUBLIC_CONVEX_URL=https://example.convex.cloud EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_dGVzdC5jbGVyay5hY2NvdW50cy5kZXYk pnpm build` |
+| astro-auth                                        | `NEXT_TELEMETRY_DISABLED=1 PUBLIC_CONVEX_URL=https://example.convex.cloud NEXT_PUBLIC_CONVEX_URL=https://example.convex.cloud pnpm build`                                                                                                                                                 |
+| astro-clerk-blank                                 | `PUBLIC_CONVEX_URL=https://example.convex.cloud PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_dGVzdC5jbGVyay5hY2NvdW50cy5kZXYk pnpm build`                                                                                                                                                         |
+| astro-added                                       | `pnpm build`                                                                                                                                                                                                                                                                              |
+
+The Clerk build includes Expo iOS and Android JavaScript exports. Its dependency graph emitted the existing optional native accelerator and TypeScript peer warnings; installation and checks passed. Convex Auth dependencies emitted upstream deprecation warnings.
+
+Before adding Astro to `astro-added`, the fixture removed Astro support from its copied setup helper, Turbo settings, and ignore files to reproduce an older workspace. Its Vite entry point was customized, and its backend `.env.local` received a synthetic public URL. These commands then passed from that workspace:
+
+```sh
+node /tmp/ccm-wt/astro/dist/cli/index.js add app island --framework astro --dry-run
+node /tmp/ccm-wt/astro/dist/cli/index.js add app island --framework astro --install
+pnpm convex:link
+pnpm typecheck
+pnpm lint
+pnpm build
+node /tmp/ccm-wt/astro/dist/cli/index.js doctor --json
+```
+
+Doctor returned no issues. Unit tests separately check dry-run preservation, inherited auth for both starters, customized-source preservation, conflict rejection, and URL linking.
+
+Both E2E commands passed installation, formatting, typecheck, lint, build, and client bundle checks. The workspace case also passed doctor; the blank case includes temporary API assertions:
+
+```sh
+CCM_APPS=vite,astro CCM_AUTH=none CCM_WORKSPACE_COMMANDS=1 pnpm test:e2e
+CCM_APPS=astro,next CCM_AUTH=convex-auth CCM_EXAMPLE=none pnpm test:e2e
+```
+
+A negative probe temporarily added an invalid `FunctionArgs<typeof api.messages.send>` assignment in the Astro app. App-local `pnpm typecheck` failed with TS2322 as expected. Temporarily removing the backend `api.d.ts` also made that command fail. Both files were restored. Output scans found the static client-only island in all seven fixtures and no backend validation text, owner-index name, or synthetic server-secret marker in Astro's client JavaScript.
+
+Initial failures were resolved:
+
+- The upstream prototype's first `pnpm install` selected pnpm 11 outside the repository and rejected unapproved esbuild scripts. A subsequent install refused to replace that modules directory without a terminal. Pinning pnpm 10.34.5, allowing esbuild in the temporary workspace, and running `CI=1 pnpm --dir /tmp/ccm-astro-upstream-sUwG8o install --no-frozen-lockfile` passed. Its `pnpm --dir /tmp/ccm-astro-upstream-sUwG8o check` and static `build` then passed with the official Clerk integration.
+- `pnpm exec vitest run tests/generator.test.ts tests/core.test.ts tests/blank.test.ts tests/setup.test.ts tests/workspace-core.test.ts tests/workspace-add.test.ts` initially passed 313 tests and failed one port assertion that assumed every non-Next web app had Vite config. Updating it to inspect Astro's `--port` script resolved the failure.
+- The reviewer's initial `pnpm exec tsc --noEmit` failed on missing `tests/.generated` fixture imports. The required `pnpm typecheck` generates those fixtures and passed.
+
+Live Clerk sessions, Convex Auth sign-in, and query/mutation execution against a deployed backend were not tested in this task. Build keys and URLs were synthetic. No production deployment or native binary build was attempted. The runtime identifies GPT-6; it does not separately attest the Astra variant requested for independent review.

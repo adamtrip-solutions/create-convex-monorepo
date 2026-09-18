@@ -9,6 +9,7 @@ const bindings: Partial<Record<Framework, { sdk: string; version: string }>> = {
   'tanstack-start': { sdk: '@clerk/tanstack-react-start', version: '1.5.12' },
   'react-router': { sdk: '@clerk/react-router', version: v.clerkReactRouter },
   expo: { sdk: '@clerk/expo', version: v.clerkExpo },
+  astro: { sdk: '@clerk/astro', version: v.clerkAstro },
 };
 
 export const clerkAdapter: AuthAdapter = {
@@ -45,6 +46,8 @@ export default { providers: [{ domain, applicationID: 'convex' }] } satisfies Au
       if (!binding)
         throw new Error('SvelteKit currently supports only --auth none.');
       const { native, prefix } = platform(app);
+      const sdk =
+        app.framework === 'astro' ? '@clerk/astro/react' : binding.sdk;
       await ctx.mergePackage(`${dir}/package.json`, {
         dependencies: {
           [binding.sdk]: binding.version,
@@ -64,7 +67,8 @@ export default { providers: [{ domain, applicationID: 'convex' }] } satisfies Au
         `# Append these values to .env.local alongside the Convex URL.\n${prefix}_CLERK_PUBLISHABLE_KEY=\n${app.framework === 'next' || app.framework === 'tanstack-start' || app.framework === 'react-router' ? '# Server only. Never prefix this with NEXT_PUBLIC_, VITE_ or EXPO_PUBLIC_.\nCLERK_SECRET_KEY=\n' : ''}${native ? `# Enable Google OAuth and Native API in Clerk.\n# Register redirect URL: ccm-${ctx.options.name}-${app.name}://continue\n# Build a development client with ${scriptCommand(ctx.options.packageManager, 'ios')} or ${scriptCommand(ctx.options.packageManager, 'android')} for this scheme.\n` : ''}`,
       );
       await writeProviders(ctx, app, {
-        sdk: binding.sdk,
+        sdk,
+        ...(app.framework === 'astro' ? { integrationManaged: true } : {}),
         ...(native
           ? {
               extraImports:
@@ -73,6 +77,16 @@ export default { providers: [{ domain, applicationID: 'convex' }] } satisfies Au
             }
           : {}),
       });
+      if (app.framework === 'astro') {
+        await ctx.write(
+          `${dir}/auth.config.mjs`,
+          "import clerk from '@clerk/astro';\nexport default [clerk()];\n",
+        );
+        await ctx.write(
+          `${dir}/src/middleware.ts`,
+          "import { clerkMiddleware } from '@clerk/astro/server';\nexport const onRequest = clerkMiddleware();\n",
+        );
+      }
       if (app.framework === 'next') {
         await ctx.write(
           `${dir}/src/proxy.ts`,
@@ -95,7 +109,7 @@ export const startInstance = createStart(() => ({ requestMiddleware: [clerkMiddl
         await ctx.write(
           `${dir}/src/auth-controls.tsx`,
           `'use client';
-import { useAuth, SignInButton, UserButton } from '${binding.sdk}';
+import { useAuth, SignInButton, UserButton } from '${sdk}';
 export function AuthControls() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return <p>Loading sign-in…</p>;

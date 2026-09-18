@@ -78,6 +78,7 @@ const frameworks: Framework[] = [
   'vite',
   'tanstack-start',
   'expo',
+  'astro',
   'react-router',
 ];
 
@@ -94,7 +95,7 @@ async function olderSetupHelper() {
   return older.replace(/^\s*case ['"]react-router['"]:\r?\n/gm, '');
 }
 
-it.each(['react-router', 'expo'] as const)(
+it.each(['react-router', 'expo', 'astro'] as const)(
   'upgrades an older generated setup helper when adding %s',
   async (framework) => {
     const workspace = await fixture('none');
@@ -111,7 +112,9 @@ it.each(['react-router', 'expo'] as const)(
       name: 'router',
       framework,
     });
-    expect(plan.changes).toContainEqual({ path, before: older, after: target });
+    expect(plan.changes.filter((change) => change.path === path)).toEqual([
+      { path, before: older, after: target },
+    ]);
     expect(await readFile(join(workspace.root, path), 'utf8')).toBe(older);
     await applyPlan(plan);
     expect(await readFile(join(workspace.root, path), 'utf8')).toBe(target);
@@ -127,7 +130,7 @@ it.each(['react-router', 'expo'] as const)(
     expect(
       await readFile(join(workspace.root, 'apps/router/.env.local'), 'utf8'),
     ).toBe(
-      `${framework === 'expo' ? 'EXPO_PUBLIC' : 'VITE'}_CONVEX_URL=https://test.convex.cloud\n`,
+      `${framework === 'expo' ? 'EXPO_PUBLIC' : framework === 'astro' ? 'PUBLIC' : 'VITE'}_CONVEX_URL=https://test.convex.cloud\n`,
     );
   },
 );
@@ -501,7 +504,7 @@ it.each<Framework>([...frameworks, 'sveltekit'])(
         ? 'NEXT_PUBLIC'
         : framework === 'expo'
           ? 'EXPO_PUBLIC'
-          : framework === 'sveltekit'
+          : framework === 'sveltekit' || framework === 'astro'
             ? 'PUBLIC'
             : 'VITE';
     expect(after['apps/extra/.env.local']).toBe(
@@ -595,14 +598,16 @@ it.each<Framework>([...frameworks, 'sveltekit'])(
     const workspace = await fixture('none');
     const plan = await planAddApp(workspace, { name: 'extra', framework });
     await applyPlan(plan);
-    if (framework === 'next' || framework === 'expo') {
+    if (framework === 'next' || framework === 'expo' || framework === 'astro') {
       const pkg = JSON.parse(
         await readFile(join(workspace.root, 'apps/extra/package.json'), 'utf8'),
       );
       expect(pkg.scripts.dev).toBe(
         framework === 'next'
           ? 'next dev --port 3001'
-          : 'expo start --port 8082',
+          : framework === 'astro'
+            ? 'astro dev --port 3001'
+            : 'expo start --port 8082',
       );
     } else {
       expect(
@@ -1916,8 +1921,91 @@ it.each(['customized', 'missing'])(
     expect(await snapshot(workspace.root)).toEqual(before);
   },
 );
+it('adds Astro to a customized pre-Astro Vite workspace and updates its URL helper and Turbo environment', async () => {
+  const workspace = await fixture('messages', 'none', 'vite');
+  const root = workspace.root;
+  const setupPath = join(root, 'scripts/convex-setup.mjs');
+  await writeFile(
+    setupPath,
+    (await readFile(setupPath, 'utf8')).replace(
+      "    case 'astro':\n      return 'PUBLIC_CONVEX_URL';\n",
+      '',
+    ),
+  );
+  for (const path of ['.gitignore', '.prettierignore']) {
+    const full = join(root, path);
+    await writeFile(
+      full,
+      (await readFile(full, 'utf8'))
+        .split('\n')
+        .filter((line) => !line.includes('.astro'))
+        .join('\n') + 'custom-output/\n',
+    );
+  }
+  const turboPath = join(root, 'turbo.json');
+  const turbo = JSON.parse(await readFile(turboPath, 'utf8'));
+  turbo.tasks.build.env = ['VITE_*', 'CUSTOM_PUBLIC'];
+  turbo.tasks.dev.passThroughEnv = ['VITE_*', 'CUSTOM_DEV'];
+  await writeFile(turboPath, JSON.stringify(turbo));
+  const entryPath = join(root, 'apps/web/src/main.tsx');
+  const customized =
+    (await readFile(entryPath, 'utf8')) + '\n// Keep my app changes.\n';
+  await writeFile(entryPath, customized);
+  await writeFile(
+    join(root, 'packages/backend/.env.local'),
+    'CONVEX_URL=https://example.convex.cloud\n',
+  );
+  const before = await snapshot(root);
+  const plan = await planAddApp(workspace, {
+    name: 'island',
+    framework: 'astro',
+  });
+  await applyPlan(plan, { dryRun: true });
+  expect(await snapshot(root)).toEqual(before);
+  await applyPlan(plan);
+  expect(await readFile(entryPath, 'utf8')).toBe(customized);
+  expect(await readFile(setupPath, 'utf8')).toContain(
+    "return 'PUBLIC_CONVEX_URL'",
+  );
+  const updated = JSON.parse(await readFile(turboPath, 'utf8'));
+  expect(updated.tasks.build.env).toEqual([
+    'VITE_*',
+    'CUSTOM_PUBLIC',
+    'PUBLIC_*',
+  ]);
+  expect(updated.tasks.dev.passThroughEnv).toEqual([
+    'VITE_*',
+    'CUSTOM_DEV',
+    'PUBLIC_*',
+  ]);
+  for (const path of ['.gitignore', '.prettierignore']) {
+    const contents = await readFile(join(root, path), 'utf8');
+    expect(contents).toContain('custom-output/');
+    expect(contents).toContain('.astro/');
+  }
+  expect(await readFile(join(root, 'apps/island/.env.local'), 'utf8')).toBe(
+    'PUBLIC_CONVEX_URL=https://example.convex.cloud\n',
+  );
+});
+
+it('rejects a customized pre-Astro URL helper before writing an app', async () => {
+  const workspace = await fixture('none', 'none', 'vite');
+  await writeFile(
+    join(workspace.root, 'scripts/convex-setup.mjs'),
+    '// Custom setup helper\n',
+  );
+  const before = await snapshot(workspace.root);
+  await expect(
+    planAddApp(workspace, { name: 'island', framework: 'astro' }),
+  ).rejects.toThrow('restore the generated setup helper');
+  expect(await snapshot(workspace.root)).toEqual(before);
+});
 
 it.each([
+  { example: 'none', manager: 'pnpm', framework: 'astro' },
+  { example: 'messages', manager: 'pnpm', framework: 'astro' },
+  { example: 'none', manager: 'bun', framework: 'astro' },
+  { example: 'messages', manager: 'bun', framework: 'astro' },
   { example: 'none', manager: 'pnpm', framework: 'next' },
   { example: 'messages', manager: 'pnpm', framework: 'next' },
   { example: 'none', manager: 'bun', framework: 'next' },
@@ -2374,3 +2462,103 @@ it.each(['pnpm', 'bun'] as const)(
     expect(await snapshot(workspace.root)).toEqual(before);
   },
 );
+describe.each(['pnpm', 'bun'] as const)(
+  'Astro integration with %s',
+  (packageManager) => {
+    it('rejects WorkOS addition to Astro without changing files', async () => {
+      const workspace = await fixture('none', 'none', 'astro', packageManager);
+      const before = await snapshot(workspace.root);
+      await expect(planAddAuth(workspace, 'workos')).rejects.toThrow(
+        'The Astro template uses static output',
+      );
+      expect(await snapshot(workspace.root)).toEqual(before);
+    });
+    it('rejects Astro addition to WorkOS without changing files', async () => {
+      const workspace = await fixture(
+        'messages',
+        'workos',
+        'vite',
+        packageManager,
+      );
+      const before = await snapshot(workspace.root);
+      await expect(
+        planAddApp(workspace, { name: 'island', framework: 'astro' }),
+      ).rejects.toThrow('The Astro template uses static output');
+      expect(await snapshot(workspace.root)).toEqual(before);
+    });
+    it.each(['clerk', 'convex-auth'] as const)(
+      'adds %s to Astro with manager-aware setup guidance',
+      async (provider) => {
+        const workspace = await fixture(
+          'messages',
+          'none',
+          'astro',
+          packageManager,
+        );
+        const plan = await planAddAuth(workspace, provider);
+        const guide = plan.changes.find((change) =>
+          change.path.endsWith('_SETUP.md'),
+        )!.after!;
+        const run = packageManager === 'bun' ? 'bun run' : 'pnpm';
+        expect(guide).toContain(`${packageManager} install`);
+        expect(guide).toContain(`${run} convex:setup`);
+        expect(plan.notes.join('\n')).toContain(`${packageManager} install`);
+        if (packageManager === 'bun') {
+          expect(guide).not.toContain('pnpm');
+          expect(plan.notes.join('\n')).not.toContain('pnpm');
+        }
+        await applyPlan(plan);
+        const files = await snapshot(workspace.root);
+        expect(files['apps/web/auth.config.mjs']).toContain(
+          provider === 'clerk' ? 'clerk()' : '[]',
+        );
+        expect((await loadWorkspace(workspace.root)).config).toMatchObject({
+          auth: provider,
+          packageManager,
+        });
+      },
+    );
+  },
+);
+
+it.each([false, true])(
+  'migrates the actual pre-Bun setup helper when adding Astro, CRLF=%s',
+  async (crlf) => {
+    const workspace = await fixture('messages', 'none', 'vite');
+    const path = join(workspace.root, 'scripts/convex-setup.mjs');
+    const legacy = await readFile(
+      new URL('./fixtures/pre-bun-setup.txt', import.meta.url),
+      'utf8',
+    );
+    await writeFile(path, crlf ? legacy.replace(/\n/g, '\r\n') : legacy);
+    const before = await snapshot(workspace.root);
+    const plan = await planAddApp(workspace, {
+      name: 'island',
+      framework: 'astro',
+    });
+    await applyPlan(plan, { dryRun: true });
+    expect(await snapshot(workspace.root)).toEqual(before);
+    await applyPlan(plan);
+    const setup = await readFile(path, 'utf8');
+    expect(setup).toContain("return 'PUBLIC_CONVEX_URL'");
+    expect(setup).toContain('detectPackageManager');
+    expect(setup.includes('\r\n')).toBe(crlf);
+  },
+);
+
+it('preserves customized historical setup helpers when rejecting Astro addition', async () => {
+  const workspace = await fixture('messages', 'none', 'vite');
+  const legacy = await readFile(
+    new URL('./fixtures/pre-bun-setup.txt', import.meta.url),
+    'utf8',
+  );
+  await writeFile(
+    join(workspace.root, 'scripts/convex-setup.mjs'),
+    legacy + '\n// User customization\n',
+  );
+  const before = await snapshot(workspace.root);
+  await expect(
+    planAddApp(workspace, { name: 'island', framework: 'astro' }),
+  ).rejects.toThrow('restore the generated setup helper');
+  expect(await snapshot(workspace.root)).toEqual(before);
+});

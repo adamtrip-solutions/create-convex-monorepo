@@ -49,6 +49,7 @@ const frameworks: Record<Framework, string[]> = {
     'vite',
     'eslint-plugin-svelte',
   ],
+  astro: ['astro', '@astrojs/react', '@astrojs/check', 'react-dom'],
 };
 const clerk: Partial<Record<Framework, string>> = {
   next: '@clerk/nextjs',
@@ -56,6 +57,7 @@ const clerk: Partial<Record<Framework, string>> = {
   'tanstack-start': '@clerk/tanstack-react-start',
   'react-router': '@clerk/react-router',
   expo: '@clerk/expo',
+  astro: '@clerk/astro',
 };
 const workos: Partial<Record<Framework, string>> = {
   next: '@workos-inc/authkit-nextjs',
@@ -84,6 +86,10 @@ const baselines: Record<string, string> = {
   '@clerk/react-router': versions.clerkReactRouter,
   react: versions.react,
   typescript: versions.typescript,
+  astro: versions.astro,
+  '@astrojs/react': versions.astroReact,
+  '@astrojs/check': versions.astroCheck,
+  '@clerk/astro': versions.clerkAstro,
   next: versions.next,
   vite: versions.vite,
   expo: versions.expo,
@@ -724,6 +730,21 @@ export async function doctor(
         `${directory}/tsconfig.json is missing.`,
         'Restore the app TypeScript configuration.',
       );
+    if (app.framework === 'astro') {
+      for (const file of [
+        'astro.config.mjs',
+        'auth.config.mjs',
+        'src/pages/index.astro',
+        ...(config.auth === 'clerk' ? ['src/middleware.ts'] : []),
+      ]) {
+        if ((await text(`${directory}/${file}`)) === null)
+          issue(
+            'astro-config-missing',
+            `${directory}/${file} is missing.`,
+            'Restore the generated Astro configuration and client-only island entry point.',
+          );
+      }
+    }
     if (app.framework === 'expo') {
       if (hasOAuth) {
         const path = `${directory}/app.json`;

@@ -1,5 +1,7 @@
 # Adding a framework
 
+Supported IDs are `next`, `vite`, `tanstack-start`, `react-router`, `expo`, and `astro`.
+
 Start with current framework and Convex documentation, then install a minimal upstream example. Record the exact versions and workspace constraints in `docs/research.md`. A successful single-package app is not enough evidence for a workspace adapter.
 
 ## Implement the adapter
@@ -13,6 +15,8 @@ Start with current framework and Convex documentation, then install a minimal up
 7. Add versions, development/build/typecheck/lint scripts, and any route-generation step the framework needs on a clean checkout.
 
 The SvelteKit template composes the shared TypeScript ESLint rules with `eslint-plugin-svelte`. Its TypeScript config extends both the shared base and SvelteKit's generated config. Its app-local Prettier config loads the pinned Svelte plugin, which the generator also loads from its own installation to format components before writing.
+
+Astro imports an auth-owned `auth.config.mjs` integration list from its framework-owned `astro.config.mjs`. The none and Convex Auth adapters export an empty list; Clerk exports `[clerk()]` and writes middleware. This lets `add auth` update authentication without replacing the framework config. Its static page mounts one React island with `client:only="react"`.
 
 The existing Vite template is the smallest example. Next and Expo show framework-specific configuration; do not copy their environment prefixes or resolver behavior into another framework.
 
@@ -32,7 +36,7 @@ Add focused output assertions, option-selection coverage, and representative gen
 
 Add the framework's dependency expectations and diagnostic checks to `src/workspace/doctor.ts`. Verify that `add app` renders the framework at its real workspace index so development ports remain distinct. Add command tests for a new app next to an existing customized app, both starter choices, inherited auth, automatic URL linking, and a dry run. Extend the command E2E matrix to install and build the added framework.
 
-The add planner uses the same template as project creation. It copies only the new application's files and updates workspace metadata and root scripts. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
+The add planner uses the same template as project creation. It copies the new application's files and updates workspace metadata and root scripts. The planner refreshes recognized unmodified setup helpers for every framework. Astro also adds its Turbo environment settings and output ignores. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
 
 ## React Router root authentication
 

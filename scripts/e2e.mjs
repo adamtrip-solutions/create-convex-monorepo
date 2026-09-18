@@ -60,6 +60,7 @@ function run(args) {
       CI: '1',
       NEXT_TELEMETRY_DISABLED: '1',
       EXPO_NO_TELEMETRY: '1',
+      ASTRO_TELEMETRY_DISABLED: '1',
     },
   });
   if (result.error) throw result.error;
@@ -173,6 +174,7 @@ try {
           'react-router': 'app/root.tsx',
           expo: 'App.tsx',
           sveltekit: 'src/routes/+page.svelte',
+          astro: 'src/App.tsx',
         }[app.framework],
       );
       const entry = await readFile(entryPath, 'utf8');
@@ -250,7 +252,7 @@ export type MissingModule = typeof api.notAModule;
         ? 'NEXT_PUBLIC'
         : app.framework === 'expo'
           ? 'EXPO_PUBLIC'
-          : app.framework === 'sveltekit'
+          : app.framework === 'sveltekit' || app.framework === 'astro'
             ? 'PUBLIC'
             : 'VITE';
     // Syntactically valid test configuration, no deployment or identity-provider credentials.

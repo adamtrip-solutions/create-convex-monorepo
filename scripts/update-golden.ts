@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { format } from 'prettier';
 import { generateProject } from '../src/generator/index.js';
 import { normalizeOptions, type RawOptions } from '../src/generator/options.js';
+import { platform } from '../src/integrations/auth/shared.js';
 import { workosBindings } from '../src/integrations/auth/workos/index.js';
 
 interface Scenario extends RawOptions {
@@ -30,6 +31,54 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
   }
 }
 
+// Preserve the Astro feature scenarios and exercise both package managers.
+for (const packageManager of ['pnpm', 'bun'] as const) {
+  const astroScenarios = [
+    ...['none', 'clerk', 'convex-auth'].flatMap((auth) =>
+      ['messages', 'none'].map((example) => ({
+        label: `Astro + ${auth} (${example})`,
+        apps: 'astro',
+        auth,
+        example,
+      })),
+    ),
+    {
+      label: 'Astro + React Router + Clerk',
+      apps: 'astro,react-router',
+      auth: 'clerk',
+    },
+    {
+      label: 'Astro + React Router + Convex Auth',
+      apps: 'astro,react-router',
+      auth: 'convex-auth',
+    },
+    ...['messages', 'none'].map((example) => ({
+      label: `Astro + React Router + Convex Auth OAuth (${example})`,
+      apps: 'astro,react-router',
+      auth: 'convex-auth',
+      oauth: 'github,google',
+      example,
+    })),
+    { label: 'Astro + Expo + Clerk', apps: 'astro,expo', auth: 'clerk' },
+    {
+      label: 'Astro + Next + Convex Auth (blank)',
+      apps: 'astro,next',
+      auth: 'convex-auth',
+      example: 'none',
+    },
+  ];
+  for (const scenario of astroScenarios) {
+    const label = `${packageManager === 'bun' ? 'Bun ' : ''}${scenario.label}`;
+    if (!scenarios.some((existing) => existing.label === label))
+      scenarios.push({
+        ...scenario,
+        label,
+        ...(packageManager === 'bun' ? { packageManager } : {}),
+        expected: [],
+      });
+  }
+}
+
 for (const packageManager of ['pnpm', 'bun'] as const) {
   for (const scenario of [
     { label: 'SvelteKit messages', apps: 'sveltekit' },
@@ -41,6 +90,10 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
     {
       label: 'All six frameworks',
       apps: 'next,vite,tanstack-start,react-router,expo,sveltekit',
+    },
+    {
+      label: 'All seven frameworks',
+      apps: 'next,vite,tanstack-start,react-router,expo,sveltekit,astro',
     },
   ]) {
     const label = `${packageManager === 'bun' ? 'Bun ' : ''}${scenario.label}`;
@@ -78,13 +131,7 @@ try {
         return [
           name,
           framework,
-          framework === 'next'
-            ? 'NEXT_PUBLIC'
-            : framework === 'expo'
-              ? 'EXPO_PUBLIC'
-              : framework === 'sveltekit'
-                ? 'PUBLIC'
-                : 'VITE',
+          platform({ name, framework }).prefix,
           sdk ?? null,
         ];
       }),
