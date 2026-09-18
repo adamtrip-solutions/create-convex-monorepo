@@ -59,6 +59,7 @@ function run(args) {
       CI: '1',
       NEXT_TELEMETRY_DISABLED: '1',
       EXPO_NO_TELEMETRY: '1',
+      ASTRO_TELEMETRY_DISABLED: '1',
     },
   });
   if (result.error) throw result.error;
@@ -168,6 +169,7 @@ try {
           'tanstack-start': 'src/routes/index.tsx',
           'react-router': 'app/root.tsx',
           expo: 'App.tsx',
+          astro: 'src/App.tsx',
         }[app.framework],
       );
       const entry = await readFile(entryPath, 'utf8');
@@ -231,7 +233,9 @@ export type MissingModule = typeof api.notAModule;
         ? 'NEXT_PUBLIC'
         : app.framework === 'expo'
           ? 'EXPO_PUBLIC'
-          : 'VITE';
+          : app.framework === 'astro'
+            ? 'PUBLIC'
+            : 'VITE';
     // Syntactically valid test configuration, no deployment or identity-provider credentials.
     const lines = [`${prefix}_CONVEX_URL=https://example.convex.cloud`];
     if (auth === 'better-auth')

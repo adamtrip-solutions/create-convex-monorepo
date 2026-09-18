@@ -21,7 +21,7 @@ Manage an existing Convex monorepo from its root or any subdirectory.
 
   add                       Choose an app, shared package, or authentication
   add app [name]            Add an application
-    --framework <name>      next, vite, tanstack-start, react-router, or expo
+    --framework <name>      next, vite, tanstack-start, react-router, expo, or astro
     --example <name>        none or messages (defaults to workspace example)
   add package [name]        Add a blank shared TypeScript package
   add auth [clerk|convex-auth|workos|better-auth]  Add authentication
@@ -271,12 +271,15 @@ export async function runWorkspace(
       options.framework = answer(
         await prompts.select({
           message: 'Application framework?',
-          options: frameworks.map((value) => ({ value, label: value })),
+          options: frameworks.map((value) => ({
+            value,
+            label: value === 'astro' ? 'Astro + React island' : value,
+          })),
         }),
       );
     if (!options.name || !options.framework)
       throw new Error(
-        'Without prompts, use add app <name> --framework <next|vite|tanstack-start|react-router|expo>.',
+        'Without prompts, use add app <name> --framework <next|vite|tanstack-start|react-router|expo|astro>.',
       );
   }
   if (options.command === 'add-auth' && !options.provider && !interactive)

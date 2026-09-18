@@ -14,6 +14,11 @@ export async function getOwner(_ctx: QueryCtx | MutationCtx): Promise<string | u
 `,
       );
     for (const app of ctx.options.apps) {
+      if (app.framework === 'astro')
+        await ctx.write(
+          `apps/${app.name}/auth.config.mjs`,
+          'export default [];\n',
+        );
       await writeProviders(ctx, app);
       await ctx.write(
         `apps/${app.name}/src/auth-controls.tsx`,

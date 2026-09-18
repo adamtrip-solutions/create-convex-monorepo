@@ -13,7 +13,9 @@ An auth adapter runs after framework generation and owns authentication wiring a
 
 The none adapter demonstrates file ownership. The Clerk adapter demonstrates a binding map that selects SDKs by framework. Keep provider-specific framework details in the adapter; do not introduce auth branches into every app template.
 
-WorkOS AuthKit is the third adapter and supports Next.js, Vite, and TanStack Start. It owns a ConvexProviderWithAuth token bridge, server callback routes where required, and `.env.workos.example`. Expo and React Router are rejected during normalization through the WorkOS bindings map. The official React Router SDK exists, but this generator has no binding for it yet. Ownership uses `identity.subject`, unlike Clerk and Convex Auth.
+For Astro, also write `auth.config.mjs` with the integration list consumed by `astro.config.mjs`. Providers that need no Astro integration export an empty list. Clerk supplies its official integration and middleware, and imports `useAuth` from `@clerk/astro/react` without a React `ClerkProvider`.
+
+WorkOS AuthKit is the third adapter and supports Next.js, Vite, and TanStack Start. It owns a ConvexProviderWithAuth token bridge, server callback routes where required, and `.env.workos.example`. Expo, Astro, and React Router are rejected during normalization through the WorkOS bindings map. Astro has an [official SDK](https://github.com/workos/authkit-astro), but it requires a server adapter and on-demand rendering, which the static Astro template does not configure. The official React Router SDK exists, but this generator has no binding for it yet. Ownership uses `identity.subject`, unlike Clerk and Convex Auth.
 
 Convex Auth is the second adapter; its independent provider writer lives in `src/integrations/auth/convex-auth/providers.ts`.
 
@@ -51,4 +53,4 @@ Better Auth uses the official `@convex-dev/better-auth` component. Follow `scrip
 
 Keep component tables out of the application schema. Add component registration through `convex.config.ts` and return an actionable conflict for an existing config that needs editing. Keep generated internals under project ownership when adding auth to an existing workspace; document the required codegen refresh. Configure deployment secrets through a generated root helper that does not print or store them, and account for every frontend origin and native scheme on the shared backend.
 
-Test browser and native plugin selection separately. Better Auth uses `convexClient` in all clients, `crossDomainClient` in browsers, and `expoClient` with SecureStore on native platforms. Next.js, TanStack Start, and React Router remain client-only. The blank starter can expose auth functions while retaining an empty application schema, so its type assertions must distinguish auth modules from example modules.
+Test browser and native plugin selection separately. Better Auth uses `convexClient` in all clients, `crossDomainClient` in browsers, and `expoClient` with SecureStore on native platforms. Next.js, TanStack Start, and React Router remain client-only. Astro uses the same browser client inside its React island and an empty `auth.config.mjs` integration list. The blank starter can expose auth functions while retaining an empty application schema, so its type assertions must distinguish auth modules from example modules.

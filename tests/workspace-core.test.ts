@@ -33,7 +33,7 @@ async function fixture(packageManager: 'pnpm' | 'bun' = 'pnpm') {
   const root = await generateProject(
     {
       name: 'fixture',
-      apps: 'next,vite,tanstack-start,expo,router:react-router',
+      apps: 'next,vite,tanstack-start,expo,router:react-router,island:astro',
       example: 'none',
       packageManager,
     },
@@ -267,6 +267,9 @@ describe('environment sync', () => {
     }
     expect(await readText(ws.root, 'apps/web/.env.local')).toContain(
       'OTHER="first\nsecond"',
+    );
+    expect(await readText(ws.root, 'apps/island/.env.local')).toBe(
+      'PUBLIC_CONVEX_URL=https://current.convex.cloud\n',
     );
     expect((await planEnvSync(ws)).changes).toEqual([]);
   });

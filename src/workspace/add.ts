@@ -220,6 +220,83 @@ function mergePackage(
   }
   return json(result);
 }
+/** Bring pre-Astro workspaces up to the environment contract needed by the new app. */
+async function planAstroSupport(
+  workspace: Workspace,
+  plan: ChangePlan,
+  generated: Files,
+) {
+  const setupPath = 'scripts/convex-setup.mjs';
+  const setup = await guardedRead(workspace, plan, setupPath);
+  const target = generated.get(setupPath)!;
+  // The generic refresh in planAddApp owns setup-helper writes. Astro still
+  // requires a recognized helper before adding its PUBLIC_ environment contract.
+  if (
+    !plan.changes.some((change) => change.path === setupPath) &&
+    !(await equivalentGeneratedFile(setupPath, setup, target))
+  )
+    throw new Error(
+      `Conflict in ${setupPath}: restore the generated setup helper before adding Astro so convex:link can recognize PUBLIC_CONVEX_URL. No files were changed.`,
+    );
+  const turboPath = 'turbo.json';
+  const before = await guardedRead(workspace, plan, turboPath);
+  if (before === null)
+    throw new Error(
+      'Missing turbo.json. Restore the workspace task configuration before adding Astro.',
+    );
+  const turbo = object(JSON.parse(before), turboPath);
+  const tasks = { ...object(turbo.tasks, turboPath) };
+  let changed = false;
+  for (const [task, field] of [
+    ['build', 'env'],
+    ['dev', 'passThroughEnv'],
+  ] as const) {
+    const config = { ...object(tasks[task], turboPath) };
+    const values = config[field] ?? [];
+    if (
+      !Array.isArray(values) ||
+      values.some((value) => typeof value !== 'string')
+    )
+      throw new Error(
+        `Conflict in turbo.json: tasks.${task}.${field} must be a string array before adding Astro.`,
+      );
+    if (
+      values.includes('!PUBLIC_*') ||
+      values.some(
+        (value) => typeof value === 'string' && value.startsWith('!PUBLIC_'),
+      )
+    )
+      throw new Error(
+        `Conflict in turbo.json: tasks.${task}.${field} excludes Astro public variables. Remove the exclusion before adding Astro.`,
+      );
+    if (!values.includes('PUBLIC_*')) {
+      config[field] = [...values, 'PUBLIC_*'];
+      tasks[task] = config;
+      changed = true;
+    }
+  }
+  if (changed)
+    plan.changes.push({
+      path: turboPath,
+      before,
+      after: json({ ...turbo, tasks }),
+    });
+  for (const [path, pattern] of [
+    ['.gitignore', '.astro/'],
+    ['.prettierignore', '**/.astro/'],
+  ]) {
+    const before = await guardedRead(workspace, plan, path!);
+    if (!(before ?? '').split(/\r?\n/).includes(pattern!)) {
+      const after = `${before ?? ''}${before && !before.endsWith('\n') ? '\n' : ''}${pattern}\n`;
+      plan.changes.push({
+        path: path!,
+        before,
+        after: retainNewlines(after, before),
+      });
+    }
+  }
+}
+
 export async function planAddApp(
   workspace: Workspace,
   options: { name: string; framework: Framework; example?: Example },
@@ -314,6 +391,8 @@ export async function planAddApp(
         `Development port ${newPort} is already configured in apps/${existing.name}. Choose a different port there before adding this app.`,
       );
   }
+  if (app.framework === 'astro')
+    await planAstroSupport(workspace, plan, generated);
   if (example === 'messages') await verifyMessages(workspace, plan, generated);
   if (workspace.config.auth !== 'none') {
     const files =

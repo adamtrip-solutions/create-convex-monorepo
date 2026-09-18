@@ -39,7 +39,7 @@ afterEach(async () => {
   );
 });
 async function fixture(
-  apps = 'next,admin:vite,portal:tanstack-start,expo,router:react-router',
+  apps = 'next,admin:vite,portal:tanstack-start,expo,router:react-router,island:astro',
   auth = 'none',
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-setup-'));
@@ -253,6 +253,7 @@ describe('public URL linking', () => {
       ['portal', 'VITE_CONVEX_URL'],
       ['router', 'VITE_CONVEX_URL'],
       ['mobile', 'EXPO_PUBLIC_CONVEX_URL'],
+      ['island', 'PUBLIC_CONVEX_URL'],
     ]) {
       const text = await readFile(join(root, `apps/${app}/.env.local`), 'utf8');
       expect(parseEnv(text)).toEqual({
