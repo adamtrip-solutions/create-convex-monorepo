@@ -35,7 +35,16 @@ const clerk: Record<Framework, string> = {
   'tanstack-start': '@clerk/tanstack-react-start',
   expo: '@clerk/expo',
 };
+const workos: Partial<Record<Framework, string>> = {
+  next: '@workos-inc/authkit-nextjs',
+  vite: '@workos-inc/authkit-react',
+  'tanstack-start': '@workos/authkit-tanstack-react-start',
+};
 const baselines: Record<string, string> = {
+  '@workos-inc/node': versions.workosNode,
+  '@workos-inc/authkit-nextjs': versions.workosNext,
+  '@workos-inc/authkit-react': versions.workosReact,
+  '@workos/authkit-tanstack-react-start': versions.workosTanstack,
   convex: versions.convex,
   '@convex-dev/auth': versions.convexAuth,
   '@auth/core': versions.authCore,
@@ -356,13 +365,13 @@ export async function doctor(
     );
   }
   if (
-    config.auth === 'clerk' &&
+    (config.auth === 'clerk' || config.auth === 'workos') &&
     (await text('packages/backend/convex/auth.config.ts')) === null
   ) {
     issue(
       'auth-config-missing',
-      'Clerk is recorded in metadata but the backend auth.config.ts is missing.',
-      'Restore the backend Clerk auth configuration before deploying.',
+      `${config.auth === 'clerk' ? 'Clerk' : 'WorkOS AuthKit'} is recorded in metadata but the backend auth.config.ts is missing.`,
+      'Restore the backend auth configuration before deploying.',
     );
   }
   if (config.auth === 'convex-auth') {
@@ -497,6 +506,13 @@ export async function doctor(
       'typescript',
       ...frameworks[app.framework],
       ...(config.auth === 'clerk' ? [clerk[app.framework]] : []),
+      ...(config.auth === 'workos' && workos[app.framework]
+        ? [workos[app.framework]!]
+        : []),
+      ...(config.auth === 'workos' &&
+      (app.framework === 'next' || app.framework === 'tanstack-start')
+        ? ['@workos-inc/node']
+        : []),
       ...(config.auth === 'convex-auth' ? ['@convex-dev/auth'] : []),
       ...(config.auth === 'convex-auth' && app.framework === 'expo'
         ? ['expo-secure-store']
@@ -534,6 +550,8 @@ export async function doctor(
       const values = await environment(directory, [filename]);
       for (const secret of [
         'CLERK_SECRET_KEY',
+        'WORKOS_API_KEY',
+        'WORKOS_COOKIE_PASSWORD',
         'CONVEX_DEPLOY_KEY',
         'JWT_PRIVATE_KEY',
         'JWKS',
@@ -584,6 +602,24 @@ export async function doctor(
             'auth-env-missing',
             `${directory} is missing ${name}.`,
             'Set the key in this app’s private .env.local.',
+          );
+    }
+    if (config.auth === 'workos') {
+      const required = [
+        `${prefix}_WORKOS_CLIENT_ID`,
+        app.framework === 'tanstack-start'
+          ? 'WORKOS_REDIRECT_URI'
+          : `${prefix}_WORKOS_REDIRECT_URI`,
+        ...(app.framework === 'next' || app.framework === 'tanstack-start'
+          ? ['WORKOS_CLIENT_ID', 'WORKOS_API_KEY', 'WORKOS_COOKIE_PASSWORD']
+          : []),
+      ];
+      for (const name of required)
+        if (!env.get(name))
+          issue(
+            'auth-env-missing',
+            `${directory} is missing ${name}.`,
+            'Set the value in this app’s private .env.local.',
           );
     }
     if ((await text(`${directory}/tsconfig.json`)) === null)
@@ -660,6 +696,10 @@ export async function doctor(
         `Align ${name} versions across packages and run pnpm install.`,
       );
   }
+  if (config.auth === 'workos')
+    result.checks.push(
+      'WorkOS issuer and client ID configuration requires a separate Convex deployment check; no remote secrets were read.',
+    );
   if (config.auth === 'clerk')
     result.checks.push(
       'Clerk deployment issuer configuration requires a separate Convex deployment check; no remote secrets were read.',

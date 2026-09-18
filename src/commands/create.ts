@@ -20,7 +20,7 @@ upgrade --check. No global or project installation is required.
 
   --apps <list>             next,vite,tanstack-start,expo or web:next,admin:vite
   --example <name>         messages (default) or none for blank apps
-  --auth <provider>         none (default), clerk, or convex-auth
+  --auth <provider>         none (default), clerk, convex-auth, or workos
   --package-manager <name>  pnpm (v0.1)
   --install / --no-install  Install generated dependencies
   --init-convex / --no-init-convex  Set up Convex and link URLs (requires install)
@@ -177,6 +177,7 @@ export async function runCreate(
           options: [
             { value: 'none', label: 'None' },
             { value: 'clerk', label: 'Clerk' },
+            { value: 'workos', label: 'WorkOS AuthKit' },
             { value: 'convex-auth', label: 'Convex Auth (email + password)' },
           ],
         }),
@@ -223,6 +224,6 @@ export async function runCreate(
     onProgress: (message) => console.log(`✓ ${message}`),
   });
   console.log(
-    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : '  pnpm install\n'}${options.initConvex ? '  pnpm dev' : '  pnpm convex:setup\n  pnpm dev'}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
+    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : '  pnpm install\n'}${options.initConvex ? '  pnpm dev' : '  pnpm convex:setup\n  pnpm dev'}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'workos' ? '\nAdd WorkOS settings from .env.workos.example and complete the auth setup in README.md.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
   );
 }

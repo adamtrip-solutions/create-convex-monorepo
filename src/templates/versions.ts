@@ -1,6 +1,10 @@
 export const versions = {
   prettier: '3.8.3',
   convex: '1.45.0',
+  workosNode: '10.13.0',
+  workosNext: '4.3.2',
+  workosReact: '0.16.2',
+  workosTanstack: '0.11.1',
   convexAuth: '0.0.95',
   authCore: '0.41.1',
   react: '19.2.3',

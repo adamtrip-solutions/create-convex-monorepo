@@ -1,6 +1,6 @@
 # create-convex-monorepo
 
-A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, or a combination, with optional Clerk or Convex Auth authentication.
+A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, or a combination, with optional Clerk, Convex Auth, or WorkOS AuthKit authentication.
 
 The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Choose blank apps or a messages example. The example includes a query and mutation, plus compile-time assertions for the shared API's argument and return types.
 
@@ -34,7 +34,7 @@ Run the same CLI from the workspace root or any subdirectory. No global or proje
 npx create-convex-monorepo@latest
 ```
 
-With a terminal attached, it detects `convex-monorepo.json` and offers a menu to add an app, add a shared package, add Clerk, check the workspace, sync frontend URLs, update dependencies, or check for updates. Without a terminal, it prints management help without changing files.
+With a terminal attached, it detects `convex-monorepo.json` and offers a menu to add an app, add a shared package, add authentication, check the workspace, sync frontend URLs, update dependencies, or check for updates. Without a terminal, it prints management help without changing files.
 
 You can also run each command directly:
 
@@ -48,6 +48,8 @@ npx create-convex-monorepo@latest add auth clerk --dry-run
 npx create-convex-monorepo@latest add auth clerk --install
 npx create-convex-monorepo@latest add auth convex-auth --dry-run
 npx create-convex-monorepo@latest add auth convex-auth --install
+npx create-convex-monorepo@latest add auth workos --dry-run
+npx create-convex-monorepo@latest add auth workos --install
 npx create-convex-monorepo@latest env sync --app mobile
 npx create-convex-monorepo@latest doctor
 npx create-convex-monorepo@latest upgrade --check
@@ -131,7 +133,7 @@ pnpm create convex-monorepo@latest my-app --apps app:tanstack-start,dashboard:ne
 | Option                              | Meaning                                                     |
 | ----------------------------------- | ----------------------------------------------------------- |
 | `--apps`                            | Comma-separated framework IDs or `name:framework` entries   |
-| `--auth`                            | `none`, the default, `clerk`, or `convex-auth`              |
+| `--auth`                            | `none`, the default, `clerk`, `convex-auth`, or `workos`    |
 | `--example`                         | `messages`, the default, or `none` for blank projects       |
 | `--package-manager`                 | `pnpm`; other managers are rejected in v0.1                 |
 | `--install`, `--no-install`         | Enable or skip dependency installation                      |
@@ -152,7 +154,7 @@ pnpm create convex-monorepo@latest my-app --apps next,expo --example none --yes
 
 Every selected app starts with a minimal page or screen showing its name. Convex providers, workspace dependencies, environment setup, and the selected auth integration remain configured. The backend has official generated types and an empty schema, except Convex Auth projects retain their auth tables and functions. There are no example tables, messages functions, access helpers, query/mutation screens, or demo-specific type-test files to remove.
 
-Add your tables to `packages/backend/convex/schema.ts` and your functions beside it. Run `pnpm convex:dev` to generate their shared API references. With either auth provider, add server-side identity and authorization checks to your protected functions. The blank starter retains sign-in controls and the existing authenticated provider behavior.
+Add your tables to `packages/backend/convex/schema.ts` and your functions beside it. Run `pnpm convex:dev` to generate their shared API references. With any auth provider, add server-side identity and authorization checks to your protected functions. The blank starter retains sign-in controls and the existing authenticated provider behavior.
 
 The choice applies to the whole workspace. `--example messages` keeps the existing query/mutation demo and remains the default, including with `--yes`.
 
@@ -250,13 +252,15 @@ Dynamic Convex declarations refer to backend source modules. Client TypeScript p
 
 ## Authentication
 
-New projects accept `none`, `clerk`, or `convex-auth` across all four frameworks and both starters. Existing no-auth workspaces accept `add auth clerk` or `add auth convex-auth`. Both providers support `add app`.
+New projects accept `none`, `clerk`, or `convex-auth` across all four frameworks and both starters. Existing no-auth workspaces accept `add auth clerk` or `add auth convex-auth`. All providers support `add app` for their supported frameworks. WorkOS AuthKit supports Next.js, Vite, and TanStack Start with both starters. Expo is rejected before writing files because no official Expo or React Native AuthKit SDK was found.
 
 `--auth convex-auth` and `add auth convex-auth` configure email and password sign-up/sign-in, sign-out, and per-user backend access. Web apps use the client ConvexAuthProvider; Expo persists tokens with expo-secure-store. No frontend public auth keys or password-flow redirect scheme are needed. Next.js and TanStack Start do not configure server-side authentication or authenticated SSR. OAuth, magic links, email verification, password reset, and MFA are outside this starter.
 
 Run `pnpm convex:setup`, then `pnpm convex:auth-keys`. The key script generates an RSA 2048 key pair and sets `JWT_PRIVATE_KEY` and `JWKS` on the deployment through the installed Convex CLI. It never stores the key locally or prints either value. The initial push can finish before keys exist, but sign-in fails until they are configured. Run `pnpm convex:auth-keys --prod` to set a separate pair for production. `SITE_URL` is a deployment setting for redirects and is optional for this Password-only flow. The generated `.env.convex-auth.example` belongs to the backend package. See the [official manual setup](https://labs.convex.dev/auth/setup/manual).
 
-Convex Auth message owners are `users` table IDs returned by `getAuthUserId`. Clerk owners are `tokenIdentifier` values. Switching providers changes these keys and needs a data migration; the CLI does not replace auth providers.
+Convex Auth message owners are `users` table IDs returned by `getAuthUserId`. Clerk owners are `tokenIdentifier` values. WorkOS owners are `identity.subject` values from `ctx.auth.getUserIdentity()`. Switching providers changes these keys and needs a data migration; the CLI does not replace auth providers.
+
+`--auth workos` and `add auth workos` configure hosted AuthKit sign-in, SDK token refresh, sign-out, and Convex identity validation. The blank starter keeps the providers and sign-in controls. Append each app's `.env.workos.example` to `.env.local` and follow the generated README's WorkOS setup section, or `WORKOS_SETUP.md` after adding auth. The client ID uses each framework's public prefix. Next.js and TanStack Start also need its unprefixed server SDK value, plus server-only `WORKOS_API_KEY` and `WORKOS_COOKIE_PASSWORD`. Vite receives no server secrets. See [WorkOS research and configuration constraints](docs/research.md#workos-authkit).
 
 `--auth clerk` adds SDK-specific bindings, a Convex auth configuration, and provider wiring. The messages example also includes backend identity checks and an owner index that keeps messages private. With `--auth none`, that example is a public message board. Blank projects omit the messages example; Convex Auth retains its auth tables and functions. Add authorization checks when writing protected functions. UI visibility alone is not authorization.
 

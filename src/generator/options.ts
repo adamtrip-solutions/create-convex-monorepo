@@ -43,9 +43,14 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
   if (example !== 'none' && example !== 'messages')
     throw new Error(`Unknown example "${example}". Choose none or messages.`);
   const auth = raw.auth ?? 'none';
-  if (auth !== 'none' && auth !== 'clerk' && auth !== 'convex-auth')
+  if (
+    auth !== 'none' &&
+    auth !== 'clerk' &&
+    auth !== 'convex-auth' &&
+    auth !== 'workos'
+  )
     throw new Error(
-      `Unknown auth provider "${auth}". Choose none, clerk, or convex-auth.`,
+      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, or workos.`,
     );
   const used = new Set<string>();
   const input = raw.apps ?? 'next';
@@ -96,6 +101,13 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     used.add(appName);
     return { name: appName, framework };
   });
+  if (auth === 'workos') {
+    const unsupported = apps.find((app) => app.framework === 'expo');
+    if (unsupported)
+      throw new Error(
+        `WorkOS AuthKit does not support framework "${unsupported.framework}". Choose next, vite, or tanstack-start; no official Expo / React Native AuthKit SDK is available.`,
+      );
+  }
   return {
     name,
     apps,

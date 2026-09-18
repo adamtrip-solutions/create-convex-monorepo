@@ -107,7 +107,7 @@ export function parseWorkspaceConfig(value: unknown): WorkspaceConfig {
     value.packageManager !== 'pnpm' ||
     value.monorepo !== 'turbo' ||
     !Array.isArray(value.apps) ||
-    !['none', 'clerk', 'convex-auth'].includes(String(value.auth))
+    !['none', 'clerk', 'convex-auth', 'workos'].includes(String(value.auth))
   )
     throw new Error(
       'Invalid convex-monorepo.json. Expected a named pnpm/Turborepo workspace with applications and a supported auth provider.',
