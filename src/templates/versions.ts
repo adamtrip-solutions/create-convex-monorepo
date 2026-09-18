@@ -5,6 +5,7 @@ export const versions = {
   authCore: '0.41.1',
   react: '19.2.3',
   typescript: '6.0.3',
+  bun: '1.4.2',
   pnpm: '10.34.5',
   turbo: '2.10.12',
   next: '16.3.4',

@@ -88,3 +88,15 @@ Clerk's issuer must exist on the deployment before its auth configuration can be
 ## Blank backend
 
 Verified `defineSchema({})` with the installed Convex 1.45.0 CLI using a normal anonymous local `convex dev --once`. It pushes successfully without registered functions. The official output uses `ApiFromModules<{}>` and derives the data model from the empty schema. Blank generation copies those artifacts unchanged from `assets/backend-blank`; it does not remove imports from the messages example's generated declarations. Keeping a schema preserves strict table-name types as users add tables. [Convex schemas](https://docs.convex.dev/database/schemas), [generated API](https://docs.convex.dev/generated-api/api).
+
+## Bun workspaces
+
+Investigated 2026-09-18. `npm view bun version` returned 1.4.2, matching the installed binary. The generated root pins that version and declares `workspaces: ["apps/*", "packages/*"]`. Workspace dependencies retain `workspace:*`. Bun 1.4.2 uses isolated installs for new workspaces by default, with dependencies linked through `node_modules/.bun`. No hoisting or Metro resolver override was needed in these fixtures. [Bun workspaces](https://bun.sh/docs/pm/workspaces), [isolated installs](https://bun.sh/docs/pm/isolated-installs).
+
+All four frameworks passed bun installation, typecheck, lint, and production build with no auth, Clerk, and Convex Auth, for both messages and blank starters. Expo's build ran `expo export --platform ios --platform android` and produced both JavaScript bundles. Adding apps and a shared package to a bun workspace also passed with the default `expo/metro-config`. These checks do not cover native binary builds or live authentication.
+
+Expo supports isolated installations from SDK 54, but additional native libraries can still have dependency-resolution problems. Keep React and React Native versions aligned across apps; do not add old `watchFolders` or symlink resolver workarounds without a reproduced failure. Clear Metro's cache after changing dependency layouts with `bun run --cwd apps/mobile expo start --clear`, adjusting the app name if needed. [Expo monorepos](https://docs.expo.dev/guides/monorepos/).
+
+Node.js remains required for the generator and framework tools. Bun does not run arbitrary dependency lifecycle scripts: generated `trustedDependencies` contains esbuild, sharp, and unrs-resolver, matching the pnpm build allowlist. Commit `bun.lock`; Expo's EAS tooling uses the lockfile to select the package manager. [Expo with Bun](https://docs.expo.dev/guides/using-bun/).
+
+The standalone setup helpers detect the manager from `convex-monorepo.json`, falling back to the root manifest. They invoke the installed Convex CLI directly, without fetching another release. Convex Auth's key helper is self-contained so `add auth convex-auth` also works beside older setup scripts. Metadata remains version 1, but CLI releases whose validator accepts only pnpm cannot manage bun projects.
