@@ -63,6 +63,53 @@ async function snapshot(root: string): Promise<Record<string, string>> {
 }
 
 describe('workspace doctor', () => {
+  it.each([
+    'react-router',
+    '@react-router/node',
+    '@react-router/serve',
+    '@react-router/dev',
+    'isbot',
+    '@clerk/react-router',
+  ])('reports missing React Router dependency %s', async (dependency) => {
+    const workspace = await fixture('web:react-router', 'clerk');
+    const path = join(workspace.root, 'apps/web/package.json');
+    const pkg = JSON.parse(await readFile(path, 'utf8'));
+    delete pkg.dependencies[dependency];
+    delete pkg.devDependencies[dependency];
+    await writeFile(path, JSON.stringify(pkg));
+    const report = await doctor(workspace);
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'dependency-missing',
+        severity: 'error',
+        message: `apps/web does not declare ${dependency}.`,
+      }),
+    );
+  });
+  it('requires the server Clerk secret for React Router without exposing values', async () => {
+    const workspace = await fixture('web:react-router', 'clerk');
+    await put(
+      workspace.root,
+      'apps/web/.env.local',
+      'VITE_CLERK_PUBLISHABLE_KEY=pk_test_placeholder\n',
+    );
+    expect((await doctor(workspace)).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'auth-env-missing',
+        message: expect.stringContaining('CLERK_SECRET_KEY'),
+      }),
+    );
+    await put(
+      workspace.root,
+      'apps/web/.env.local',
+      'VITE_CLERK_PUBLISHABLE_KEY=pk_test_placeholder\nCLERK_SECRET_KEY=never-expose-this\n',
+    );
+    const report = await doctor(workspace);
+    expect(
+      report.issues.filter((issue) => issue.code === 'auth-env-missing'),
+    ).toEqual([]);
+    expect(JSON.stringify(report)).not.toContain('never-expose-this');
+  });
   it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'PUBLIC'])(
     'reports %s signing values in every app environment file without exposing them',
     async (prefix) => {
@@ -406,7 +453,7 @@ closing secret"
       result.issues.some((issue) => issue.code === 'backend-runtime'),
     ).toBe(true);
   });
-  it('runs an in-memory type probe against installed TypeScript and detects an untyped API', async () => {
+  it('resolves app-local type libraries in the in-memory probe and detects an untyped API', async () => {
     const workspace = await fixture('web:vite');
     const require = createRequire(import.meta.url);
     // The fixture uses the real compiler through a local package entry, without an install.
@@ -433,9 +480,19 @@ closing secret"
           module: 'ESNext',
           moduleResolution: 'Bundler',
           target: 'ES2023',
-          types: [],
+          types: ['ccm-app-only-types'],
         },
       }),
+    );
+    await put(
+      workspace.root,
+      'apps/web/node_modules/ccm-app-only-types/package.json',
+      JSON.stringify({ name: 'ccm-app-only-types', types: 'index.d.ts' }),
+    );
+    await put(
+      workspace.root,
+      'apps/web/node_modules/ccm-app-only-types/index.d.ts',
+      'export {};\n',
     );
     await mkdir(join(workspace.root, 'node_modules/@diagnostics'), {
       recursive: true,

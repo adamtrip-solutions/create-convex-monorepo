@@ -34,7 +34,9 @@ describe.each(['none', 'clerk', 'convex-auth', 'workos'])(
             'tanstack-start',
             'expo',
             'astro',
+            'react-router',
             'next,admin:vite,portal:tanstack-start,expo',
+            'next,admin:vite,portal:tanstack-start,expo,router:react-router',
           ],
     )('generates %s without demo code', async (apps) => {
       const cwd = await mkdtemp(join(tmpdir(), 'ccm-blank-'));
@@ -83,13 +85,19 @@ describe.each(['none', 'clerk', 'convex-auth', 'workos'])(
                   ? 'App.tsx'
                   : app.framework === 'astro'
                     ? 'src/App.tsx'
-                    : 'src/routes/index.tsx';
+                    : app.framework === 'react-router'
+                      ? 'app/routes/home.tsx'
+                      : 'src/routes/index.tsx';
           expect(await read(`${dir}/${entry}`)).toContain(
             app.framework === 'expo'
               ? `<Text>${app.name}</Text>`
               : `<h1>${app.name}</h1>`,
           );
-          expect(await read(`${dir}/${entry}`)).toContain('<Providers>');
+          expect(
+            await read(
+              `${dir}/${app.framework === 'react-router' ? 'app/root.tsx' : entry}`,
+            ),
+          ).toContain('<Providers>');
           expect(await read(`${dir}/src/providers.tsx`)).toContain(
             auth === 'clerk'
               ? 'ConvexProviderWithClerk'

@@ -8,13 +8,14 @@ An auth adapter runs after framework generation and owns authentication wiring a
 2. Create `src/integrations/auth/<id>/index.ts` exporting an `AuthAdapter`, then register it in `src/integrations/auth/index.ts`.
 3. Write `packages/backend/convex/access.ts` with the `getOwner` function consumed by the example backend. Use a stable authenticated identity and reject unauthenticated access. Generate the provider's supported Convex auth configuration.
 4. For each app, merge SDK dependencies through `context.mergePackage` and write `src/providers.tsx` and `src/auth-controls.tsx`. Add middleware or native configuration where the SDK requires it.
-5. Generate safe environment examples and setup instructions. Separate public keys, framework server secrets, and environment variables configured on the Convex deployment.
+5. For React Router, write `src/auth.server.ts` with the root route's `loader` and `middleware` exports. Use a null loader and empty middleware list for client-only authentication. Pass server session data to the client provider when the SDK requires it.
+6. Generate safe environment examples and setup instructions. Separate public keys, framework server secrets, and environment variables configured on the Convex deployment.
 
 The none adapter demonstrates file ownership. The Clerk adapter demonstrates a binding map that selects SDKs by framework. Keep provider-specific framework details in the adapter; do not introduce auth branches into every app template.
 
 For Astro, also write `auth.config.mjs` with the integration list consumed by `astro.config.mjs`. Providers that need no Astro integration export an empty list. Clerk supplies its official integration and middleware, and imports `useAuth` from `@clerk/astro/react` without a React `ClerkProvider`.
 
-WorkOS AuthKit is the third adapter and supports Next.js, Vite, and TanStack Start. It owns a ConvexProviderWithAuth token bridge, server callback routes where required, and `.env.workos.example`. Expo and Astro are rejected during normalization through the WorkOS bindings map. Astro has an [official SDK](https://github.com/workos/authkit-astro), but it requires a server adapter and on-demand rendering, which the static Astro template does not configure. Ownership uses `identity.subject`, unlike Clerk and Convex Auth.
+WorkOS AuthKit is the third adapter and supports Next.js, Vite, and TanStack Start. It owns a ConvexProviderWithAuth token bridge, server callback routes where required, and `.env.workos.example`. Expo, Astro, and React Router are rejected during normalization through the WorkOS bindings map. Astro has an [official SDK](https://github.com/workos/authkit-astro), but it requires a server adapter and on-demand rendering, which the static Astro template does not configure. The official React Router SDK exists, but this generator has no binding for it yet. Ownership uses `identity.subject`, unlike Clerk and Convex Auth.
 
 Convex Auth is the second adapter; its independent provider writer lives in `src/integrations/auth/convex-auth/providers.ts`.
 

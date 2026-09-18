@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { format } from 'prettier';
 import { generateProject } from '../src/generator/index.js';
 import { normalizeOptions, type RawOptions } from '../src/generator/options.js';
+import { platform } from '../src/integrations/auth/shared.js';
 import { workosBindings } from '../src/integrations/auth/workos/index.js';
 
 interface Scenario extends RawOptions {
@@ -41,6 +42,16 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
         example,
       })),
     ),
+    {
+      label: 'Astro + React Router + Clerk',
+      apps: 'astro,react-router',
+      auth: 'clerk',
+    },
+    {
+      label: 'Astro + React Router + Convex Auth',
+      apps: 'astro,react-router',
+      auth: 'convex-auth',
+    },
     { label: 'Astro + Expo + Clerk', apps: 'astro,expo', auth: 'clerk' },
     {
       label: 'Astro + Next + Convex Auth (blank)',
@@ -84,13 +95,7 @@ try {
         return [
           name,
           framework,
-          framework === 'next'
-            ? 'NEXT_PUBLIC'
-            : framework === 'expo'
-              ? 'EXPO_PUBLIC'
-              : framework === 'astro'
-                ? 'PUBLIC'
-                : 'VITE',
+          platform({ name, framework }).prefix,
           sdk ?? null,
         ];
       }),

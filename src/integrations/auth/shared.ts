@@ -26,6 +26,8 @@ export async function writeProviders(
   },
 ): Promise<void> {
   const { native, env } = platform(app);
+  const routeAuth = !!auth && app.framework === 'react-router';
+  await writeRouteAuth(ctx, app, !!auth);
   const text = (message: string) =>
     native ? `<Text>${message}</Text>` : `<p>${message}</p>`;
   await ctx.write(
@@ -39,16 +41,18 @@ ${
     ? `import { ${auth.integrationManaged ? '' : 'ClerkProvider, '}useAuth } from '${auth.sdk}';
 import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { AuthControls } from './auth-controls';
-${auth.extraImports ?? ''}`
+${auth.extraImports ?? ''}
+${routeAuth ? "import { useRouteLoaderData } from 'react-router';\nimport type { loader } from './auth.server';" : ''}`
     : ''
 }
 
 export function Providers({ children }: { children: ReactNode }) {
+  ${routeAuth ? "const loaderData = useRouteLoaderData<typeof loader>('root');" : ''}
   const url = ${env('CONVEX_URL')};
   ${auth ? `const publishableKey = ${env('CLERK_PUBLISHABLE_KEY')};` : ''}
   if (!url) return ${text(`Set ${platform(app).prefix}_CONVEX_URL in this app's .env.local.`)};
   ${auth ? `if (!publishableKey) return ${text(`Set ${platform(app).prefix}_CLERK_PUBLISHABLE_KEY in this app's .env.local.`)};` : ''}
-  return ${auth && !auth.integrationManaged ? `<ClerkProvider publishableKey={publishableKey} ${auth.providerProps ?? ''}>` : ''}<Connection url={url}>{children}</Connection>${auth && !auth.integrationManaged ? '</ClerkProvider>' : ''};
+  return ${auth && !auth.integrationManaged ? `<ClerkProvider publishableKey={publishableKey} ${routeAuth ? 'loaderData={loaderData}' : ''} ${auth.providerProps ?? ''}>` : ''}<Connection url={url}>{children}</Connection>${auth && !auth.integrationManaged ? '</ClerkProvider>' : ''};
 }
 function Connection({ url, children }: { url: string; children: ReactNode }) {
   const [client] = useState(() => new ConvexReactClient(url${native ? ', { unsavedChangesWarning: false }' : ''}));
@@ -62,6 +66,30 @@ function Connection({ url, children }: { url: string; children: ReactNode }) {
       : `<ConvexProvider client={client}>${native ? '<View style={{ flex: 1, padding: 24, paddingTop: 64 }}>' : ''}{children}${native ? '</View>' : ''}</ConvexProvider>`
   };
 }
+`,
+  );
+}
+
+/** Auth adapters supply the root route's server hooks without moving shared client files. */
+export async function writeRouteAuth(
+  ctx: GeneratorContext,
+  app: AppSpec,
+  clerk = false,
+): Promise<void> {
+  if (app.framework !== 'react-router') return;
+  await ctx.write(
+    `apps/${app.name}/src/auth.server.ts`,
+    clerk
+      ? `import { clerkMiddleware, rootAuthLoader } from '@clerk/react-router/server';
+import type { Route } from '../app/+types/root';
+export const middleware: Route.MiddlewareFunction[] = [clerkMiddleware()];
+export function loader(args: Route.LoaderArgs) {
+  return rootAuthLoader(args);
+}
+`
+      : `import type { Route } from '../app/+types/root';
+export const middleware: Route.MiddlewareFunction[] = [];
+export function loader() { return null; }
 `,
   );
 }

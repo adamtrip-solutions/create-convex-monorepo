@@ -34,11 +34,12 @@ export async function common(
   context: GeneratorContext,
   app: AppSpec,
   env: string,
+  ignores: string[] = [],
 ): Promise<void> {
   const dir = `apps/${app.name}`;
   await context.write(
     `${dir}/eslint.config.js`,
-    `import config from '@${context.scope}/eslint-config';\nexport default config;\n`,
+    `import config from '@${context.scope}/eslint-config';\nexport default ${ignores.length ? `[{ ignores: ${JSON.stringify(ignores)} }, ...config]` : 'config'};\n`,
   );
   await context.write(
     `${dir}/.env.example`,

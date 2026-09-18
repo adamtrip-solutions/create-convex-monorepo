@@ -72,7 +72,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   await ctx.json('.prettierrc.json', formattingOptions);
   await ctx.write(
     '.prettierignore',
-    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.astro/\n**/.output/\n**/dist/\n**/.turbo/\nbun.lock\npnpm-lock.yaml\n.env*\n**/.env*\n',
+    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.astro/\n**/.output/\n**/.react-router/\n**/build/\n**/dist/\n**/.turbo/\nbun.lock\npnpm-lock.yaml\n.env*\n**/.env*\n',
   );
   if (manager === 'pnpm')
     await ctx.write(
@@ -98,7 +98,13 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
       build: {
         dependsOn: ['^build'],
         inputs: ['$TURBO_DEFAULT$', '.env*'],
-        outputs: ['.next/**', '!.next/cache/**', 'dist/**', '.output/**'],
+        outputs: [
+          '.next/**',
+          '!.next/cache/**',
+          'dist/**',
+          '.output/**',
+          'build/**',
+        ],
         env: ['NEXT_PUBLIC_*', 'VITE_*', 'EXPO_PUBLIC_*', 'PUBLIC_*'],
         passThroughEnv: [
           'CLERK_SECRET_KEY',
@@ -112,7 +118,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   });
   await ctx.write(
     '.gitignore',
-    `node_modules/\n.turbo/\n.next/\n.output/\ndist/\n.expo/\n.astro/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'workos' ? '!.env.workos.example\n' : ''}${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
+    `node_modules/\n.turbo/\n.next/\n.output/\n.react-router/\nbuild/\ndist/\n.expo/\n.astro/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'workos' ? '!.env.workos.example\n' : ''}${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
   );
   await ctx.json('convex-monorepo.json', {
     version: 1,
@@ -160,7 +166,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     'packages/eslint-config/index.js',
     `import tseslint from 'typescript-eslint';
 export default tseslint.config(
-  { ignores: ['**/_generated/**', '**/routeTree.gen.ts', '**/node_modules/**', '**/dist/**', '**/.next/**', '**/.expo/**', '**/.astro/**', '**/.output/**'] },
+  { ignores: ['**/_generated/**', '**/routeTree.gen.ts', '**/node_modules/**', '**/dist/**', '**/.next/**', '**/.expo/**', '**/.astro/**', '**/.output/**', '**/.react-router/**', '**/build/**'] },
   ...tseslint.configs.recommended,
   { files: ['**/*.cjs'], rules: { '@typescript-eslint/no-require-imports': 'off' } },
   { rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }] } },
@@ -213,7 +219,7 @@ Use one Clerk application across all frontends. Create a JWT template named conv
 ${exec('backend', 'convex env set CLERK_JWT_ISSUER_DOMAIN')} https://your-instance.clerk.accounts.dev
 \`\`\`
 
-On a new deployment, run ${run('convex:setup')} to select it. If the first push asks for CLERK_JWT_ISSUER_DOMAIN, set it in another terminal with the command above and rerun setup. Repeat this for production. Append each app's .env.clerk.example to its .env.local. These files name publishable keys and any server-only secrets. Never put CLERK_SECRET_KEY in a VITE_, EXPO_PUBLIC_, NEXT_PUBLIC_ or PUBLIC_ variable.
+On a new deployment, run ${run('convex:setup')} to select it. If the first push asks for CLERK_JWT_ISSUER_DOMAIN, set it in another terminal with the command above and rerun setup. Repeat this for production. Append each app's .env.clerk.example to its .env.local. These files name publishable keys and any server-only secrets. React Router needs VITE_CLERK_PUBLISHABLE_KEY at build time and both Clerk keys in the server runtime environment. Its production start command does not load .env.local automatically. Never put CLERK_SECRET_KEY in a VITE_, EXPO_PUBLIC_, NEXT_PUBLIC_ or PUBLIC_ variable.
 
 Expo uses Google OAuth. Enable Google's connection and the Native API in Clerk. Register each mobile scheme redirect listed in that app's .env.clerk.example in Clerk Native applications. Use a development build for a stable app scheme. SecureStore persists the token. Additional MFA or session tasks need a custom flow before production rollout.
 
@@ -239,7 +245,7 @@ These package exports point directly to official Convex generated files. Keep co
 
 Astro emits a static page with a client-only React island. Its typecheck script runs astro check over the page and React source. Clerk uses the official Astro integration and middleware; no SSR adapter is configured. Auth adapters own auth.config.mjs.
 
-TanStack Start uses client Convex hooks. Server-side data preloading is not configured. Next uses the App Router. Expo uses the default Metro workspace resolver and the SDK's React/React Native versions. Avoid independently upgrading React in one app.
+TanStack Start and React Router v7 use client Convex hooks. Server-side Convex prefetching and data loaders are not configured. React Router keeps SSR enabled; its root loader handles authentication only. Next uses the App Router. Expo uses the default Metro workspace resolver and the SDK's React/React Native versions. Avoid independently upgrading React in one app.
 
 ## Deployment and troubleshooting
 

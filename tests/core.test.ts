@@ -96,6 +96,15 @@ describe('options', () => {
       );
     },
   );
+  it.each(['react-router', 'web:react-router'])(
+    'accepts %s through CLI options',
+    (apps) => {
+      expect(normalizeOptions(parseCommand(['--apps', apps]).raw).apps).toEqual(
+        [{ name: 'web', framework: 'react-router' }],
+      );
+      expect(selectTemplate('react-router').id).toBe('react-router');
+    },
+  );
   it.each(['pnpm', 'bun'])(
     'accepts %s through the package-manager flag',
     (manager) => {
@@ -173,6 +182,19 @@ describe('context', () => {
   });
 });
 describe('generation safety', () => {
+  it.each(['react-router', 'next,router:react-router'])(
+    'rejects unsupported WorkOS apps %s during normalization and before writing output',
+    async (apps) => {
+      const cwd = await temp();
+      const raw = { name: 'unsupported', apps, auth: 'workos' };
+      expect(() => normalizeOptions(raw)).toThrow(/framework "react-router"/);
+      await expect(generateProject(raw, { cwd })).rejects.toThrow(
+        /Choose next, vite, tanstack-start/,
+      );
+      expect(await readdir(cwd)).toEqual([]);
+    },
+  );
+
   it.each(['expo', 'next,expo', 'expo,vite', 'tanstack-start,mobile:expo'])(
     'rejects unsupported WorkOS apps %s before writing output',
     async (apps) => {
@@ -323,7 +345,7 @@ it.each(['none', 'clerk', 'convex-auth'])(
   (auth) => {
     const raw = parseCommand([
       '--apps',
-      'astro,next,vite,tanstack-start,expo,island:astro',
+      'astro,next,vite,tanstack-start,expo,router:react-router,island:astro',
       '--auth',
       auth,
     ]).raw;
@@ -333,6 +355,7 @@ it.each(['none', 'clerk', 'convex-auth'])(
       { name: 'admin', framework: 'vite' },
       { name: 'app-2', framework: 'tanstack-start' },
       { name: 'mobile', framework: 'expo' },
+      { name: 'router', framework: 'react-router' },
       { name: 'island', framework: 'astro' },
     ]);
     expect(selectTemplate('astro').label).toBe('Astro + React island');
@@ -364,11 +387,11 @@ it.each(['pnpm', 'bun'])(
       packageManager,
     };
     expect(() => normalizeOptions(options)).toThrow(
-      'the Astro template uses static output',
+      'The Astro template uses static output',
     );
     const cwd = await temp();
     await expect(generateProject(options, { cwd })).rejects.toThrow(
-      'does not support framework "astro"',
+      'is not supported by this generator for framework "astro"',
     );
     expect(await readdir(cwd)).toEqual([]);
   },
