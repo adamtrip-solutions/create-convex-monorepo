@@ -55,6 +55,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - apps: sveltekit
+            auth: none
+            example: messages
+          - apps: sveltekit,next
+            auth: none
+            example: none
+          - apps: vite,sveltekit
+            auth: none
+            example: messages
+            workspaceCommands: '1'
+          - apps: vite,sveltekit
+            auth: none
+            example: messages
+            workspaceCommands: '1'
+            packageManager: bun
+          - apps: sveltekit,react-router
+            auth: none
+            example: none
           - apps: astro,react-router
             auth: better-auth
           - apps: astro,react-router

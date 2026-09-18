@@ -16,6 +16,8 @@ export function publicVariable(framework) {
     case 'tanstack-start':
     case 'react-router':
       return 'VITE_CONVEX_URL';
+    case 'sveltekit':
+      return 'PUBLIC_CONVEX_URL';
     case 'astro':
       return 'PUBLIC_CONVEX_URL';
     case 'expo':

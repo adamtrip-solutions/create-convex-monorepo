@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import spawn from 'cross-spawn';
 import { format } from 'prettier';
+import * as sveltePlugin from 'prettier-plugin-svelte';
 import { normalizeOptions } from '../dist/index.js';
 
 const apps =
@@ -94,6 +95,9 @@ async function snapshot() {
           '.next',
           '.expo',
           '.output',
+          '.svelte-kit',
+          '.react-router',
+          'build',
           'dist',
         ].includes(entry.name)
       )
@@ -169,27 +173,48 @@ try {
           'tanstack-start': 'src/routes/index.tsx',
           'react-router': 'app/root.tsx',
           expo: 'App.tsx',
+          sveltekit: 'src/routes/+page.svelte',
           astro: 'src/App.tsx',
         }[app.framework],
       );
       const entry = await readFile(entryPath, 'utf8');
-      const sharedElement =
-        app.framework === 'expo'
-          ? '<SharedText>{packageName}</SharedText>'
-          : '<p>{packageName}</p>';
-      if (!entry.includes('</Providers>'))
-        throw new Error(`Missing Providers element in ${entryPath}`);
-      await writeFile(
-        entryPath,
-        await format(
-          "import { packageName } from '@fixture/shared';\n" +
-            (app.framework === 'expo'
-              ? "import { Text as SharedText } from 'react-native';\n"
-              : '') +
-            entry.replace('</Providers>', `${sharedElement}</Providers>`),
-          { parser: 'typescript', singleQuote: true, trailingComma: 'all' },
-        ),
-      );
+      if (app.framework === 'sveltekit') {
+        if (!entry.includes('<script lang="ts">'))
+          throw new Error(`Missing TypeScript script in ${entryPath}`);
+        await writeFile(
+          entryPath,
+          await format(
+            entry.replace(
+              '<script lang="ts">',
+              '<script lang="ts">\n  import { packageName } from "@fixture/shared";',
+            ) + '\n<p>{packageName}</p>\n',
+            {
+              parser: 'svelte',
+              plugins: [sveltePlugin],
+              singleQuote: true,
+              trailingComma: 'all',
+            },
+          ),
+        );
+      } else {
+        const sharedElement =
+          app.framework === 'expo'
+            ? '<SharedText>{packageName}</SharedText>'
+            : '<p>{packageName}</p>';
+        if (!entry.includes('</Providers>'))
+          throw new Error(`Missing Providers element in ${entryPath}`);
+        await writeFile(
+          entryPath,
+          await format(
+            "import { packageName } from '@fixture/shared';\n" +
+              (app.framework === 'expo'
+                ? "import { Text as SharedText } from 'react-native';\n"
+                : '') +
+              entry.replace('</Providers>', `${sharedElement}</Providers>`),
+            { parser: 'typescript', singleQuote: true, trailingComma: 'all' },
+          ),
+        );
+      }
     }
     if (example === 'none') {
       // Keep starter assertions here so adding a user's first function does not break their project.
@@ -233,7 +258,7 @@ export type MissingModule = typeof api.notAModule;
         ? 'NEXT_PUBLIC'
         : app.framework === 'expo'
           ? 'EXPO_PUBLIC'
-          : app.framework === 'astro'
+          : app.framework === 'sveltekit' || app.framework === 'astro'
             ? 'PUBLIC'
             : 'VITE';
     // Syntactically valid test configuration, no deployment or identity-provider credentials.
@@ -294,9 +319,11 @@ export type MissingModule = typeof api.notAModule;
         ? '.next/static'
         : app.framework === 'tanstack-start'
           ? 'dist/client'
-          : app.framework === 'react-router'
-            ? 'build/client'
-            : 'dist',
+          : app.framework === 'sveltekit'
+            ? '.svelte-kit/output/client'
+            : app.framework === 'react-router'
+              ? 'build/client'
+              : 'dist',
     );
     for (const file of await readdir(output, { recursive: true })) {
       if (!/\.(?:js|hbc)$/.test(file)) continue;

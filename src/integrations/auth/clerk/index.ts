@@ -3,7 +3,7 @@ import type { AuthAdapter, Framework } from '../../../generator/types.js';
 import { versions as v } from '../../../templates/versions.js';
 import { platform, writeProviders } from '../shared.js';
 
-const bindings: Record<Framework, { sdk: string; version: string }> = {
+const bindings: Partial<Record<Framework, { sdk: string; version: string }>> = {
   next: { sdk: '@clerk/nextjs', version: v.clerkNext },
   vite: { sdk: '@clerk/react', version: v.clerkReact },
   'tanstack-start': { sdk: '@clerk/tanstack-react-start', version: '1.5.12' },
@@ -15,6 +15,7 @@ const bindings: Record<Framework, { sdk: string; version: string }> = {
 export const clerkAdapter: AuthAdapter = {
   id: 'clerk',
   label: 'Clerk',
+  supportedRuntimes: ['react'],
   async apply(ctx) {
     if (ctx.options.example === 'messages')
       await ctx.write(
@@ -42,6 +43,8 @@ export default { providers: [{ domain, applicationID: 'convex' }] } satisfies Au
     for (const app of ctx.options.apps) {
       const dir = `apps/${app.name}`;
       const binding = bindings[app.framework];
+      if (!binding)
+        throw new Error('SvelteKit currently supports only --auth none.');
       const { native, prefix } = platform(app);
       const sdk =
         app.framework === 'astro' ? '@clerk/astro/react' : binding.sdk;

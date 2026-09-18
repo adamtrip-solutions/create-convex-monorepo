@@ -8,6 +8,7 @@ import { authControls } from './controls.js';
 export const betterAuthAdapter: AuthAdapter = {
   id: 'better-auth',
   label: 'Better Auth',
+  supportedRuntimes: ['react'],
   async apply(ctx) {
     await ctx.mergePackage('packages/backend/package.json', {
       dependencies: {

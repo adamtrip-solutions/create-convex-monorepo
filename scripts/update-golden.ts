@@ -100,6 +100,35 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
   }
 }
 
+for (const packageManager of ['pnpm', 'bun'] as const) {
+  for (const scenario of [
+    { label: 'SvelteKit messages', apps: 'sveltekit' },
+    {
+      label: 'SvelteKit + Next blank',
+      apps: 'sveltekit,next',
+      example: 'none',
+    },
+    {
+      label: 'All six frameworks',
+      apps: 'next,vite,tanstack-start,react-router,expo,sveltekit',
+    },
+    {
+      label: 'All seven frameworks',
+      apps: 'next,vite,tanstack-start,react-router,expo,sveltekit,astro',
+    },
+  ]) {
+    const label = `${packageManager === 'bun' ? 'Bun ' : ''}${scenario.label}`;
+    if (!scenarios.some((existing) => existing.label === label))
+      scenarios.push({
+        ...scenario,
+        label,
+        auth: 'none',
+        ...(packageManager === 'bun' ? { packageManager } : {}),
+        expected: [],
+      });
+  }
+}
+
 const cwd = await mkdtemp(join(tmpdir(), 'ccm-update-golden-'));
 try {
   for (const scenario of scenarios) {

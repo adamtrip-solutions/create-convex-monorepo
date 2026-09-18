@@ -1,3 +1,4 @@
+import { validateAuthCompatibility } from '../integrations/auth/index.js';
 import { workosBindings } from '../integrations/auth/workos/index.js';
 import type {
   AppSpec,
@@ -25,6 +26,7 @@ export const frameworks: readonly Framework[] = [
   'tanstack-start',
   'react-router',
   'expo',
+  'sveltekit',
   'astro',
 ];
 export const oauthProviders: readonly OAuthProvider[] = ['github', 'google'];
@@ -77,17 +79,6 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
   if (example !== 'none' && example !== 'messages')
     throw new Error(`Unknown example "${example}". Choose none or messages.`);
   const auth = raw.auth ?? 'none';
-  if (
-    auth !== 'none' &&
-    auth !== 'clerk' &&
-    auth !== 'convex-auth' &&
-    auth !== 'workos' &&
-    auth !== 'better-auth'
-  )
-    throw new Error(
-      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, workos, or better-auth.`,
-    );
-  const oauth = normalizeOAuthProviders(raw.oauth, auth);
   const used = new Set<string>();
   const input = raw.apps ?? 'next';
   const entries =
@@ -137,6 +128,18 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     used.add(appName);
     return { name: appName, framework };
   });
+  validateAuthCompatibility(apps, auth);
+  if (
+    auth !== 'none' &&
+    auth !== 'clerk' &&
+    auth !== 'convex-auth' &&
+    auth !== 'workos' &&
+    auth !== 'better-auth'
+  )
+    throw new Error(
+      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, workos, or better-auth.`,
+    );
+  const oauth = normalizeOAuthProviders(raw.oauth, auth);
   if (auth === 'workos') {
     const unsupported = apps.find((app) => !workosBindings[app.framework]);
     if (unsupported)

@@ -113,6 +113,97 @@ Both command-driven all-four-framework scenarios passed generated formatting che
 
 A manual PTY check displayed all five management actions from an app's src directory and cancelled without applying changes. A fresh read-only review found no material issues and independently passed 101 focused tests. Native device execution and real Clerk login were not repeated for this change.
 
+## SvelteKit
+
+Verified on 2026-09-18 with Node 24.17.0 and pnpm 10.34.5. All required checks passed. No commits or pushes were made.
+
+Repository commands, run from the feature worktree:
+
+```sh
+pnpm format
+pnpm lint
+pnpm format:check
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+The final test run passed 544 unit tests and 7 backend tests. Windows execution was not available locally; the existing Windows CI job runs these unit tests. The generated Svelte files use the same plain TypeScript backend contract as React apps.
+
+The following built-CLI commands ran from `/tmp/ccm-svelte-verification`:
+
+```sh
+node /tmp/ccm-wt/sveltekit/dist/cli/index.js create svelte-final --apps sveltekit --auth none --example messages --no-git --install
+node /tmp/ccm-wt/sveltekit/dist/cli/index.js create svelte-vite-blank --apps sveltekit,vite --auth none --example none --no-git --install
+node /tmp/ccm-wt/sveltekit/dist/cli/index.js create add-svelte --apps vite --auth none --example messages --no-git --install
+```
+
+The add-app fixture then ran these commands from its workspace root:
+
+```sh
+node /tmp/ccm-wt/sveltekit/dist/cli/index.js add app portal --framework sveltekit --dry-run
+node /tmp/ccm-wt/sveltekit/dist/cli/index.js add app portal --framework sveltekit --install
+node scripts/convex-setup.mjs --link-only
+node /tmp/ccm-wt/sveltekit/dist/cli/index.js doctor --json
+```
+
+Before adding the app, this fixture received the pre-feature setup script from Git and had the new Svelte Turbo settings and formatter ignores removed. This exercised an older workspace rather than relying on the updated root template. The root Turbo config remained unchanged by app addition. The dry run listed the setup-script and ignore updates; the applied command linked the new app's `PUBLIC_CONVEX_URL`. Doctor's final report had no issues.
+
+Each fixture received `CONVEX_URL=https://example.convex.cloud` in its backend `.env.local`, then linked frontend URLs with `node scripts/convex-setup.mjs --link-only`. This was test configuration, not a live deployment. In each completed workspace, the following commands passed:
+
+```sh
+pnpm typecheck
+pnpm lint
+pnpm build
+pnpm format:check
+```
+
+| Combination                           | Install | Typecheck                    | Lint   | Build  | Formatting |
+| ------------------------------------- | ------- | ---------------------------- | ------ | ------ | ---------- |
+| SvelteKit, messages, none             | Passed  | Passed, zero Svelte warnings | Passed | Passed | Passed     |
+| SvelteKit + Vite, blank, none         | Passed  | Passed, zero Svelte warnings | Passed | Passed | Passed     |
+| Add SvelteKit to Vite, messages, none | Passed  | Passed, zero Svelte warnings | Passed | Passed | Passed     |
+
+The new CI paths also passed locally, including blank API assertions, shared-package imports, doctor for workspace commands, and browser-bundle checks for backend implementation text:
+
+```sh
+CCM_APPS=sveltekit,next CCM_AUTH=none CCM_EXAMPLE=none pnpm test:e2e
+CCM_APPS=vite,sveltekit CCM_AUTH=none CCM_EXAMPLE=messages CCM_WORKSPACE_COMMANDS=1 pnpm test:e2e
+```
+
+A frontend-only negative check changed the backend mutation's validator to require an additional boolean argument in a disposable fixture, without touching its generated declarations:
+
+```sh
+pnpm --filter @svelte-messages/web exec svelte-check --tsconfig ./tsconfig.json
+```
+
+It exited 1 as expected, reporting the missing argument in `Messages.svelte` and the argument-type assertion in `convex-api.type-test.ts`. The backend file was restored. The clean standalone fixture then passed its positive checks.
+
+The legacy fixture also ran:
+
+```sh
+PUBLIC_CONVEX_URL=https://shell.convex.cloud pnpm exec turbo run build --filter=@add-svelte/portal --dry=json
+```
+
+The resolved task included the public URL hash and `.svelte-kit/**` and `build/**` outputs. Production preview returned HTTP 200 with the messages heading, loading state, and form:
+
+```sh
+pnpm --filter @svelte-final/web preview --host 127.0.0.1 --port 4178
+curl --fail --silent http://127.0.0.1:4178/
+```
+
+The preview was stopped after the check. Adapter-auto completed the builds and reported that the local environment had no detected hosting adapter. No deployment was attempted. Live query and mutation execution was skipped because no live Convex deployment was configured. No required verification was blocked.
+
+Failures found and resolved during implementation:
+
+- The first `pnpm build` rejected the Svelte formatter plugin's published TypeScript declarations. Resolving the installed plugin path explicitly fixed it.
+- The first generated `pnpm format:check` could not resolve a plugin named in an app-local JSON config from the workspace root. The app now resolves its plugin from `prettier.config.js`.
+- The first add-app doctor and workspace E2E run reported TS2688. Supplying the app's tsconfig filename to the in-memory compiler fixed explicit app-local type-package resolution; a regression test covers it.
+- Focused tests initially ran before the Svelte template existed, and formatter tests initially omitted the Svelte parser. Both were corrected. A direct `pnpm exec tsc --noEmit` ran before generated backend fixtures existed; the required `pnpm typecheck` creates those fixtures and passed.
+- Two legacy-script tests initially used the macOS temporary-directory alias and missed the setup script's existing direct-execution guard. Passing the script's real path fixed the tests. A manually rewritten fixture Turbo JSON needed formatting before its final format check.
+
+Independent technical review found the older-workspace setup, Turbo, and formatter compatibility gap. The implementation and tests were extended, and focused re-review found no remaining material issue. Fable was unavailable, so no independent UI design review was performed; the starter keeps the existing messages and blank content without a visual redesign.
+
 ## Better Auth checks
 
 `pnpm format`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, and `pnpm build` passed during Better Auth implementation. The test run passed 570 unit tests and 10 backend tests, including unauthenticated access, cross-user isolation, stable ownership across sessions, and expired or deleted session rejection.

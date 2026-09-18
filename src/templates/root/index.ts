@@ -7,8 +7,9 @@ import { readFile } from 'node:fs/promises';
 import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
 import { versions as v } from '../versions.js';
-import { publicVariable } from '../../../assets/setup/convex-setup.mjs';
 import { formattingOptions } from '../../generator/format.js';
+import { publicVariable } from '../../../assets/setup/convex-setup.mjs';
+
 import { betterAuthSetup } from '../../integrations/auth/better-auth/setup.js';
 import { workosSetup } from '../../integrations/auth/workos/setup.js';
 import { convexAuthSetup } from '../../integrations/auth/convex-auth/setup.js';
@@ -96,7 +97,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   await ctx.json('.prettierrc.json', formattingOptions);
   await ctx.write(
     '.prettierignore',
-    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.astro/\n**/.output/\n**/.react-router/\n**/build/\n**/dist/\n**/.turbo/\nbun.lock\npnpm-lock.yaml\n.env*\n**/.env*\n',
+    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.astro/\n**/.output/\n**/.svelte-kit/\n**/.react-router/\n**/build/\n**/dist/\n**/.turbo/\nbun.lock\npnpm-lock.yaml\n.env*\n**/.env*\n',
   );
   if (manager === 'pnpm')
     await ctx.write(
@@ -127,6 +128,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
           '!.next/cache/**',
           'dist/**',
           '.output/**',
+          '.svelte-kit/**',
           'build/**',
         ],
         env: ['NEXT_PUBLIC_*', 'VITE_*', 'EXPO_PUBLIC_*', 'PUBLIC_*'],
@@ -136,7 +138,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
         ],
       },
       [`@${scope}/backend#build`]: { outputs: [] },
-      typecheck: { dependsOn: ['^typecheck'], outputs: [] },
+      typecheck: { dependsOn: ['^typecheck'], outputs: [], env: ['PUBLIC_*'] },
       lint: { dependsOn: ['^lint'], outputs: [] },
     },
   });
@@ -266,6 +268,7 @@ ${options.example === 'messages' ? 'The backend checks identity and uses an owne
             : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
 `
 }
+${options.apps.some((app) => app.framework === 'sveltekit') ? 'SvelteKit currently supports only --auth none. Set PUBLIC_CONVEX_URL in its .env.local before typechecking or building. The root layout mounts Providers.svelte, which calls setupConvex for its children.\n' : ''}
 ## Shared backend types
 
 \`\`\`ts

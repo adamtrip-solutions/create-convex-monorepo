@@ -9,6 +9,7 @@ import {
   publicVariable,
 } from '../../assets/setup/convex-setup.mjs';
 import type { Framework } from '../generator/types.js';
+import { platform, uiRuntime } from '../integrations/auth/shared.js';
 import { versions } from '../templates/versions.js';
 import { readJson, readText, type Workspace } from './project.js';
 
@@ -38,9 +39,19 @@ const frameworks: Record<Framework, string[]> = {
     'react-dom',
   ],
   expo: ['expo', 'react-native'],
+  sveltekit: [
+    'svelte',
+    '@sveltejs/kit',
+    '@sveltejs/adapter-auto',
+    '@sveltejs/vite-plugin-svelte',
+    'convex-svelte',
+    'svelte-check',
+    'vite',
+    'eslint-plugin-svelte',
+  ],
   astro: ['astro', '@astrojs/react', '@astrojs/check', 'react-dom'],
 };
-const clerk: Record<Framework, string> = {
+const clerk: Partial<Record<Framework, string>> = {
   next: '@clerk/nextjs',
   vite: '@clerk/react',
   'tanstack-start': '@clerk/tanstack-react-start',
@@ -54,6 +65,13 @@ const workos: Partial<Record<Framework, string>> = {
   'tanstack-start': '@workos/authkit-tanstack-react-start',
 };
 const baselines: Record<string, string> = {
+  svelte: versions.svelte,
+  '@sveltejs/kit': versions.sveltekit,
+  '@sveltejs/adapter-auto': versions.svelteAdapterAuto,
+  '@sveltejs/vite-plugin-svelte': versions.viteSvelte,
+  'convex-svelte': versions.convexSvelte,
+  'svelte-check': versions.svelteCheck,
+  'eslint-plugin-svelte': versions.eslintSvelte,
   '@workos-inc/node': versions.workosNode,
   '@workos-inc/authkit-nextjs': versions.workosNext,
   '@workos-inc/authkit-react': versions.workosReact,
@@ -632,10 +650,12 @@ export async function doctor(
     const pkg = await manifest(`${directory}/package.json`);
     await dependencies(directory, pkg, [
       'convex',
-      'react',
+      ...(uiRuntime(app.framework) === 'react' ? ['react'] : []),
       'typescript',
       ...frameworks[app.framework],
-      ...(config.auth === 'clerk' ? [clerk[app.framework]] : []),
+      ...(config.auth === 'clerk' && clerk[app.framework]
+        ? [clerk[app.framework]!]
+        : []),
       ...(config.auth === 'workos' && workos[app.framework]
         ? [workos[app.framework]!]
         : []),
@@ -675,14 +695,7 @@ export async function doctor(
         'Add the backend package with a workspace dependency.',
       );
     }
-    const prefix =
-      app.framework === 'next'
-        ? 'NEXT_PUBLIC'
-        : app.framework === 'expo'
-          ? 'EXPO_PUBLIC'
-          : app.framework === 'astro'
-            ? 'PUBLIC'
-            : 'VITE';
+    const { prefix } = platform(app);
     const env = await environment(directory);
     let envFiles: string[] = [];
     try {

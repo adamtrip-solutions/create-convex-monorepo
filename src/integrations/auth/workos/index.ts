@@ -18,6 +18,7 @@ export const workosBindings: Partial<
 
 export const workosAdapter: AuthAdapter = {
   id: 'workos',
+  supportedRuntimes: ['react'],
   label: 'WorkOS AuthKit',
   async apply(ctx) {
     if (ctx.options.example === 'messages')

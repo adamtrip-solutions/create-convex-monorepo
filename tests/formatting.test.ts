@@ -8,6 +8,7 @@ import {
 } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { afterEach, expect, it } from 'vitest';
 import { check } from 'prettier';
 import { generateProject } from '../src/generator/index.js';
@@ -46,7 +47,7 @@ it.each([
     const root = await generateProject(
       {
         name: 'formatted',
-        apps: 'next,admin:vite,portal:tanstack-start,expo',
+        apps: `next,admin:vite,portal:tanstack-start,expo${auth === 'none' ? ',svelte:sveltekit' : ''}`,
         auth,
         example,
         install: false,
@@ -64,7 +65,8 @@ it.each([
     expect(pkg.devDependencies.prettier).toBe('3.8.3');
     for (const entry of await readdir(root, { recursive: true })) {
       const path = entry.split(sep).join('/');
-      if (!/\.(?:[cm]?[jt]sx?|json|css|html|md|ya?ml)$/.test(path)) continue;
+      if (!/\.(?:[cm]?[jt]sx?|svelte|json|css|html|md|ya?ml)$/.test(path))
+        continue;
       const source = await readFile(join(root, path), 'utf8');
       if (path.includes('/_generated/')) {
         const asset = example === 'none' ? 'backend-blank' : 'backend';
@@ -78,9 +80,23 @@ it.each([
           ),
         );
       } else {
-        expect(await check(source, { ...config, filepath: path }), path).toBe(
-          true,
-        );
+        expect(
+          await check(source, {
+            ...config,
+            filepath: path,
+            ...(path.endsWith('.svelte')
+              ? {
+                  parser: 'svelte',
+                  plugins: [
+                    createRequire(import.meta.url).resolve(
+                      'prettier-plugin-svelte',
+                    ),
+                  ],
+                }
+              : {}),
+          }),
+          path,
+        ).toBe(true);
       }
     }
     const main = await readFile(join(root, 'apps/admin/src/main.tsx'), 'utf8');

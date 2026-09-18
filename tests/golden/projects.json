@@ -980,5 +980,95 @@
       ["web", "astro", "PUBLIC", "better-auth"],
       ["app", "react-router", "VITE", "better-auth"]
     ]
+  },
+  {
+    "label": "SvelteKit messages",
+    "apps": "sveltekit",
+    "auth": "none",
+    "expected": [["web", "sveltekit", "PUBLIC", null]]
+  },
+  {
+    "label": "SvelteKit + Next blank",
+    "apps": "sveltekit,next",
+    "example": "none",
+    "auth": "none",
+    "expected": [
+      ["web", "sveltekit", "PUBLIC", null],
+      ["app", "next", "NEXT_PUBLIC", null]
+    ]
+  },
+  {
+    "label": "All six frameworks",
+    "apps": "next,vite,tanstack-start,react-router,expo,sveltekit",
+    "auth": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["app-2", "react-router", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null],
+      ["app-3", "sveltekit", "PUBLIC", null]
+    ]
+  },
+  {
+    "label": "All seven frameworks",
+    "apps": "next,vite,tanstack-start,react-router,expo,sveltekit,astro",
+    "auth": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["app-2", "react-router", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null],
+      ["app-3", "sveltekit", "PUBLIC", null],
+      ["app-4", "astro", "PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Bun SvelteKit messages",
+    "apps": "sveltekit",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [["web", "sveltekit", "PUBLIC", null]]
+  },
+  {
+    "label": "Bun SvelteKit + Next blank",
+    "apps": "sveltekit,next",
+    "example": "none",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "sveltekit", "PUBLIC", null],
+      ["app", "next", "NEXT_PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Bun All six frameworks",
+    "apps": "next,vite,tanstack-start,react-router,expo,sveltekit",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["app-2", "react-router", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null],
+      ["app-3", "sveltekit", "PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Bun All seven frameworks",
+    "apps": "next,vite,tanstack-start,react-router,expo,sveltekit,astro",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null],
+      ["app", "tanstack-start", "VITE", null],
+      ["app-2", "react-router", "VITE", null],
+      ["mobile", "expo", "EXPO_PUBLIC", null],
+      ["app-3", "sveltekit", "PUBLIC", null],
+      ["app-4", "astro", "PUBLIC", null]
+    ]
   }
 ]

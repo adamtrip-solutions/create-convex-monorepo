@@ -340,6 +340,40 @@ describe('setup recovery and cancellation', () => {
   });
 });
 
+describe('SvelteKit options', () => {
+  it.each(['sveltekit', 'sveltekit,next', 'vite,sveltekit,expo'])(
+    'accepts %s with both starters and no auth',
+    (apps) => {
+      for (const example of ['none', 'messages']) {
+        const options = normalizeOptions(
+          parseCommand(['--apps', apps, '--auth', 'none', '--example', example])
+            .raw,
+        );
+        expect(options.apps.some((app) => app.framework === 'sveltekit')).toBe(
+          true,
+        );
+        expect(options.example).toBe(example);
+      }
+      expect(selectTemplate('sveltekit').label).toBe('SvelteKit');
+    },
+  );
+  it.each(['clerk', 'convex-auth', 'workos', 'better-auth', 'custom'])(
+    'rejects SvelteKit with %s before writing files',
+    async (auth) => {
+      const cwd = await temp();
+      for (const apps of ['sveltekit', 'next,sveltekit']) {
+        expect(() => normalizeOptions({ apps, auth })).toThrow(
+          'SvelteKit currently supports only --auth none',
+        );
+        await expect(
+          generateProject({ name: 'rejected', apps, auth }, { cwd }),
+        ).rejects.toThrow('SvelteKit currently supports only --auth none');
+        expect(await readdir(cwd)).toEqual([]);
+      }
+    },
+  );
+});
+
 it.each(['none', 'clerk', 'convex-auth'])(
   'selects Astro with every framework and %s auth',
   (auth) => {
@@ -375,6 +409,28 @@ it('installs bun projects with the selected package manager', async () => {
   expect(install).toHaveBeenCalledWith(root, undefined);
   expect(other).not.toHaveBeenCalled();
 });
+
+it.each(['pnpm', 'bun'])(
+  'rejects SvelteKit Convex Auth OAuth with %s before writing files',
+  async (packageManager) => {
+    const cwd = await temp();
+    for (const apps of ['sveltekit', 'react-router,sveltekit']) {
+      await expect(
+        generateProject(
+          {
+            name: 'rejected',
+            apps,
+            auth: 'convex-auth',
+            oauth: 'github,google',
+            packageManager,
+          },
+          { cwd },
+        ),
+      ).rejects.toThrow('SvelteKit currently supports only --auth none');
+      expect(await readdir(cwd)).toEqual([]);
+    }
+  },
+);
 
 // Unsupported combinations must fail in normalization, before generation writes.
 it.each(['pnpm', 'bun'])(
