@@ -198,6 +198,7 @@ export async function doctor(
   options: { signal?: AbortSignal } = {},
 ): Promise<DoctorResult> {
   const { root, config } = workspace;
+  const hasOAuth = config.auth === 'convex-auth' && !!config.oauth?.length;
   const result: DoctorResult = { issues: [], checks: [] };
   const issue = (
     code: string,
@@ -436,6 +437,28 @@ export async function doctor(
         );
     }
   }
+  if (hasOAuth) {
+    let hasSiteUrlGuidance = false;
+    for (const path of [
+      'packages/backend/.env.convex-auth.example',
+      'README.md',
+      'CONVEX_AUTH_SETUP.md',
+    ]) {
+      if (/\bSITE_URL\b/.test((await text(path)) ?? ''))
+        hasSiteUrlGuidance = true;
+    }
+    if (!hasSiteUrlGuidance)
+      issue(
+        'oauth-site-url-guidance',
+        'OAuth is recorded in metadata but the setup files do not mention SITE_URL.',
+        'Document the required SITE_URL deployment setting in README.md, CONVEX_AUTH_SETUP.md, or packages/backend/.env.convex-auth.example.',
+        'warning',
+      );
+    else
+      result.checks.push(
+        'OAuth SITE_URL setup guidance exists; deployment settings were not checked.',
+      );
+  }
   const backend = await manifest('packages/backend/package.json');
   const backendName = typeof backend.name === 'string' ? backend.name : '';
   if (backendName !== `@${config.name}/backend`)
@@ -568,6 +591,9 @@ export async function doctor(
       ...(config.auth === 'convex-auth' && app.framework === 'expo'
         ? ['expo-secure-store']
         : []),
+      ...(hasOAuth && app.framework === 'expo'
+        ? ['expo-web-browser', 'expo-linking']
+        : []),
     ]);
     if (
       !backendName ||
@@ -606,6 +632,8 @@ export async function doctor(
         'CONVEX_DEPLOY_KEY',
         'JWT_PRIVATE_KEY',
         'JWKS',
+        'AUTH_GITHUB_SECRET',
+        'AUTH_GOOGLE_SECRET',
       ]) {
         if (
           ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'].some((publicPrefix) =>
@@ -682,6 +710,35 @@ export async function doctor(
         'Restore the app TypeScript configuration.',
       );
     if (app.framework === 'expo') {
+      if (hasOAuth) {
+        const path = `${directory}/app.json`;
+        const source = await text(path);
+        let scheme: unknown;
+        try {
+          const parsed: unknown = JSON.parse(source ?? '{}');
+          scheme = object(object(parsed).expo).scheme;
+        } catch {
+          // Invalid JSON is reported with the same repair as a missing scheme.
+        }
+        const schemes = Array.isArray(scheme) ? scheme : [scheme];
+        if (
+          schemes.length === 0 ||
+          !schemes.every(
+            (value) =>
+              typeof value === 'string' &&
+              /^[A-Za-z][A-Za-z0-9+.-]*$/.test(value),
+          )
+        )
+          issue(
+            'expo-oauth-scheme',
+            `${path} has no valid expo.scheme for OAuth redirects.`,
+            'Set expo.scheme to a nonempty URI scheme, use it in the OAuth redirectTo URL, and rebuild the development app.',
+          );
+        else
+          result.checks.push(
+            `${path} declares an OAuth redirect scheme; provider registration and native redirects were not checked.`,
+          );
+      }
       const metro =
         (await text(`${directory}/metro.config.cjs`)) ??
         (await text(`${directory}/metro.config.js`));

@@ -13,11 +13,13 @@ const mocks = vi.hoisted(() => ({
   install: vi.fn(),
   bunInstall: vi.fn(),
   select: vi.fn(),
+  multiselect: vi.fn(),
   text: vi.fn(),
   confirm: vi.fn(),
 }));
 vi.mock('@clack/prompts', () => ({
   select: mocks.select,
+  multiselect: mocks.multiselect,
   text: mocks.text,
   confirm: mocks.confirm,
   isCancel: (value: unknown) => typeof value === 'symbol',
@@ -77,6 +79,7 @@ beforeEach(() => {
   mocks.app.mockResolvedValue(plan);
   mocks.package.mockResolvedValue(plan);
   mocks.auth.mockResolvedValue(plan);
+  mocks.multiselect.mockResolvedValue([]);
   mocks.env.mockResolvedValue(plan);
   mocks.planUpgrade.mockResolvedValue(plan);
   mocks.apply.mockResolvedValue(undefined);
@@ -613,6 +616,39 @@ it.each(['clerk', 'convex-auth', 'workos'])(
     expect(mocks.install).not.toHaveBeenCalled();
   },
 );
+
+it('routes OAuth options to auth installation', async () => {
+  await runWorkspace(
+    ['add', 'auth', 'convex-auth', '--oauth', 'google', '--no-install'],
+    '1.2.3',
+  );
+  expect(mocks.auth).toHaveBeenCalledWith(workspace, 'convex-auth', {
+    oauth: 'google',
+  });
+});
+it.each([
+  ['add', 'auth', 'clerk', '--oauth', 'github'],
+  ['add', 'auth', 'convex-auth', '--oauth', 'other'],
+  ['add', 'app', 'mobile', '--framework', 'expo', '--oauth', 'github'],
+])('rejects misplaced or invalid OAuth arguments %j', (...args) => {
+  expect(() => parseWorkspaceCommand(args)).toThrow();
+});
+it('prompts for OAuth when adding Convex Auth', async () => {
+  process.stdin.isTTY = true;
+  process.stdout.isTTY = true;
+  mocks.multiselect.mockResolvedValueOnce(['google']);
+  await runWorkspace(['add', 'auth', 'convex-auth', '--no-install'], '1.2.3');
+  expect(mocks.multiselect).toHaveBeenCalledWith(
+    expect.objectContaining({
+      message: 'OAuth providers?',
+      initialValues: [],
+      required: false,
+    }),
+  );
+  expect(mocks.auth).toHaveBeenCalledWith(workspace, 'convex-auth', {
+    oauth: ['google'],
+  });
+});
 
 it.each([
   ['add', 'app', 'admin', '--framework', 'vite', '--install'],

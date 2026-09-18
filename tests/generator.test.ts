@@ -16,6 +16,7 @@ interface Golden {
   apps: string;
   auth: string;
   example?: string;
+  oauth?: string;
   packageManager?: 'pnpm' | 'bun';
   expected: [string, string, string, string | null][];
 }
@@ -54,6 +55,7 @@ describe('generated project golden matrix', () => {
           name: 'golden-app',
           apps: scenario.apps,
           auth: scenario.auth,
+          ...(scenario.oauth ? { oauth: scenario.oauth } : {}),
           example: scenario.example ?? 'messages',
           install: false,
           git: false,
@@ -91,6 +93,7 @@ describe('generated project golden matrix', () => {
       const config = await json<ProjectOptions & { generator: string }>(
         'convex-monorepo.json',
       );
+      expect(config.oauth).toEqual(scenario.oauth?.split(','));
       expect(config.generator).toBe(await getPackageVersion());
       expect(
         config.apps.map(({ name, framework }) => [name, framework]),
@@ -218,7 +221,17 @@ describe('generated project golden matrix', () => {
           '@convex-dev/auth/providers/Password',
         );
         expect(await read('packages/backend/convex/auth.ts')).toContain(
-          'providers: [Password]',
+          `providers: [Password${
+            scenario.oauth
+              ? ', ' +
+                scenario.oauth
+                  .split(',')
+                  .map((provider) =>
+                    provider === 'github' ? 'GitHub' : 'Google',
+                  )
+                  .join(', ')
+              : ''
+          }]`,
         );
         expect(await read('packages/backend/convex/http.ts')).toContain(
           'auth.addHttpRoutes(http)',
@@ -338,6 +351,53 @@ describe('generated project golden matrix', () => {
           expect(controls).toContain('signUp');
           expect(controls).toContain('signIn');
           expect(controls).not.toContain('alert(');
+          for (const provider of ['github', 'google']) {
+            const selected = scenario.oauth?.split(',').includes(provider);
+            const label = provider === 'github' ? 'GitHub' : 'Google';
+            const backendAuth = await read('packages/backend/convex/auth.ts');
+            if (selected) {
+              expect(controls).toContain(`authenticateOAuth('${provider}')`);
+              expect(controls).toContain(`Sign in with ${label}`);
+              expect(backendAuth).toContain(
+                `from '@auth/core/providers/${provider}'`,
+              );
+              expect(
+                await read('packages/backend/.env.convex-auth.example'),
+              ).toContain(`AUTH_${provider.toUpperCase()}_SECRET`);
+              expect(await read('README.md')).toContain(
+                `/api/auth/callback/${provider}`,
+              );
+            } else {
+              expect(controls).not.toContain(`Sign in with ${label}`);
+              expect(backendAuth).not.toContain(
+                `@auth/core/providers/${provider}`,
+              );
+            }
+          }
+          if (scenario.oauth) {
+            expect(manifest.scripts?.['convex:auth-site']).toBe(
+              'node scripts/convex-auth-site.mjs',
+            );
+            expect(await read('README.md')).toContain('SITE_URL is required');
+            if (framework === 'expo') {
+              expect(app.dependencies).toMatchObject({
+                'expo-web-browser': versions.expoWebBrowser,
+                'expo-linking': versions.expoLinking,
+              });
+              const config = await json<{ expo: { scheme: string } }>(
+                `${dir}/app.json`,
+              );
+              expect(controls).toContain(`scheme: '${config.expo.scheme}'`);
+              expect(controls).toContain("Linking.createURL('auth'");
+              expect(controls).toContain('signIn(provider, { redirectTo })');
+              expect(controls).toContain('openAuthSessionAsync(');
+              expect(controls).toContain("result.type === 'success'");
+              expect(controls).toContain('signIn(provider, { code })');
+              expect(await read('packages/backend/convex/auth.ts')).toContain(
+                `${config.expo.scheme}://auth`,
+              );
+            } else expect(controls).toContain('await signIn(provider)');
+          }
           if (framework === 'expo') {
             expect(app.dependencies).toHaveProperty(
               'expo-secure-store',
@@ -350,7 +410,7 @@ describe('generated project golden matrix', () => {
             expect(providers).toContain('getItemAsync');
             expect(providers).toContain('setItemAsync');
             expect(providers).toContain('deleteItemAsync');
-            expect(controls).not.toContain('scheme:');
+            if (!scenario.oauth) expect(controls).not.toContain('scheme:');
           } else {
             expect(controls).toContain('<form');
             expect(controls).toContain('type="email"');

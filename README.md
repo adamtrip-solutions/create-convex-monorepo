@@ -114,6 +114,7 @@ Application framework?  Expo / React Native
 Application name?       mobile
 Add another frontend?   No
 Authentication?         Convex Auth (email + password)
+OAuth providers?        None
 Starter content?        Blank project
 Initialize git?         Yes
 Initialize Convex and link frontend URLs?   Yes
@@ -130,17 +131,18 @@ pnpm create convex-monorepo@latest my-app --apps web:next,admin:vite --no-instal
 pnpm create convex-monorepo@latest my-app --apps app:tanstack-start,dashboard:next --auth none --package-manager pnpm --yes
 ```
 
-| Option                              | Meaning                                                     |
-| ----------------------------------- | ----------------------------------------------------------- |
-| `--apps`                            | Comma-separated framework IDs or `name:framework` entries   |
-| `--auth`                            | `none`, the default, `clerk`, `convex-auth`, or `workos`    |
-| `--example`                         | `messages`, the default, or `none` for blank projects       |
-| `--package-manager`                 | `pnpm`, the default, or `bun`; npm and yarn are rejected    |
-| `--install`, `--no-install`         | Enable or skip dependency installation                      |
-| `--init-convex`, `--no-init-convex` | Initialize Convex and link URLs; enables installation       |
-| `--git`, `--no-git`                 | Enable or skip `git init`; no commit is created             |
-| `--yes`, `-y`                       | Skip prompts and accept defaults, including install and git |
-| `--help`, `--version`               | Show usage or the generator version                         |
+| Option                              | Meaning                                                            |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| `--apps`                            | Comma-separated framework IDs or `name:framework` entries          |
+| `--auth`                            | `none`, the default, `clerk`, `convex-auth`, or `workos`           |
+| `--oauth`                           | Optional comma list `github,google`; requires `--auth convex-auth` |
+| `--example`                         | `messages`, the default, or `none` for blank projects              |
+| `--package-manager`                 | `pnpm`, the default, or `bun`; npm and yarn are rejected           |
+| `--install`, `--no-install`         | Enable or skip dependency installation                             |
+| `--init-convex`, `--no-init-convex` | Initialize Convex and link URLs; enables installation              |
+| `--git`, `--no-git`                 | Enable or skip `git init`; no commit is created                    |
+| `--yes`, `-y`                       | Skip prompts and accept defaults, including install and git        |
+| `--help`, `--version`               | Show usage or the generator version                                |
 
 Without a terminal, prompts are disabled and install/git default to off unless explicitly enabled or `--yes` is passed. Explicit negative flags override `--yes`. Convex initialization defaults to off when prompts are skipped, including with `--yes`; request it explicitly with `--init-convex`. That flag still lets Convex prompt for an account or deployment, and conflicts with `--no-install`. The default app is Next.js. Project and app names must be lowercase letters, digits, and hyphens, at most 100 characters, with no path separators or reserved device names.
 
@@ -277,9 +279,144 @@ Dynamic Convex declarations refer to backend source modules. Client TypeScript p
 
 New projects accept `none`, `clerk`, or `convex-auth` across all five frameworks and both starters. Existing no-auth workspaces accept `add auth clerk`, `add auth convex-auth`, or `add auth workos`. All providers support `add app` for their supported frameworks. WorkOS AuthKit supports Next.js, Vite, and TanStack Start with both starters. React Router is also rejected until a generator binding for its official SDK is implemented. Expo is rejected before writing files because no official Expo or React Native AuthKit SDK was found.
 
-`--auth convex-auth` and `add auth convex-auth` configure email and password sign-up/sign-in, sign-out, and per-user backend access. Web apps use the client ConvexAuthProvider; Expo persists tokens with expo-secure-store. No frontend public auth keys or password-flow redirect scheme are needed. Next.js, TanStack Start, and React Router do not configure server-side authentication or authenticated SSR. OAuth, magic links, email verification, password reset, and MFA are outside this starter.
+`--auth convex-auth` and `add auth convex-auth` configure email and password sign-up/sign-in, sign-out, and per-user backend access. Web apps use the client ConvexAuthProvider; Expo persists tokens with expo-secure-store. No frontend public auth keys or password-flow redirect scheme are needed. Next.js, TanStack Start, and React Router do not configure server-side authentication or authenticated SSR. GitHub and Google OAuth are opt-in with `--oauth github,google`. Magic links, email verification, password reset, and MFA are outside this starter.
 
 Run `pnpm convex:setup`, then `pnpm convex:auth-keys`. The key script generates an RSA 2048 key pair and sets `JWT_PRIVATE_KEY` and `JWKS` on the deployment through the installed Convex CLI. It never stores the key locally or prints either value. The initial push can finish before keys exist, but sign-in fails until they are configured. Run `pnpm convex:auth-keys --prod` to set a separate pair for production. `SITE_URL` is a deployment setting for redirects and is optional for this Password-only flow. The generated `.env.convex-auth.example` belongs to the backend package. See the [official manual setup](https://labs.convex.dev/auth/setup/manual).
+
+### Optional GitHub and Google OAuth
+
+Keep Password sign-in and add either or both providers:
+
+```sh
+pnpm create convex-monorepo@latest my-app --apps next,expo --auth convex-auth --oauth github,google
+npx create-convex-monorepo@latest add auth convex-auth --oauth google --install
+```
+
+OAuth supports both package managers. The examples below use pnpm. For bun workspaces, use `bun install`, replace `pnpm <script>` with `bun run <script>`, and replace `pnpm --filter @my-app/backend exec convex` with `bun run --cwd packages/backend convex`. Generated setup instructions use the selected manager.
+
+The interactive OAuth multiselect defaults to none. `--oauth` is valid only with Convex Auth; unknown providers fail before generation. Both starters and all five frameworks support it. Metadata version 1 records the selected providers in an optional `oauth` array. `add auth` accepts this flag only on a no-auth workspace. Adding OAuth to a workspace with authentication already configured requires the manual edits below.
+
+For OAuth, `SITE_URL` is required on the Convex deployment. Generated OAuth workspaces include a helper that leaves signing keys unchanged:
+
+```sh
+pnpm convex:auth-site http://localhost:3000
+pnpm convex:auth-site https://your-app.example --prod
+```
+
+Set `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` for the selected providers with `pnpm --filter @my-app/backend exec convex env set <name> <value>` or the Convex dashboard. These are deployment settings, never frontend public environment variables. The backend `.env.convex-auth.example` lists the selected settings.
+
+Create the OAuth applications in GitHub's developer settings and Google's Cloud console. Register the callback for each selected provider:
+
+| Provider | Callback URL                                 |
+| -------- | -------------------------------------------- |
+| GitHub   | `<CONVEX_SITE_URL>/api/auth/callback/github` |
+| Google   | `<CONVEX_SITE_URL>/api/auth/callback/google` |
+
+`CONVEX_SITE_URL` is the deployment's HTTPS `.convex.site` URL. Use separate provider applications and credentials for development and production. Web buttons start `signIn('github')` or `signIn('google')`; successful sign-ins return to `SITE_URL`. Browser OAuth must start on the SITE_URL origin so the returning page can read its stored verifier. For additional web origins, change the web handler to `signIn(provider, { redirectTo: window.location.href })` and allow those origins in the backend redirect callback. Changing only the callback is insufficient.
+
+Expo uses the scheme already defined in `app.json`, `ccm-<project>-<app>`, with return URL `ccm-<project>-<app>://auth`. Use `pnpm ios` or `pnpm android` in the app directory to create a development build. Expo Go cannot handle this custom scheme. The provider console uses the HTTPS Convex callback above, then Convex redirects to the app scheme. Register the scheme return URL in any native redirect allowlist required by the provider console. Do not replace the GitHub or Google web client's HTTPS callback with the app scheme.
+
+The generated native handler uses `expo-linking` to create the return URL and `expo-web-browser` to open the URL returned by `signIn(provider, { redirectTo })`. It completes successful browser sessions with `signIn(provider, { code })`. The backend allows only the generated native return URLs and the configured web origin. Keep those URLs and the app scheme aligned if you rename an app. See [Convex Auth OAuth](https://labs.convex.dev/auth/config/oauth) and [Expo authentication](https://docs.expo.dev/guides/authentication/).
+
+### Add OAuth to an existing Convex Auth workspace
+
+This is a manual edit. In `packages/backend/convex/auth.ts`, retain Password and add the selected imports and array entries. These OAuth providers come from the existing pinned `@auth/core` dependency; `@convex-dev/auth@0.0.95` does not export GitHub or Google provider modules.
+
+```ts
+import { convexAuth } from '@convex-dev/auth/server';
+import { Password } from '@convex-dev/auth/providers/Password';
+import GitHub from '@auth/core/providers/github';
+import Google from '@auth/core/providers/google';
+
+export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
+  providers: [Password, GitHub, Google],
+});
+```
+
+Remove the import and array entry for any provider you do not want. In each web app's `src/auth-controls.tsx`, add these buttons inside the signed-out form, beside the Password controls:
+
+```tsx
+<button type="button" disabled={pending} onClick={() => {
+  void signIn('github').catch(() => setError('Could not sign in. Try again.'));
+}}>Sign in with GitHub</button>
+<button type="button" disabled={pending} onClick={() => {
+  void signIn('google').catch(() => setError('Could not sign in. Try again.'));
+}}>Sign in with Google</button>
+```
+
+For Expo, add exact dependencies `"expo-web-browser": "57.0.3"` and `"expo-linking": "57.0.10"` to the app's `package.json`, then run `pnpm install`. Confirm the `expo.scheme` value in `app.json`. Add these imports to `src/auth-controls.tsx`:
+
+```ts
+import * as Linking from 'expo-linking';
+import { openAuthSessionAsync } from 'expo-web-browser';
+```
+
+Add this handler inside `AuthControls`, replacing `ccm-my-app-mobile` with the actual scheme:
+
+```tsx
+async function authenticateOAuth(provider: 'github' | 'google') {
+  if (pending) return;
+  setPending(true);
+  setError(null);
+  try {
+    const redirectTo = Linking.createURL('auth', {
+      scheme: 'ccm-my-app-mobile',
+    });
+    const { redirect } = await signIn(provider, { redirectTo });
+    if (!redirect) throw new Error('Missing sign-in URL.');
+    const result = await openAuthSessionAsync(redirect.toString(), redirectTo);
+    if (result.type === 'success') {
+      const code = new URL(result.url).searchParams.get('code');
+      if (!code) throw new Error('Missing sign-in code.');
+      await signIn(provider, { code });
+    }
+  } catch (cause) {
+    setError(cause instanceof Error ? cause.message : 'Could not sign in.');
+  } finally {
+    setPending(false);
+  }
+}
+```
+
+Add native buttons inside the signed-out `View`:
+
+```tsx
+<Button title="Sign in with GitHub" disabled={pending} onPress={() => { void authenticateOAuth('github'); }} />
+<Button title="Sign in with Google" disabled={pending} onPress={() => { void authenticateOAuth('google'); }} />
+```
+
+For a shared web and native backend, add this `callbacks` property beside `providers` in `convexAuth`. Replace the example native URL with the actual scheme, adding each native app's exact return URL to the array:
+
+```ts
+callbacks: {
+  async redirect({ redirectTo }) {
+    const siteUrl = process.env.SITE_URL;
+    if (!siteUrl) throw new Error('Set SITE_URL on the Convex deployment.');
+    if (['ccm-my-app-mobile://auth'].includes(redirectTo)) return redirectTo;
+    const target = new URL(redirectTo, siteUrl);
+    if (target.origin === new URL(siteUrl).origin && ['http:', 'https:'].includes(target.protocol)) {
+      return target.toString();
+    }
+    throw new Error('Invalid OAuth redirect destination.');
+  },
+},
+```
+
+To enable OAuth from multiple web frontends, pass `{ redirectTo: window.location.href }` as the second argument to each web `signIn` call. Replace the callback's same-origin condition above with an explicit list of trusted origins, using your actual addresses:
+
+```ts
+const allowedOrigins = [new URL(siteUrl).origin, 'http://localhost:3001'];
+if (
+  allowedOrigins.includes(target.origin) &&
+  ['http:', 'https:'].includes(target.protocol)
+) {
+  return target.toString();
+}
+```
+
+Use production origins in production. Do not allow arbitrary URLs supplied by the client.
+
+Configure credentials and callbacks as above. Set `SITE_URL` with `pnpm --filter @my-app/backend exec convex env set SITE_URL http://localhost:3000`, or use the scheme return URL for a mobile-only workspace. Add `"oauth": ["github", "google"]` to `convex-monorepo.json`, omitting unselected providers. Add `# SITE_URL is required for OAuth` and the selected `AUTH_*` variable names to `packages/backend/.env.convex-auth.example`. Run `pnpm convex:dev` to push the auth configuration, then rebuild the frontends and native development client. The backend module set is unchanged, so no codegen asset edits are needed.
 
 Convex Auth message owners are `users` table IDs returned by `getAuthUserId`. Clerk owners are `tokenIdentifier` values. WorkOS owners are `identity.subject` values from `ctx.auth.getUserIdentity()`. Switching providers changes these keys and needs a data migration; the CLI does not replace auth providers.
 
