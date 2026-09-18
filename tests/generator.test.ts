@@ -62,6 +62,18 @@ describe('generated project golden matrix', () => {
       const json = async <T>(path: string): Promise<T> =>
         JSON.parse(await read(path));
       const manifest = await json<PackageManifest>('package.json');
+      const hasNuxt = scenario.expected.some(
+        ([, framework]) => framework === 'nuxt',
+      );
+      expect(manifest.engines).toEqual({
+        node: hasNuxt ? '^22.19.0 || ^24.11.0 || >=26.0.0' : '>=22.12.0',
+      });
+      expect(await read('README.md')).toContain(
+        hasNuxt
+          ? 'Use Node ^22.19.0 || ^24.11.0 || >=26.0.0 and pnpm'
+          : 'Use Node 22.12+ and pnpm',
+      );
+      if (hasNuxt) expect(await read('README.md')).not.toContain('Node 22.12+');
       if (scenario.auth === 'convex-auth') {
         expect(manifest.scripts?.['convex:auth-keys']).toBe(
           'node scripts/convex-auth-keys.mjs',
@@ -218,7 +230,13 @@ describe('generated project golden matrix', () => {
         expect(app.dependencies).toMatchObject({
           '@golden-app/backend': 'workspace:*',
           convex: versions.convex,
-          react: versions.react,
+          ...(framework === 'nuxt'
+            ? {
+                vue: versions.vue,
+                nuxt: versions.nuxt,
+                'convex-vue': versions.convexVue,
+              }
+            : { react: versions.react }),
         });
         expect(app.devDependencies).toMatchObject({
           '@golden-app/typescript-config': 'workspace:*',
@@ -239,13 +257,34 @@ describe('generated project golden matrix', () => {
         expect(await read(`${dir}/.env.example`)).toContain(
           `${prefix}_CONVEX_URL=\n`,
         );
-        const providers = await read(`${dir}/src/providers.tsx`);
-        expect(providers).toContain(`${prefix}_CONVEX_URL`);
+        const providers = await read(
+          `${dir}/src/${framework === 'nuxt' ? 'components/Providers.vue' : 'providers.tsx'}`,
+        );
+        if (framework === 'nuxt') {
+          expect(app.dependencies).not.toHaveProperty('react');
+          expect(app.dependencies).not.toHaveProperty('react-dom');
+          expect(app.devDependencies).not.toHaveProperty('@types/react');
+          expect(providers).toContain('convexUrl');
+          expect(providers).toMatch(/<ClientOnly(?:\s|>)/);
+          expect(await read(`${dir}/src/plugins/convex.client.ts`)).toContain(
+            'convexVue',
+          );
+        } else expect(providers).toContain(`${prefix}_CONVEX_URL`);
         if (scenario.example !== 'none') {
-          const demo = await read(`${dir}/src/messages.tsx`);
+          const demo = await read(
+            `${dir}/src/${framework === 'nuxt' ? 'components/Messages.vue' : 'messages.tsx'}`,
+          );
           expect(demo).toContain("from '@golden-app/backend/api'");
-          expect(demo).toContain('useQuery(api.messages.list, {})');
-          expect(demo).toContain('useMutation(api.messages.send)');
+          expect(demo).toMatch(
+            framework === 'nuxt'
+              ? /useConvexQuery\(\s*api\.messages\.list,\s*\{\}/
+              : /useQuery\(api\.messages\.list, \{\}\)/,
+          );
+          expect(demo).toContain(
+            framework === 'nuxt'
+              ? 'useConvexMutation(api.messages.send)'
+              : 'useMutation(api.messages.send)',
+          );
           const contract = await read(`${dir}/src/convex-api.type-test.ts`);
           expect(contract).toContain('IsAny<typeof api>');
           expect(contract).toContain("Doc<'messages'>[]");
@@ -325,9 +364,25 @@ describe('generated project golden matrix', () => {
           expect(Object.keys(app.dependencies ?? {})).not.toContainEqual(
             expect.stringMatching(/^@clerk\//),
           );
-          expect(providers).toContain('<ConvexProvider client={client}>');
+          if (framework !== 'nuxt')
+            expect(providers).toContain('<ConvexProvider client={client}>');
         }
-        if (framework === 'next') {
+        if (framework === 'nuxt') {
+          expect(await read(`${dir}/nuxt.config.ts`)).toContain('convexUrl');
+          expect(app.scripts?.typecheck).toBe(
+            'nuxt prepare && vue-tsc --noEmit -p .nuxt/tsconfig.json && vue-tsc --noEmit -p .nuxt/tsconfig.server.json',
+          );
+          expect(app.scripts?.build).toBe('nuxt build --dotenv .env.local');
+          expect(await read(`${dir}/src/app.vue`)).toContain('<Providers>');
+          if (scenario.example === 'none') {
+            expect(await read(`${dir}/src/app.vue`)).toContain(
+              `<h1>${name}</h1>`,
+            );
+            expect(
+              await readdir(join(root, dir, 'src/components')),
+            ).not.toContain('Messages.vue');
+          }
+        } else if (framework === 'next') {
           expect(await read(`${dir}/next.config.ts`)).toContain(
             "transpilePackages: ['@golden-app/backend']",
           );

@@ -443,3 +443,15 @@ it('reports cancellation during URL linking and leaves remaining apps unchanged'
     'NEXT_PUBLIC_CONVEX_URL=',
   );
 });
+
+it('links the Nuxt public runtime URL without copying backend secrets', async () => {
+  const { root } = await fixture('web:nuxt');
+  await backendEnv(
+    root,
+    'CONVEX_URL=https://nuxt.convex.cloud\nCONVEX_DEPLOY_KEY=never-copy\n',
+  );
+  await linkFrontends(root);
+  expect(await readFile(join(root, 'apps/web/.env.local'), 'utf8')).toBe(
+    'NUXT_PUBLIC_CONVEX_URL=https://nuxt.convex.cloud\n',
+  );
+});

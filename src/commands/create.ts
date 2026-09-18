@@ -18,7 +18,7 @@ as add or doctor. Inside an existing workspace, running without arguments opens
 the management menu. Commands: add app, add auth clerk, doctor, env sync,
 upgrade --check. No global or project installation is required.
 
-  --apps <list>             next,vite,tanstack-start,expo or web:next,admin:vite
+  --apps <list>             next,vite,tanstack-start,expo,nuxt or web:next,admin:vite
   --example <name>         messages (default) or none for blank apps
   --auth <provider>         none (default), clerk, or convex-auth
   --package-manager <name>  pnpm (v0.1)
@@ -134,6 +134,7 @@ export async function runCreate(
             options: frameworks.map((value) => ({
               value,
               label: {
+                nuxt: 'Nuxt',
                 next: 'Next.js',
                 vite: 'Vite + React',
                 'tanstack-start': 'TanStack Start',

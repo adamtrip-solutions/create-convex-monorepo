@@ -24,18 +24,30 @@ export interface DoctorResult {
 }
 
 const frameworks: Record<Framework, string[]> = {
+  nuxt: [
+    'nuxt',
+    'vue',
+    'convex-vue',
+    'vue-tsc',
+    'eslint-plugin-vue',
+    'vue-eslint-parser',
+  ],
   next: ['next', 'react-dom'],
   vite: ['vite', '@vitejs/plugin-react', 'react-dom'],
   'tanstack-start': ['@tanstack/react-start', 'vite', 'react-dom'],
   expo: ['expo', 'react-native'],
 };
-const clerk: Record<Framework, string> = {
+const clerk: Partial<Record<Framework, string>> = {
   next: '@clerk/nextjs',
   vite: '@clerk/react',
   'tanstack-start': '@clerk/tanstack-react-start',
   expo: '@clerk/expo',
 };
 const baselines: Record<string, string> = {
+  nuxt: versions.nuxt,
+  vue: versions.vue,
+  'convex-vue': versions.convexVue,
+  'vue-tsc': versions.vueTsc,
   convex: versions.convex,
   '@convex-dev/auth': versions.convexAuth,
   '@auth/core': versions.authCore,
@@ -150,7 +162,25 @@ async function installedVersion(
         cursor = parent;
       }
     } catch {
-      return null;
+      // Import-only packages may export neither a CommonJS entry nor package.json.
+      // Inspect package manifests in this workspace's Node resolution directories.
+      let cursor = join(root, directory);
+      for (;;) {
+        const candidate = join(cursor, 'node_modules', name, 'package.json');
+        try {
+          const data: unknown = JSON.parse(await readFile(candidate, 'utf8'));
+          if (object(data).name === name) {
+            manifest = candidate;
+            break;
+          }
+        } catch {
+          /* Continue toward the workspace root. */
+        }
+        if (cursor === root) return null;
+        const parent = dirname(cursor);
+        if (parent === cursor) return null;
+        cursor = parent;
+      }
     }
   }
   // Avoid accidentally treating a dependency in an ancestor project as installed here.
@@ -493,10 +523,12 @@ export async function doctor(
     const pkg = await manifest(`${directory}/package.json`);
     await dependencies(directory, pkg, [
       'convex',
-      'react',
+      ...(app.framework === 'nuxt' ? [] : ['react']),
       'typescript',
       ...frameworks[app.framework],
-      ...(config.auth === 'clerk' ? [clerk[app.framework]] : []),
+      ...(config.auth === 'clerk' && clerk[app.framework]
+        ? [clerk[app.framework]!]
+        : []),
       ...(config.auth === 'convex-auth' ? ['@convex-dev/auth'] : []),
       ...(config.auth === 'convex-auth' && app.framework === 'expo'
         ? ['expo-secure-store']
@@ -513,11 +545,13 @@ export async function doctor(
       );
     }
     const prefix =
-      app.framework === 'next'
-        ? 'NEXT_PUBLIC'
-        : app.framework === 'expo'
-          ? 'EXPO_PUBLIC'
-          : 'VITE';
+      app.framework === 'nuxt'
+        ? 'NUXT_PUBLIC'
+        : app.framework === 'next'
+          ? 'NEXT_PUBLIC'
+          : app.framework === 'expo'
+            ? 'EXPO_PUBLIC'
+            : 'VITE';
     const env = await environment(directory);
     let envFiles: string[] = [];
     try {
@@ -539,8 +573,8 @@ export async function doctor(
         'JWKS',
       ]) {
         if (
-          ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'].some((publicPrefix) =>
-            values.get(`${publicPrefix}_${secret}`),
+          ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'NUXT_PUBLIC'].some(
+            (publicPrefix) => values.get(`${publicPrefix}_${secret}`),
           )
         )
           exposed.add(secret);

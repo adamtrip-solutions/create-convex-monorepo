@@ -52,7 +52,7 @@ async function snapshot(root: string): Promise<Record<string, string>> {
 }
 
 describe('workspace doctor', () => {
-  it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'])(
+  it.each(['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'NUXT_PUBLIC'])(
     'reports %s signing values in every app environment file without exposing them',
     async (prefix) => {
       const workspace = await fixture('web:next', 'convex-auth');
@@ -711,4 +711,119 @@ describe('upgrade check', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await rejected;
   });
+});
+
+it('checks Nuxt URL and Vue dependencies without requiring React', async () => {
+  const workspace = await fixture('web:nuxt');
+  await put(
+    workspace.root,
+    'packages/backend/.env.local',
+    'CONVEX_URL=https://linked.convex.cloud\n',
+  );
+  await put(
+    workspace.root,
+    'apps/web/.env.local',
+    'NUXT_PUBLIC_CONVEX_URL=https://linked.convex.cloud\n',
+  );
+  const before = await snapshot(workspace.root);
+  const healthy = await doctor(workspace);
+  expect(
+    healthy.issues.filter((issue) =>
+      ['dependency-missing', 'app-url', 'app-url-mismatch'].includes(
+        issue.code,
+      ),
+    ),
+  ).toEqual([]);
+  expect(healthy.issues.some((issue) => /react/i.test(issue.message))).toBe(
+    false,
+  );
+  expect(await snapshot(workspace.root)).toEqual(before);
+  const path = join(workspace.root, 'apps/web/package.json');
+  const pkg = JSON.parse(await readFile(path, 'utf8'));
+  for (const dependency of ['nuxt', 'vue', 'convex-vue'])
+    delete pkg.dependencies[dependency];
+  await writeFile(path, JSON.stringify(pkg));
+  const missing = await doctor(workspace);
+  for (const dependency of ['nuxt', 'vue', 'convex-vue'])
+    expect(missing.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'dependency-missing',
+        message: `apps/web does not declare ${dependency}.`,
+      }),
+    );
+  await put(
+    workspace.root,
+    'apps/web/.env.local',
+    'VITE_CONVEX_URL=https://linked.convex.cloud\n',
+  );
+  expect(
+    (await doctor(workspace)).issues.filter(
+      (issue) => issue.code === 'app-url',
+    ),
+  ).toHaveLength(1);
+});
+
+it.each(['apps/web/node_modules/convex-vue', 'node_modules/convex-vue'])(
+  'recognizes an import-only Vue client installed at %s',
+  async (directory) => {
+    const workspace = await fixture('web:nuxt');
+    await put(
+      workspace.root,
+      `${directory}/package.json`,
+      JSON.stringify({
+        name: 'convex-vue',
+        version: versions.convexVue,
+        type: 'module',
+        exports: { '.': { import: './index.mjs' } },
+      }),
+    );
+    await put(workspace.root, `${directory}/index.mjs`, 'export {};\n');
+    const require = createRequire(
+      join(workspace.root, 'apps/web/package.json'),
+    );
+    expect(() => require.resolve('convex-vue/package.json')).toThrow();
+    expect(() => require.resolve('convex-vue')).toThrow();
+    const before = await snapshot(workspace.root);
+    const report = await doctor(workspace);
+    expect(
+      report.issues.filter(
+        (issue) =>
+          issue.code.startsWith('dependency-') &&
+          issue.message.includes('convex-vue'),
+      ),
+    ).toEqual([]);
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
+it('does not treat an import-only package outside the workspace as installed', async () => {
+  const workspace = await fixture('web:nuxt');
+  const ancestor = dirname(workspace.root);
+  await put(
+    ancestor,
+    'node_modules/convex-vue/package.json',
+    JSON.stringify({
+      name: 'convex-vue',
+      version: versions.convexVue,
+      type: 'module',
+      exports: { '.': { import: './index.mjs' } },
+    }),
+  );
+  await put(ancestor, 'node_modules/convex-vue/index.mjs', 'export {};\n');
+  const missingVueClient = async () =>
+    (await doctor(workspace)).issues.filter(
+      (issue) =>
+        issue.code === 'dependency-uninstalled' &&
+        issue.message.includes('convex-vue'),
+    );
+  expect(await missingVueClient()).toHaveLength(1);
+  await mkdir(join(workspace.root, 'apps/web/node_modules'), {
+    recursive: true,
+  });
+  await symlink(
+    join(ancestor, 'node_modules/convex-vue'),
+    join(workspace.root, 'apps/web/node_modules/convex-vue'),
+    'junction',
+  );
+  expect(await missingVueClient()).toHaveLength(1);
 });

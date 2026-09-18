@@ -8,8 +8,8 @@ Start with current framework and Convex documentation, then install a minimal up
 2. Create `src/templates/apps/<id>/index.ts` exporting an `AppTemplate`. Use `context.write`, `context.json`, and shared manifest helpers. Generate framework files under `apps/${app.name}`.
 3. Register it in `src/templates/apps/index.ts` and add the interactive label in `src/commands/create.ts`.
 4. Generate the public Convex environment variable with the framework's required prefix. Use statically named environment access where the bundler requires it. Add its public variable to `publicVariable` in `assets/setup/convex-setup.mjs`, update the generated README environment table, and test URL linking for the new framework.
-5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own `src/providers.tsx` and `src/auth-controls.tsx`; the framework template must not write those files.
-6. Add platform handling in `src/integrations/auth/shared.ts` and a binding in the Clerk adapter. If the integration cannot work, add explicit compatibility validation before output is written.
+5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own provider and auth-control files; the framework template must not write them. React uses `src/providers.tsx` and `src/auth-controls.tsx`. Nuxt uses `src/plugins/convex.client.ts`, `src/components/Providers.vue`, and `src/components/AuthControls.vue`.
+6. Add runtime handling through `uiRuntime` in `src/integrations/auth/shared.ts`, currently `react` or `vue`, and platform handling or auth bindings where supported. If the integration cannot work, add explicit compatibility validation before output is written.
 7. Add versions, development/build/typecheck/lint scripts, and any route-generation step the framework needs on a clean checkout.
 
 The existing Vite template is the smallest example. Next and Expo show framework-specific configuration; do not copy their environment prefixes or resolver behavior into another framework.
@@ -22,7 +22,7 @@ Do not add a declaration bundler, a generic API cast, or copied backend code. Ch
 
 ## Verify before registration is considered supported
 
-Generate the framework alone, with another frontend, and with every advertised auth provider. Cover both `--example messages` and `--example none`; use the shared entry-content helper so blank apps do not import demo files. Install from a clean directory, typecheck, lint, and run a production build. For a native framework, run its actual JavaScript bundler for supported platforms. Exercise the query and mutation against a development backend when credentials or local deployment tooling are available; report separately when that check was skipped.
+Generate the framework alone, with another frontend, and with every advertised auth provider. Cover both `--example messages` and `--example none`; use runtime-appropriate entry content so blank apps do not import demo files. Install from a clean directory, typecheck, lint, and run a production build. For a native framework, run its actual JavaScript bundler for supported platforms. Exercise the query and mutation against a development backend when credentials or local deployment tooling are available; report separately when that check was skipped.
 
 Add focused output assertions, option-selection coverage, and representative generated-project CI coverage. Tests must catch missing generated declarations and widened argument/return types. Update README support notes and this guide if the framework introduces a new integration contract.
 
@@ -30,4 +30,12 @@ Add focused output assertions, option-selection coverage, and representative gen
 
 Add the framework's dependency expectations and diagnostic checks to `src/workspace/doctor.ts`. Verify that `add app` renders the framework at its real workspace index so development ports remain distinct. Add command tests for a new app next to an existing customized app, both starter choices, inherited auth, automatic URL linking, and a dry run. Extend the command E2E matrix to install and build the added framework.
 
-The add planner uses the same template as project creation. It copies only the new application's files and updates workspace metadata and root scripts. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
+The add planner uses the same template as project creation. It copies the new application's files and updates workspace metadata and root scripts. Adding Nuxt also updates older generated URL-linking helpers, adds its Turbo environment and output settings, and appends `.nuxt` ignore patterns. A customized setup helper causes a conflict before writes; restore the generated helper, add Nuxt, then reapply custom changes. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
+
+## Nuxt and Vue
+
+Nuxt supports auth `none` only. `validateCompatibility` rejects other providers during option normalization and before `add auth` plans files, including when Nuxt is not the first app. Add-app validation uses the workspace's existing auth.
+
+The none adapter selects Vue output through `uiRuntime`. Install `convex-vue` in a `.client.ts` plugin, and mount query components inside `ClientOnly`. Keep `ssr: true`; neither server rendering nor production builds should query Convex. Read `runtimeConfig.public.convexUrl`, populated by `NUXT_PUBLIC_CONVEX_URL`. Include that prefix in URL linking, doctor secret checks, and Turbo environment inputs.
+
+The Nuxt app uses `srcDir: 'src/'` so the shared `src/convex-api.type-test.ts` belongs to its compiler program. `nuxt prepare && vue-tsc --noEmit` uses the generated Nuxt tsconfig without a frontend `rootDir`. Lint composes `eslint-plugin-vue` essential rules with the shared TypeScript rules, using `vue-eslint-parser` and the TypeScript parser for script blocks. Ignore `.nuxt` and `.output` in lint, formatting, and git.

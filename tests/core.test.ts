@@ -283,3 +283,32 @@ describe('setup recovery and cancellation', () => {
     expect(await readFile(join(target, 'user-file'), 'utf8')).toBe('keep me');
   });
 });
+
+describe('Nuxt options', () => {
+  it.each(['nuxt', 'nuxt,next', 'web:next,portal:nuxt'])(
+    'accepts %s with auth none',
+    (apps) => {
+      expect(
+        normalizeOptions(
+          parseCommand(['--apps', apps, '--auth', 'none']).raw,
+        ).apps.some((app) => app.framework === 'nuxt'),
+      ).toBe(true);
+      expect(selectTemplate('nuxt').id).toBe('nuxt');
+    },
+  );
+  it.each(['clerk', 'convex-auth'])(
+    'rejects Nuxt with %s before creating files',
+    async (auth) => {
+      const cwd = await temp();
+      for (const apps of ['nuxt', 'next,nuxt']) {
+        expect(() => normalizeOptions({ apps, auth })).toThrow(
+          'Nuxt supports only auth none. Remove Nuxt or choose --auth none.',
+        );
+        await expect(
+          generateProject({ name: 'unsupported', apps, auth }, { cwd }),
+        ).rejects.toThrow('Nuxt supports only auth none');
+        expect(await readdir(cwd)).toEqual([]);
+      }
+    },
+  );
+});

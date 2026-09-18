@@ -1,5 +1,5 @@
 import type { AuthAdapter } from '../../../generator/types.js';
-import { writeProviders } from '../shared.js';
+import { uiRuntime, writeProviders } from '../shared.js';
 export const noneAdapter: AuthAdapter = {
   id: 'none',
   label: 'None',
@@ -15,6 +15,17 @@ export async function getOwner(_ctx: QueryCtx | MutationCtx): Promise<string | u
       );
     for (const app of ctx.options.apps) {
       await writeProviders(ctx, app);
+      if (uiRuntime(app) === 'vue') {
+        await ctx.write(
+          `apps/${app.name}/src/components/AuthControls.vue`,
+          `<script lang="ts">
+import { defineComponent } from 'vue';
+export default defineComponent({ render: () => null });
+</script>
+`,
+        );
+        continue;
+      }
       await ctx.write(
         `apps/${app.name}/src/auth-controls.tsx`,
         'export function AuthControls() { return null; }\n',

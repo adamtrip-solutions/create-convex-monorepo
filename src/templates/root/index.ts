@@ -1,12 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
-import { versions as v } from '../versions.js';
+import { nodeEngines, versions as v } from '../versions.js';
+import { publicVariable } from '../../../assets/setup/convex-setup.mjs';
 import { formattingOptions } from '../../generator/format.js';
 import { convexAuthSetup } from '../../integrations/auth/convex-auth/setup.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   const { options, scope } = ctx;
+  const hasNuxt = options.apps.some((app) => app.framework === 'nuxt');
   await ctx.write(
     'scripts/convex-setup.mjs',
     await readFile(
@@ -43,14 +45,14 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     version: '0.0.0',
     type: 'module',
     packageManager: `pnpm@${v.pnpm}`,
-    engines: { node: '>=22.12.0' },
+    engines: { node: hasNuxt ? nodeEngines.nuxt : nodeEngines.default },
     scripts,
     devDependencies: { turbo: v.turbo, prettier: v.prettier },
   });
   await ctx.json('.prettierrc.json', formattingOptions);
   await ctx.write(
     '.prettierignore',
-    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.output/\n**/dist/\n**/.turbo/\npnpm-lock.yaml\n.env*\n**/.env*\n',
+    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.nuxt/\n**/.expo/\n**/.output/\n**/dist/\n**/.turbo/\npnpm-lock.yaml\n.env*\n**/.env*\n',
   );
   await ctx.write(
     'pnpm-workspace.yaml',
@@ -68,13 +70,20 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
           'NEXT_PUBLIC_*',
           'VITE_*',
           'EXPO_PUBLIC_*',
+          'NUXT_PUBLIC_*',
         ],
       },
       build: {
         dependsOn: ['^build'],
         inputs: ['$TURBO_DEFAULT$', '.env*'],
-        outputs: ['.next/**', '!.next/cache/**', 'dist/**', '.output/**'],
-        env: ['NEXT_PUBLIC_*', 'VITE_*', 'EXPO_PUBLIC_*'],
+        outputs: [
+          '.next/**',
+          '!.next/cache/**',
+          'dist/**',
+          '.output/**',
+          '.nuxt/**',
+        ],
+        env: ['NEXT_PUBLIC_*', 'VITE_*', 'EXPO_PUBLIC_*', 'NUXT_PUBLIC_*'],
         passThroughEnv: ['CLERK_SECRET_KEY'],
       },
       [`@${scope}/backend#build`]: { outputs: [] },
@@ -84,7 +93,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   });
   await ctx.write(
     '.gitignore',
-    `node_modules/\n.turbo/\n.next/\n.output/\ndist/\n.expo/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
+    `node_modules/\n.turbo/\n.next/\n.nuxt/\n.output/\ndist/\n.expo/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
   );
   await ctx.json('convex-monorepo.json', {
     version: 1,
@@ -132,7 +141,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     'packages/eslint-config/index.js',
     `import tseslint from 'typescript-eslint';
 export default tseslint.config(
-  { ignores: ['**/_generated/**', '**/routeTree.gen.ts', '**/node_modules/**', '**/dist/**', '**/.next/**', '**/.expo/**', '**/.output/**'] },
+  { ignores: ['**/_generated/**', '**/routeTree.gen.ts', '**/node_modules/**', '**/dist/**', '**/.next/**', '**/.nuxt/**', '**/.expo/**', '**/.output/**'] },
   ...tseslint.configs.recommended,
   { files: ['**/*.cjs'], rules: { '@typescript-eslint/no-require-imports': 'off' } },
   { rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }] } },
@@ -140,10 +149,7 @@ export default tseslint.config(
 `,
   );
   const envTable = options.apps
-    .map(
-      (app) =>
-        `| ${app.name} | ${app.framework === 'next' ? 'NEXT_PUBLIC' : app.framework === 'expo' ? 'EXPO_PUBLIC' : 'VITE'}_CONVEX_URL |`,
-    )
+    .map((app) => `| ${app.name} | ${publicVariable(app.framework)} |`)
     .join('\n');
   await ctx.write(
     'README.md',
@@ -153,7 +159,7 @@ ${options.apps.map((a) => a.framework).join(', ')} applications share one Convex
 
 ## First run
 
-Use Node 22.12+ and pnpm ${v.pnpm}.
+Use Node ${hasNuxt ? nodeEngines.nuxt : '22.12+'} and pnpm ${v.pnpm}.
 
 \`\`\`sh
 pnpm install
@@ -189,6 +195,7 @@ ${options.example === 'messages' ? 'The backend checks identity and uses an owne
         : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
 `
 }
+${options.apps.some((app) => app.framework === 'nuxt') ? 'Nuxt supports auth none only. Its Convex client runs in a client-only plugin, and query components mount inside ClientOnly. NUXT_PUBLIC_CONVEX_URL populates runtimeConfig.public.convexUrl. Dev, build, and preview load .env.local; production Node servers read this variable from their environment.\n' : ''}
 ## Development
 
 \`\`\`sh

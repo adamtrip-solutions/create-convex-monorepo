@@ -9,6 +9,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { generateProject } from '../src/generator/index.js';
 import type { Auth, Example, Framework } from '../src/generator/types.js';
@@ -96,6 +97,7 @@ describe.each<Example>(['none', 'messages'])(
             const pkg = JSON.parse(after['apps/added/package.json']!);
             expect(pkg.name).toBe('@sample/added');
             const root = JSON.parse(after['package.json']!);
+            expect(root.engines.node).toBe('>=22.12.0');
             expect(root.scripts['dev:added']).toBe(
               'pnpm --filter @sample/added dev',
             );
@@ -1554,4 +1556,281 @@ it('respects per-app blank overrides when adding Convex Auth', async () => {
     '@convex-dev/auth/react',
   );
   expect(files['apps/web/src/messages.tsx']).toContain('api.messages');
+});
+
+describe('adding Nuxt', () => {
+  it('preserves custom prose after the generated Node requirement', async () => {
+    const workspace = await fixture();
+    const path = join(workspace.root, 'README.md');
+    const before =
+      'Use Node 22.12+ and pnpm 10.30.0. Keep our deployment instructions.\n';
+    await writeFile(path, before);
+    await applyPlan(
+      await planAddApp(workspace, { name: 'portal', framework: 'nuxt' }),
+    );
+    expect(await readFile(path, 'utf8')).toBe(
+      before.replace('Node 22.12+', 'Node ^22.19.0 || ^24.11.0 || >=26.0.0'),
+    );
+  });
+  it('preserves custom README content and other engine requirements', async () => {
+    const workspace = await fixture();
+    const packagePath = join(workspace.root, 'package.json');
+    const manifest = JSON.parse(await readFile(packagePath, 'utf8'));
+    manifest.engines.pnpm = '>=10';
+    await writeFile(packagePath, JSON.stringify(manifest));
+    await writeFile(
+      join(workspace.root, 'README.md'),
+      '# Custom docs\r\n\r\nKeep this.\r\n',
+    );
+    await applyPlan(
+      await planAddApp(workspace, { name: 'portal', framework: 'nuxt' }),
+    );
+    const after = await snapshot(workspace.root);
+    expect(JSON.parse(after['package.json']!).engines).toEqual({
+      node: '^22.19.0 || ^24.11.0 || >=26.0.0',
+      pnpm: '>=10',
+    });
+    expect(after['README.md']).toBe(
+      `# Custom docs\r\n\r\nKeep this.\r\n\r\n\r\nUse Node ^22.19.0 || ^24.11.0 || >=26.0.0 and pnpm ${versions.pnpm}.\r\n`,
+    );
+    const beforeSecondApp = after['README.md'];
+    await applyPlan(
+      await planAddApp(await loadWorkspace(workspace.root), {
+        name: 'second',
+        framework: 'nuxt',
+      }),
+    );
+    expect(await readFile(join(workspace.root, 'README.md'), 'utf8')).toBe(
+      beforeSecondApp,
+    );
+    await applyPlan(
+      await planAddApp(await loadWorkspace(workspace.root), {
+        name: 'react',
+        framework: 'vite',
+      }),
+    );
+    expect(JSON.parse(await readFile(packagePath, 'utf8')).engines.node).toBe(
+      '^22.19.0 || ^24.11.0 || >=26.0.0',
+    );
+  });
+  it('rejects customized Node constraints without writes', async () => {
+    const workspace = await fixture();
+    const path = join(workspace.root, 'package.json');
+    const manifest = JSON.parse(await readFile(path, 'utf8'));
+    manifest.engines.node = '>=26.1.0';
+    await writeFile(path, JSON.stringify(manifest));
+    const before = await snapshot(workspace.root);
+    await expect(
+      planAddApp(workspace, { name: 'portal', framework: 'nuxt' }),
+    ).rejects.toThrow('engines.node is customized');
+    expect(await snapshot(workspace.root)).toEqual(before);
+  });
+  it.each<Example>(['none', 'messages'])(
+    'adds %s with public URL linking, dry run, and preserved custom files',
+    async (example) => {
+      const workspace = await fixture(example);
+      await writeFile(
+        join(workspace.root, 'apps/web/custom.txt'),
+        'preserve me',
+      );
+      await writeFile(
+        join(workspace.root, 'packages/backend/.env.local'),
+        'CONVEX_URL=https://linked.convex.cloud\nCONVEX_DEPLOY_KEY=never-copy\n',
+      );
+      const before = await snapshot(workspace.root);
+      const plan = await planAddApp(workspace, {
+        name: 'portal',
+        framework: 'nuxt',
+      });
+      expect(await snapshot(workspace.root)).toEqual(before);
+      await applyPlan(plan, { dryRun: true });
+      expect(await snapshot(workspace.root)).toEqual(before);
+      await applyPlan(plan);
+      const after = await snapshot(workspace.root);
+      for (const [path, contents] of Object.entries(before)) {
+        if (
+          !['package.json', 'convex-monorepo.json', 'README.md'].includes(path)
+        )
+          expect(after[path], path).toBe(contents);
+      }
+      expect(JSON.parse(after['package.json']!).engines.node).toBe(
+        '^22.19.0 || ^24.11.0 || >=26.0.0',
+      );
+      expect(after['README.md']).toBe(
+        before['README.md']!.replace(
+          'Use Node 22.12+',
+          'Use Node ^22.19.0 || ^24.11.0 || >=26.0.0',
+        ),
+      );
+      expect(after['apps/portal/.env.local']).toBe(
+        'NUXT_PUBLIC_CONVEX_URL=https://linked.convex.cloud\n',
+      );
+      const pkg = JSON.parse(after['apps/portal/package.json']!);
+      expect(pkg.name).toBe('@sample/portal');
+      expect(pkg.scripts.dev).toContain('--port 3001');
+      expect(
+        after['apps/portal/src/components/Messages.vue'] !== undefined,
+      ).toBe(example === 'messages');
+      expect(
+        after['apps/portal/src/convex-api.type-test.ts'] !== undefined,
+      ).toBe(example === 'messages');
+      expect(JSON.stringify(plan.changes)).not.toContain('never-copy');
+    },
+  );
+  it.each<Auth>(['clerk', 'convex-auth'])(
+    'refuses adding Nuxt to %s without writes',
+    async (auth) => {
+      const workspace = await fixture('none', auth);
+      const before = await snapshot(workspace.root);
+      await expect(
+        planAddApp(workspace, { name: 'portal', framework: 'nuxt' }),
+      ).rejects.toThrow('Nuxt supports only auth none');
+      expect(await snapshot(workspace.root)).toEqual(before);
+    },
+  );
+  it.each(['clerk', 'convex-auth'] as const)(
+    'refuses adding %s when Nuxt is a later app before inspecting app sources',
+    async (auth) => {
+      let workspace = await fixture('none');
+      await applyPlan(
+        await planAddApp(workspace, { name: 'portal', framework: 'nuxt' }),
+      );
+      workspace = await loadWorkspace(workspace.root);
+      await rm(join(workspace.root, 'apps/web/package.json'));
+      const before = await snapshot(workspace.root);
+      await expect(planAddAuth(workspace, auth)).rejects.toThrow(
+        'Nuxt supports only auth none',
+      );
+      expect(await snapshot(workspace.root)).toEqual(before);
+    },
+  );
+});
+
+async function legacyNuxtFixture() {
+  const workspace = await fixture('none');
+  const setupPath = join(workspace.root, 'scripts/convex-setup.mjs');
+  const setup = await readFile(setupPath, 'utf8');
+  expect(setup).toContain(
+    "    case 'nuxt':\n      return 'NUXT_PUBLIC_CONVEX_URL';\n",
+  );
+  await writeFile(
+    setupPath,
+    setup.replace(
+      "    case 'nuxt':\n      return 'NUXT_PUBLIC_CONVEX_URL';\n",
+      '',
+    ),
+  );
+  const turboPath = join(workspace.root, 'turbo.json');
+  const turbo = JSON.parse(await readFile(turboPath, 'utf8'));
+  for (const [task, key, value] of [
+    ['dev', 'passThroughEnv', 'NUXT_PUBLIC_*'],
+    ['build', 'env', 'NUXT_PUBLIC_*'],
+    ['build', 'outputs', '.nuxt/**'],
+  ]) {
+    turbo.tasks[task!][key!] = turbo.tasks[task!][key!].filter(
+      (entry: string) => entry !== value,
+    );
+  }
+  turbo.tasks.build.env.push('CUSTOM_BUILD');
+  turbo.tasks.dev.passThroughEnv.push('CUSTOM_DEV');
+  turbo.tasks.build.outputs.push('custom/**');
+  turbo.tasks.custom = { cache: false };
+  await writeFile(turboPath, JSON.stringify(turbo));
+  for (const [path, pattern] of [
+    ['.gitignore', '.nuxt/'],
+    ['.prettierignore', '**/.nuxt/'],
+  ]) {
+    const fullPath = join(workspace.root, path!);
+    await writeFile(
+      fullPath,
+      (await readFile(fullPath, 'utf8')).replace(`${pattern}\n`, '') +
+        'custom-output/\n',
+    );
+  }
+  return workspace;
+}
+
+describe('adding Nuxt to legacy workspaces', () => {
+  it('updates root support without writes during dry run and preserves custom entries', async () => {
+    const workspace = await legacyNuxtFixture();
+    const before = await snapshot(workspace.root);
+    const plan = await planAddApp(workspace, {
+      name: 'portal',
+      framework: 'nuxt',
+    });
+    expect(await snapshot(workspace.root)).toEqual(before);
+    await applyPlan(plan, { dryRun: true });
+    expect(await snapshot(workspace.root)).toEqual(before);
+    await applyPlan(plan);
+    const after = await snapshot(workspace.root);
+    expect(after['turbo.json']).toBe(
+      await formatGeneratedFile('turbo.json', after['turbo.json']!),
+    );
+    const turbo = JSON.parse(after['turbo.json']!);
+    const previous = JSON.parse(before['turbo.json']!);
+    expect(turbo.tasks.dev.passThroughEnv).toEqual([
+      ...previous.tasks.dev.passThroughEnv,
+      'NUXT_PUBLIC_*',
+    ]);
+    expect(turbo.tasks.build.env).toEqual([
+      ...previous.tasks.build.env,
+      'NUXT_PUBLIC_*',
+    ]);
+    expect(turbo.tasks.build.outputs).toEqual([
+      ...previous.tasks.build.outputs,
+      '.nuxt/**',
+    ]);
+    expect(turbo.tasks.custom).toEqual({ cache: false });
+    expect(after['.gitignore']).toBe(`${before['.gitignore']}.nuxt/\n`);
+    expect(after['.prettierignore']).toBe(
+      `${before['.prettierignore']}**/.nuxt/\n`,
+    );
+    await writeFile(
+      join(workspace.root, 'packages/backend/.env.local'),
+      'CONVEX_URL=https://legacy.convex.cloud\nCONVEX_DEPLOY_KEY=never-copy\n',
+    );
+    const setup: { linkFrontends: (root: string) => Promise<unknown> } =
+      await import(
+        pathToFileURL(join(workspace.root, 'scripts/convex-setup.mjs')).href
+      );
+    await setup.linkFrontends(workspace.root);
+    expect(
+      await readFile(join(workspace.root, 'apps/portal/.env.local'), 'utf8'),
+    ).toBe('NUXT_PUBLIC_CONVEX_URL=https://legacy.convex.cloud\n');
+  });
+  it('rejects a customized legacy helper without writing any files', async () => {
+    const workspace = await legacyNuxtFixture();
+    const path = join(workspace.root, 'scripts/convex-setup.mjs');
+    await writeFile(
+      path,
+      (await readFile(path, 'utf8')) + '\nexport const customized = true;\n',
+    );
+    const before = await snapshot(workspace.root);
+    await expect(
+      planAddApp(workspace, { name: 'portal', framework: 'nuxt' }),
+    ).rejects.toThrow('customized URL linking cannot be updated for Nuxt');
+    expect(await snapshot(workspace.root)).toEqual(before);
+  });
+  it.each([
+    'scripts/convex-setup.mjs',
+    'turbo.json',
+    '.gitignore',
+    '.prettierignore',
+  ])(
+    'guards concurrent edits to %s before applying the migration',
+    async (path) => {
+      const workspace = await legacyNuxtFixture();
+      const plan = await planAddApp(workspace, {
+        name: 'portal',
+        framework: 'nuxt',
+      });
+      await writeFile(
+        join(workspace.root, path),
+        (await readFile(join(workspace.root, path), 'utf8')) + '\n',
+      );
+      const before = await snapshot(workspace.root);
+      await expect(applyPlan(plan)).rejects.toThrow('Workspace changed');
+      expect(await snapshot(workspace.root)).toEqual(before);
+    },
+  );
 });

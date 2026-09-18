@@ -1,5 +1,9 @@
 import type { AppSpec, GeneratorContext } from '../../generator/types.js';
 
+export function uiRuntime(app: AppSpec): 'react' | 'vue' {
+  return app.framework === 'nuxt' ? 'vue' : 'react';
+}
+
 export function platform(app: AppSpec) {
   const native = app.framework === 'expo';
   const prefix =
@@ -18,6 +22,34 @@ export async function writeProviders(
     providerProps?: string;
   },
 ): Promise<void> {
+  if (uiRuntime(app) === 'vue') {
+    await ctx.write(
+      `apps/${app.name}/src/plugins/convex.client.ts`,
+      `import { defineNuxtPlugin, useRuntimeConfig } from '#app';
+import { convexVue } from 'convex-vue';
+
+export default defineNuxtPlugin((nuxtApp) => {
+  const url = useRuntimeConfig().public.convexUrl;
+  if (url) nuxtApp.vueApp.use(convexVue, { url });
+});
+`,
+    );
+    await ctx.write(
+      `apps/${app.name}/src/components/Providers.vue`,
+      `<script setup lang="ts">
+import { useRuntimeConfig } from '#app';
+import { ClientOnly } from '#components';
+const config = useRuntimeConfig();
+</script>
+
+<template>
+  <p v-if="!config.public.convexUrl">Set NUXT_PUBLIC_CONVEX_URL in this app's .env.local.</p>
+  <ClientOnly v-else><slot /></ClientOnly>
+</template>
+`,
+    );
+    return;
+  }
   const { native, env } = platform(app);
   const text = (message: string) =>
     native ? `<Text>${message}</Text>` : `<p>${message}</p>`;

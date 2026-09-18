@@ -1,4 +1,4 @@
-export type Framework = 'next' | 'vite' | 'tanstack-start' | 'expo';
+export type Framework = 'next' | 'vite' | 'tanstack-start' | 'expo' | 'nuxt';
 export type Auth = 'none' | 'clerk' | 'convex-auth';
 export type Example = 'none' | 'messages';
 export interface AppSpec {

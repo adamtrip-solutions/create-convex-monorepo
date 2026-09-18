@@ -1,4 +1,15 @@
+export const nodeEngines = {
+  default: '>=22.12.0',
+  nuxt: '^22.19.0 || ^24.11.0 || >=26.0.0',
+} as const;
+
 export const versions = {
+  nuxt: '4.5.2',
+  vue: '3.5.43',
+  convexVue: '0.1.5',
+  vueTsc: '3.3.11',
+  eslintPluginVue: '10.11.0',
+  vueEslintParser: '10.4.1',
   prettier: '3.8.3',
   convex: '1.45.0',
   convexAuth: '0.0.95',

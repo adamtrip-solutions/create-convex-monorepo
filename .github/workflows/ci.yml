@@ -55,6 +55,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - apps: nuxt
+            auth: none
+            example: messages
+          - apps: nuxt,vite
+            auth: none
+            example: none
+          - apps: vite,nuxt
+            auth: none
+            example: messages
+            workspaceCommands: '1'
           - apps: next
             auth: none
           - apps: vite

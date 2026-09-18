@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,24 +131,38 @@ try {
           vite: 'src/main.tsx',
           'tanstack-start': 'src/routes/index.tsx',
           expo: 'App.tsx',
+          nuxt: 'src/app.vue',
         }[app.framework],
       );
       const entry = await readFile(entryPath, 'utf8');
       const sharedElement =
         app.framework === 'expo'
           ? '<SharedText>{packageName}</SharedText>'
-          : '<p>{packageName}</p>';
+          : app.framework === 'nuxt'
+            ? '<p>{{ packageName }}</p>'
+            : '<p>{packageName}</p>';
       if (!entry.includes('</Providers>'))
         throw new Error(`Missing Providers element in ${entryPath}`);
       await writeFile(
         entryPath,
         await format(
-          "import { packageName } from '@fixture/shared';\n" +
-            (app.framework === 'expo'
-              ? "import { Text as SharedText } from 'react-native';\n"
-              : '') +
-            entry.replace('</Providers>', `${sharedElement}</Providers>`),
-          { parser: 'typescript', singleQuote: true, trailingComma: 'all' },
+          app.framework === 'nuxt'
+            ? entry
+                .replace(
+                  '<script setup lang="ts">',
+                  '<script setup lang="ts">\nimport { packageName } from "@fixture/shared";',
+                )
+                .replace('</Providers>', `${sharedElement}</Providers>`)
+            : "import { packageName } from '@fixture/shared';\n" +
+                (app.framework === 'expo'
+                  ? "import { Text as SharedText } from 'react-native';\n"
+                  : '') +
+                entry.replace('</Providers>', `${sharedElement}</Providers>`),
+          {
+            parser: app.framework === 'nuxt' ? 'vue' : 'typescript',
+            singleQuote: true,
+            trailingComma: 'all',
+          },
         ),
       );
     }
@@ -177,11 +198,13 @@ export type MissingModule = typeof api.notAModule;
       );
     }
     const prefix =
-      app.framework === 'next'
-        ? 'NEXT_PUBLIC'
-        : app.framework === 'expo'
-          ? 'EXPO_PUBLIC'
-          : 'VITE';
+      app.framework === 'nuxt'
+        ? 'NUXT_PUBLIC'
+        : app.framework === 'next'
+          ? 'NEXT_PUBLIC'
+          : app.framework === 'expo'
+            ? 'EXPO_PUBLIC'
+            : 'VITE';
     // Syntactically valid test configuration, no deployment or identity-provider credentials.
     const lines = [`${prefix}_CONVEX_URL=https://example.convex.cloud`];
     if (auth === 'clerk') {
@@ -198,8 +221,41 @@ export type MissingModule = typeof api.notAModule;
   }
   run(['install', '--no-frozen-lockfile']);
   run(['format:check']);
-  if (workspaceCommands) command(['doctor', '--json']);
   run(['typecheck']);
+  for (const app of config.apps.filter((app) => app.framework === 'nuxt')) {
+    const middleware = join(project, 'apps', app.name, 'server/middleware');
+    const badFile = join(middleware, 'typecheck-regression.ts');
+    await mkdir(middleware, { recursive: true });
+    try {
+      await writeFile(badFile, 'export const invalid: string = 123;\n');
+      const result = spawn.sync(
+        'pnpm',
+        ['--filter', `@fixture/${app.name}`, 'typecheck'],
+        {
+          cwd: project,
+          encoding: 'utf8',
+          timeout: 120_000,
+        },
+      );
+      if (result.error) throw result.error;
+      const output = `${result.stdout}\n${result.stderr}`;
+      if (
+        result.status === 0 ||
+        !/server[/\\]middleware[/\\]typecheck-regression\.ts\(1,14\): error TS2322/.test(
+          output,
+        )
+      )
+        throw new Error(
+          `Nuxt typecheck did not report the intentional server error:\n${output}`,
+        );
+      console.log(
+        `PASS ${app.name} typecheck rejects an error in server/middleware`,
+      );
+    } finally {
+      await rm(badFile, { force: true });
+    }
+  }
+  if (workspaceCommands) command(['doctor', '--json']);
   run(['lint']);
   run(['build']);
   for (const app of config.apps) {
@@ -207,11 +263,13 @@ export type MissingModule = typeof api.notAModule;
       project,
       'apps',
       app.name,
-      app.framework === 'next'
-        ? '.next/static'
-        : app.framework === 'tanstack-start'
-          ? 'dist/client'
-          : 'dist',
+      app.framework === 'nuxt'
+        ? '.output/public'
+        : app.framework === 'next'
+          ? '.next/static'
+          : app.framework === 'tanstack-start'
+            ? 'dist/client'
+            : 'dist',
     );
     for (const file of await readdir(output, { recursive: true })) {
       if (!/\.(?:js|hbc)$/.test(file)) continue;

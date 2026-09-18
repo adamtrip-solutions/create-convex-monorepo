@@ -18,13 +18,13 @@ export function manifest(
     dependencies: {
       [`@${context.scope}/backend`]: 'workspace:*',
       convex: versions.convex,
-      react: versions.react,
+      ...(app.framework === 'nuxt' ? {} : { react: versions.react }),
     },
     devDependencies: {
       [`@${context.scope}/typescript-config`]: 'workspace:*',
       [`@${context.scope}/eslint-config`]: 'workspace:*',
       typescript: versions.typescript,
-      '@types/react': '19.2.18',
+      ...(app.framework === 'nuxt' ? {} : { '@types/react': '19.2.18' }),
       eslint: versions.eslint,
     },
   };
@@ -34,11 +34,13 @@ export async function common(
   context: GeneratorContext,
   app: AppSpec,
   env: string,
+  eslintConfig?: string,
 ): Promise<void> {
   const dir = `apps/${app.name}`;
   await context.write(
     `${dir}/eslint.config.js`,
-    `import config from '@${context.scope}/eslint-config';\nexport default config;\n`,
+    eslintConfig ??
+      `import config from '@${context.scope}/eslint-config';\nexport default config;\n`,
   );
   await context.write(
     `${dir}/.env.example`,

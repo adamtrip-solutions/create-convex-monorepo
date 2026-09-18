@@ -16,6 +16,7 @@ export const frameworks: readonly Framework[] = [
   'vite',
   'tanstack-start',
   'expo',
+  'nuxt',
 ];
 const reserved = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9]|node_modules)$/i;
 export function validateProjectName(name: string): string | undefined {
@@ -96,6 +97,7 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     used.add(appName);
     return { name: appName, framework };
   });
+  validateCompatibility(apps, auth);
   return {
     name,
     apps,
@@ -106,4 +108,14 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     initConvex,
     git: raw.git ?? raw.yes ?? false,
   };
+}
+
+export function validateCompatibility(
+  apps: readonly AppSpec[],
+  auth: Auth,
+): void {
+  if (auth !== 'none' && apps.some((app) => app.framework === 'nuxt'))
+    throw new Error(
+      'Nuxt supports only auth none. Remove Nuxt or choose --auth none.',
+    );
 }
