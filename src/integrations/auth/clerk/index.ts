@@ -15,6 +15,7 @@ const bindings: Partial<Record<Framework, { sdk: string; version: string }>> = {
 export const clerkAdapter: AuthAdapter = {
   id: 'clerk',
   label: 'Clerk',
+  supportedRuntimes: ['react'],
   async apply(ctx) {
     if (ctx.options.example === 'messages')
       await ctx.write(

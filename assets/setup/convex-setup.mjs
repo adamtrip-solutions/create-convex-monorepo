@@ -18,6 +18,8 @@ export function publicVariable(framework) {
       return 'VITE_CONVEX_URL';
     case 'nuxt':
       return 'NUXT_PUBLIC_CONVEX_URL';
+    case 'sveltekit':
+      return 'PUBLIC_CONVEX_URL';
     case 'astro':
       return 'PUBLIC_CONVEX_URL';
     case 'expo':

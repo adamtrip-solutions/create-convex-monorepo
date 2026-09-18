@@ -7,6 +7,8 @@ import { astroTemplate } from './astro/index.js';
 import { reactRouterTemplate } from './react-router/index.js';
 import { expoTemplate } from './expo/index.js';
 
+import { sveltekitTemplate } from './sveltekit/index.js';
+
 export const appTemplates: Record<Framework, AppTemplate> = {
   nuxt: nuxtTemplate,
   next: nextTemplate,
@@ -14,5 +16,6 @@ export const appTemplates: Record<Framework, AppTemplate> = {
   'tanstack-start': tanstackStartTemplate,
   'react-router': reactRouterTemplate,
   expo: expoTemplate,
+  sveltekit: sveltekitTemplate,
   astro: astroTemplate,
 };

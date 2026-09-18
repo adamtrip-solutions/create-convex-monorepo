@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 async function fixture(
   packageManager: 'pnpm' | 'bun' = 'pnpm',
-  apps = 'next,vite,tanstack-start,expo,router:react-router,island:astro',
+  apps = 'next,vite,tanstack-start,expo,router:react-router,svelte:sveltekit,island:astro',
 ) {
   const dir = await mkdtemp(join(tmpdir(), 'ccm-workspace-core-'));
   directories.push(dir);
@@ -242,7 +242,7 @@ describe('workspace transactions', () => {
 });
 
 describe('environment sync', () => {
-  it('links only public URLs for all five frameworks, preserves settings, and is idempotent', async () => {
+  it('links only public URLs for all seven frameworks, preserves settings, and is idempotent', async () => {
     const ws = await fixture();
     await writeFile(
       join(ws.root, 'packages/backend/.env'),
@@ -270,6 +270,9 @@ describe('environment sync', () => {
     }
     expect(await readText(ws.root, 'apps/web/.env.local')).toContain(
       'OTHER="first\nsecond"',
+    );
+    expect(await readText(ws.root, 'apps/svelte/.env.local')).toBe(
+      'PUBLIC_CONVEX_URL=https://current.convex.cloud\n',
     );
     expect(await readText(ws.root, 'apps/island/.env.local')).toBe(
       'PUBLIC_CONVEX_URL=https://current.convex.cloud\n',

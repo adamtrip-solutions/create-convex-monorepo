@@ -370,7 +370,9 @@ describe('generated project golden matrix', () => {
                 nuxt: versions.nuxt,
                 'convex-vue': versions.convexVue,
               }
-            : { react: versions.react }),
+            : framework === 'sveltekit'
+              ? {}
+              : { react: versions.react }),
         });
         expect(app.devDependencies).toMatchObject({
           '@golden-app/typescript-config': 'workspace:*',
@@ -391,8 +393,9 @@ describe('generated project golden matrix', () => {
         expect(await read(`${dir}/.env.example`)).toContain(
           `${prefix}_CONVEX_URL=\n`,
         );
+        const svelte = framework === 'sveltekit';
         const providers = await read(
-          `${dir}/src/${framework === 'nuxt' ? 'components/Providers.vue' : 'providers.tsx'}`,
+          `${dir}/src/${framework === 'nuxt' ? 'components/Providers.vue' : svelte ? 'Providers.svelte' : 'providers.tsx'}`,
         );
         if (framework === 'nuxt') {
           expect(app.dependencies).not.toHaveProperty('react');
@@ -406,18 +409,22 @@ describe('generated project golden matrix', () => {
         } else expect(providers).toContain(`${prefix}_CONVEX_URL`);
         if (scenario.example !== 'none') {
           const demo = await read(
-            `${dir}/src/${framework === 'nuxt' ? 'components/Messages.vue' : 'messages.tsx'}`,
+            `${dir}/src/${framework === 'nuxt' ? 'components/Messages.vue' : svelte ? 'Messages.svelte' : 'messages.tsx'}`,
           );
           expect(demo).toContain("from '@golden-app/backend/api'");
           expect(demo).toMatch(
             framework === 'nuxt'
               ? /useConvexQuery\(\s*api\.messages\.list,\s*\{\}/
-              : /useQuery\(api\.messages\.list, \{\}\)/,
+              : svelte
+                ? /useQuery\(api\.messages\.list/
+                : /useQuery\(api\.messages\.list, \{\}\)/,
           );
           expect(demo).toContain(
             framework === 'nuxt'
               ? 'useConvexMutation(api.messages.send)'
-              : 'useMutation(api.messages.send)',
+              : svelte
+                ? 'mutation(api.messages.send'
+                : 'useMutation(api.messages.send)',
           );
           const contract = await read(`${dir}/src/convex-api.type-test.ts`);
           expect(contract).toContain('IsAny<typeof api>');
@@ -428,7 +435,7 @@ describe('generated project golden matrix', () => {
           expect(contract).toContain('@ts-expect-error');
         } else {
           expect(await readdir(join(root, dir, 'src'))).not.toContain(
-            'messages.tsx',
+            svelte ? 'Messages.svelte' : 'messages.tsx',
           );
           expect(await readdir(join(root, dir, 'src'))).not.toContain(
             'convex-api.type-test.ts',
@@ -666,7 +673,11 @@ describe('generated project golden matrix', () => {
             expect.stringMatching(/^@clerk\//),
           );
           if (framework !== 'nuxt')
-            expect(providers).toContain('<ConvexProvider client={client}>');
+            expect(providers).toContain(
+              svelte
+                ? 'setupConvex(PUBLIC_CONVEX_URL)'
+                : '<ConvexProvider client={client}>',
+            );
         }
         if (framework === 'nuxt') {
           expect(await read(`${dir}/nuxt.config.ts`)).toContain('convexUrl');
@@ -683,6 +694,27 @@ describe('generated project golden matrix', () => {
               await readdir(join(root, dir, 'src/components')),
             ).not.toContain('Messages.vue');
           }
+        } else if (svelte) {
+          expect(app.dependencies).toHaveProperty('svelte');
+          expect(app.dependencies).toHaveProperty('convex-svelte');
+          expect(app.dependencies).not.toHaveProperty('react');
+          expect(app.dependencies).not.toHaveProperty('react-dom');
+          expect(app.scripts?.typecheck).toContain(
+            'svelte-kit sync && svelte-check',
+          );
+          expect(await read(`${dir}/tsconfig.json`)).toContain(
+            './.svelte-kit/tsconfig.json',
+          );
+          expect(await read(`${dir}/src/routes/+layout.svelte`)).toContain(
+            '<Providers>',
+          );
+          expect(await read(`${dir}/src/routes/+page.svelte`)).toContain(
+            scenario.example === 'none' ? `<h1>${name}</h1>` : '<Messages',
+          );
+          expect(await read(`${dir}/src/AuthControls.svelte`)).not.toMatch(
+            /clerk|convex-auth|react/,
+          );
+          expect(providers).toContain("from '$env/static/public'");
         } else if (framework === 'next') {
           expect(await read(`${dir}/next.config.ts`)).toContain(
             "transpilePackages: ['@golden-app/backend']",

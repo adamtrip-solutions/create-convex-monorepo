@@ -1,6 +1,6 @@
 # Adding a framework
 
-Supported IDs are `next`, `vite`, `tanstack-start`, `react-router`, `expo`, `astro`, and `nuxt`.
+Supported IDs are `next`, `vite`, `tanstack-start`, `react-router`, `expo`, `astro`, `sveltekit`, and `nuxt`.
 
 Start with current framework and Convex documentation, then install a minimal upstream example. Record the exact versions and workspace constraints in `docs/research.md`. A successful single-package app is not enough evidence for a workspace adapter.
 
@@ -10,9 +10,11 @@ Start with current framework and Convex documentation, then install a minimal up
 2. Create `src/templates/apps/<id>/index.ts` exporting an `AppTemplate`. Use `context.write`, `context.json`, and shared manifest helpers. Generate framework files under `apps/${app.name}`.
 3. Register it in `src/templates/apps/index.ts` and add the interactive label in `src/commands/create.ts`.
 4. Generate the public Convex environment variable with the framework's required prefix. Use statically named environment access where the bundler requires it. Add its public variable to `publicVariable` in `assets/setup/convex-setup.mjs`, update the generated README environment table, and test URL linking for the new framework.
-5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own provider and auth-control files; the framework template must not write them. React uses `src/providers.tsx` and `src/auth-controls.tsx`. Nuxt uses `src/plugins/convex.client.ts`, `src/components/Providers.vue`, and `src/components/AuthControls.vue`.
-6. Add runtime handling through `uiRuntime` in `src/integrations/auth/shared.ts`, currently `react` or `vue`, and platform handling or auth bindings where supported. If the integration cannot work, add explicit compatibility validation before output is written.
+5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own the provider and auth-control components. React uses `src/providers.tsx` and `src/auth-controls.tsx`; Svelte uses `src/Providers.svelte` and `src/AuthControls.svelte`. Nuxt uses `src/plugins/convex.client.ts`, `src/components/Providers.vue`, and `src/components/AuthControls.vue`. The framework template must not write those files.
+6. Declare the framework's UI runtime, `react`, `svelte`, or `vue`, in `src/integrations/auth/shared.ts`. Each auth adapter declares `supportedRuntimes`. Shared manifests use the runtime to include React dependencies only where needed. Add platform environment handling and provider components for that runtime. Add a Clerk binding only if it is supported. Compatibility validation must reject unsupported combinations during create, add app, and add auth before output is written.
 7. Add versions, development/build/typecheck/lint scripts, and any route-generation step the framework needs on a clean checkout.
+
+The SvelteKit template composes the shared TypeScript ESLint rules with `eslint-plugin-svelte`. Its TypeScript config extends both the shared base and SvelteKit's generated config. Its app-local Prettier config loads the pinned Svelte plugin, which the generator also loads from its own installation to format components before writing.
 
 Astro imports an auth-owned `auth.config.mjs` integration list from its framework-owned `astro.config.mjs`. The none and Convex Auth adapters export an empty list; Clerk exports `[clerk()]` and writes middleware. This lets `add auth` update authentication without replacing the framework config. Its static page mounts one React island with `client:only="react"`.
 
@@ -38,9 +40,11 @@ The add planner uses the same template as project creation. It copies the new ap
 
 ## Nuxt and Vue
 
-Nuxt supports auth `none` only. Clerk, Convex Auth, WorkOS, and Better Auth have no integrated Vue binding here, so Nuxt rejects them and Convex Auth OAuth. `validateCompatibility` rejects other providers during option normalization and before `add auth` plans files, including when Nuxt is not the first app. Add-app validation uses the workspace's existing auth.
+Nuxt supports auth `none` only. Clerk, Convex Auth, WorkOS, and Better Auth have no integrated Vue binding here, so Nuxt rejects them and Convex Auth OAuth. `validateAuthCompatibility` rejects other providers during option normalization and before `add auth` plans files, including when Nuxt is not the first app. Add-app validation uses the workspace's existing auth.
 
 The none adapter selects Vue output through `uiRuntime`. Install `convex-vue` in a `.client.ts` plugin, and mount query components inside `ClientOnly`. Keep `ssr: true`; neither server rendering nor production builds should query Convex. Read `runtimeConfig.public.convexUrl`, populated by `NUXT_PUBLIC_CONVEX_URL`. Include that prefix in URL linking, doctor secret checks, and Turbo environment inputs.
+
+Prettier formats `.vue` files with its built-in Vue parser, so Nuxt needs no additional formatting dependency.
 
 The Nuxt app uses `srcDir: 'src/'` so the shared `src/convex-api.type-test.ts` belongs to its compiler program. `nuxt prepare && vue-tsc --noEmit` uses the generated Nuxt tsconfig without a frontend `rootDir`. Lint composes `eslint-plugin-vue` essential rules with the shared TypeScript rules, using `vue-eslint-parser` and the TypeScript parser for script blocks. Ignore `.nuxt` and `.output` in lint, formatting, and git.
 

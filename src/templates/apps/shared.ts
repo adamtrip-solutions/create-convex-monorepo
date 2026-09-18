@@ -3,6 +3,7 @@ import type {
   GeneratorContext,
   PackageManifest,
 } from '../../generator/types.js';
+import { uiRuntime } from '../../integrations/auth/shared.js';
 import { versions } from '../versions.js';
 
 export function manifest(
@@ -18,13 +19,17 @@ export function manifest(
     dependencies: {
       [`@${context.scope}/backend`]: 'workspace:*',
       convex: versions.convex,
-      ...(app.framework === 'nuxt' ? {} : { react: versions.react }),
+      ...(uiRuntime(app.framework) === 'react'
+        ? { react: versions.react }
+        : {}),
     },
     devDependencies: {
       [`@${context.scope}/typescript-config`]: 'workspace:*',
       [`@${context.scope}/eslint-config`]: 'workspace:*',
       typescript: versions.typescript,
-      ...(app.framework === 'nuxt' ? {} : { '@types/react': '19.2.18' }),
+      ...(uiRuntime(app.framework) === 'react'
+        ? { '@types/react': '19.2.18' }
+        : {}),
       eslint: versions.eslint,
     },
   };
@@ -41,7 +46,19 @@ export async function common(
   await context.write(
     `${dir}/eslint.config.js`,
     eslintConfig ??
-      `import config from '@${context.scope}/eslint-config';\nexport default ${ignores.length ? `[{ ignores: ${JSON.stringify(ignores)} }, ...config]` : 'config'};\n`,
+      (uiRuntime(app.framework) === 'svelte'
+        ? `import config from '@${context.scope}/eslint-config';
+import svelte from 'eslint-plugin-svelte';
+import tseslint from 'typescript-eslint';
+import svelteConfig from './svelte.config.js';
+export default [
+  ...config,
+  { ignores: ['.svelte-kit/**', 'build/**'] },
+  ...svelte.configs.recommended,
+  { files: ['**/*.svelte'], languageOptions: { parserOptions: { parser: tseslint.parser, svelteConfig } } },
+];
+`
+        : `import config from '@${context.scope}/eslint-config';\nexport default ${ignores.length ? `[{ ignores: ${JSON.stringify(ignores)} }, ...config]` : 'config'};\n`),
   );
   await context.write(
     `${dir}/.env.example`,
@@ -150,7 +167,10 @@ export function entryContent(
 ) {
   if (context.options.example === 'messages') {
     return {
-      imports: `import { Messages } from '${from}/messages';`,
+      imports:
+        uiRuntime(app.framework) === 'svelte'
+          ? `import Messages from '${from}/Messages.svelte';`
+          : `import { Messages } from '${from}/messages';`,
       content: '<Messages />',
     };
   }

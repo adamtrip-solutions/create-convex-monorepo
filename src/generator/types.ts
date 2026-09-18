@@ -1,3 +1,5 @@
+import type { UiRuntime } from '../integrations/auth/shared.js';
+
 export type Framework =
   | 'next'
   | 'vite'
@@ -5,7 +7,8 @@ export type Framework =
   | 'react-router'
   | 'expo'
   | 'astro'
-  | 'nuxt';
+  | 'nuxt'
+  | 'sveltekit';
 export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos' | 'better-auth';
 export type OAuthProvider = 'github' | 'google';
 export type PackageManagerId = 'pnpm' | 'bun';
@@ -53,5 +56,6 @@ export interface AppTemplate {
 export interface AuthAdapter {
   id: Auth;
   label: string;
+  supportedRuntimes: readonly UiRuntime[];
   apply(context: GeneratorContext): Promise<void>;
 }

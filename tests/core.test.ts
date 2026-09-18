@@ -340,6 +340,40 @@ describe('setup recovery and cancellation', () => {
   });
 });
 
+describe('SvelteKit options', () => {
+  it.each(['sveltekit', 'sveltekit,next', 'vite,sveltekit,expo'])(
+    'accepts %s with both starters and no auth',
+    (apps) => {
+      for (const example of ['none', 'messages']) {
+        const options = normalizeOptions(
+          parseCommand(['--apps', apps, '--auth', 'none', '--example', example])
+            .raw,
+        );
+        expect(options.apps.some((app) => app.framework === 'sveltekit')).toBe(
+          true,
+        );
+        expect(options.example).toBe(example);
+      }
+      expect(selectTemplate('sveltekit').label).toBe('SvelteKit');
+    },
+  );
+  it.each(['clerk', 'convex-auth', 'workos', 'better-auth', 'custom'])(
+    'rejects SvelteKit with %s before writing files',
+    async (auth) => {
+      const cwd = await temp();
+      for (const apps of ['sveltekit', 'next,sveltekit']) {
+        expect(() => normalizeOptions({ apps, auth })).toThrow(
+          'SvelteKit currently supports only --auth none',
+        );
+        await expect(
+          generateProject({ name: 'rejected', apps, auth }, { cwd }),
+        ).rejects.toThrow('SvelteKit currently supports only --auth none');
+        expect(await readdir(cwd)).toEqual([]);
+      }
+    },
+  );
+});
+
 it.each(['none', 'clerk', 'convex-auth'])(
   'selects Astro with every framework and %s auth',
   (auth) => {
@@ -376,6 +410,28 @@ it('installs bun projects with the selected package manager', async () => {
   expect(other).not.toHaveBeenCalled();
 });
 
+it.each(['pnpm', 'bun'])(
+  'rejects SvelteKit Convex Auth OAuth with %s before writing files',
+  async (packageManager) => {
+    const cwd = await temp();
+    for (const apps of ['sveltekit', 'react-router,sveltekit']) {
+      await expect(
+        generateProject(
+          {
+            name: 'rejected',
+            apps,
+            auth: 'convex-auth',
+            oauth: 'github,google',
+            packageManager,
+          },
+          { cwd },
+        ),
+      ).rejects.toThrow('SvelteKit currently supports only --auth none');
+      expect(await readdir(cwd)).toEqual([]);
+    }
+  },
+);
+
 // Unsupported combinations must fail in normalization, before generation writes.
 it.each(['pnpm', 'bun'])(
   'rejects WorkOS with static Astro before writing a %s project',
@@ -398,7 +454,7 @@ it.each(['pnpm', 'bun'])(
 );
 
 describe('Nuxt options', () => {
-  it.each(['nuxt', 'nuxt,next', 'web:next,portal:nuxt'])(
+  it.each(['nuxt', 'nuxt,next', 'web:next,portal:nuxt', 'nuxt,sveltekit,vite'])(
     'accepts %s with auth none',
     (apps) => {
       expect(
@@ -415,11 +471,11 @@ describe('Nuxt options', () => {
       const cwd = await temp();
       for (const apps of ['nuxt', 'next,nuxt']) {
         expect(() => normalizeOptions({ apps, auth })).toThrow(
-          'Nuxt supports only auth none. Remove Nuxt or choose --auth none.',
+          'Nuxt currently supports only --auth none.',
         );
         await expect(
           generateProject({ name: 'unsupported', apps, auth }, { cwd }),
-        ).rejects.toThrow('Nuxt supports only auth none');
+        ).rejects.toThrow('Nuxt currently supports only --auth none');
         expect(await readdir(cwd)).toEqual([]);
       }
     },
@@ -431,7 +487,7 @@ describe.each(['pnpm', 'bun'] as const)(
   (packageManager) => {
     it('coexists with every framework without authentication', () => {
       const options = normalizeOptions({
-        apps: 'next,vite,tanstack-start,expo,router:react-router,island:astro,portal:nuxt',
+        apps: 'next,vite,tanstack-start,expo,router:react-router,island:astro,svelte:sveltekit,portal:nuxt',
         auth: 'none',
         packageManager,
       });
@@ -442,6 +498,7 @@ describe.each(['pnpm', 'bun'] as const)(
         'expo',
         'react-router',
         'astro',
+        'sveltekit',
         'nuxt',
       ]);
       expect(options.packageManager).toBe(packageManager);
@@ -458,10 +515,10 @@ describe.each(['pnpm', 'bun'] as const)(
           packageManager,
         };
         expect(() => normalizeOptions(options)).toThrow(
-          'Nuxt supports only auth none',
+          'Nuxt currently supports only --auth none',
         );
         await expect(generateProject(options, { cwd })).rejects.toThrow(
-          'Nuxt supports only auth none',
+          'Nuxt currently supports only --auth none',
         );
         expect(await readdir(cwd)).toEqual([]);
       },

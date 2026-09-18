@@ -3,6 +3,7 @@ import { uiRuntime, writeProviders } from '../shared.js';
 export const noneAdapter: AuthAdapter = {
   id: 'none',
   label: 'None',
+  supportedRuntimes: ['react', 'svelte', 'vue'],
   async apply(ctx) {
     if (ctx.options.example === 'messages')
       await ctx.write(
@@ -20,7 +21,7 @@ export async function getOwner(_ctx: QueryCtx | MutationCtx): Promise<string | u
           'export default [];\n',
         );
       await writeProviders(ctx, app);
-      if (uiRuntime(app) === 'vue') {
+      if (uiRuntime(app.framework) === 'vue') {
         await ctx.write(
           `apps/${app.name}/src/components/AuthControls.vue`,
           `<script lang="ts">
@@ -28,6 +29,13 @@ import { defineComponent } from 'vue';
 export default defineComponent({ render: () => null });
 </script>
 `,
+        );
+        continue;
+      }
+      if (uiRuntime(app.framework) === 'svelte') {
+        await ctx.write(
+          `apps/${app.name}/src/AuthControls.svelte`,
+          '<!-- No authentication controls for --auth none. -->\n',
         );
         continue;
       }

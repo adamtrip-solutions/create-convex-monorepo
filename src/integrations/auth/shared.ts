@@ -1,7 +1,22 @@
-import type { AppSpec, GeneratorContext } from '../../generator/types.js';
+import type {
+  AppSpec,
+  Framework,
+  GeneratorContext,
+} from '../../generator/types.js';
 
-export function uiRuntime(app: AppSpec): 'react' | 'vue' {
-  return app.framework === 'nuxt' ? 'vue' : 'react';
+export type UiRuntime = 'react' | 'svelte' | 'vue';
+const runtimes: Record<Framework, UiRuntime> = {
+  next: 'react',
+  vite: 'react',
+  'tanstack-start': 'react',
+  expo: 'react',
+  'react-router': 'react',
+  sveltekit: 'svelte',
+  nuxt: 'vue',
+  astro: 'react',
+};
+export function uiRuntime(framework: Framework): UiRuntime {
+  return runtimes[framework];
 }
 
 export function platform(app: AppSpec) {
@@ -13,12 +28,14 @@ export function platform(app: AppSpec) {
         ? 'NEXT_PUBLIC'
         : native
           ? 'EXPO_PUBLIC'
-          : app.framework === 'astro'
+          : app.framework === 'astro' || app.framework === 'sveltekit'
             ? 'PUBLIC'
             : 'VITE';
   const env = (name: string) =>
-    `${prefix === 'VITE' || prefix === 'PUBLIC' ? 'import.meta.env' : 'process.env'}.${prefix}_${name}`;
-  return { native, prefix, env };
+    app.framework === 'sveltekit'
+      ? `PUBLIC_${name}`
+      : `${prefix === 'VITE' || prefix === 'PUBLIC' ? 'import.meta.env' : 'process.env'}.${prefix}_${name}`;
+  return { native, prefix, env, runtime: uiRuntime(app.framework) };
 }
 
 export async function writeProviders(
@@ -31,7 +48,7 @@ export async function writeProviders(
     providerProps?: string;
   },
 ): Promise<void> {
-  if (uiRuntime(app) === 'vue') {
+  if (uiRuntime(app.framework) === 'vue') {
     await ctx.write(
       `apps/${app.name}/src/plugins/convex.client.ts`,
       `import { defineNuxtPlugin, useRuntimeConfig } from '#app';
@@ -55,6 +72,27 @@ const config = useRuntimeConfig();
   <p v-if="!config.public.convexUrl">Set NUXT_PUBLIC_CONVEX_URL in this app's .env.local.</p>
   <ClientOnly v-else><slot /></ClientOnly>
 </template>
+`,
+    );
+    return;
+  }
+  if (uiRuntime(app.framework) === 'svelte') {
+    if (auth) throw new Error('SvelteKit currently supports only --auth none.');
+    await ctx.write(
+      `apps/${app.name}/src/Providers.svelte`,
+      `<script lang="ts">
+  import type { Snippet } from 'svelte';
+  import { setupConvex } from 'convex-svelte';
+  import { PUBLIC_CONVEX_URL } from '$env/static/public';
+  let { children }: { children: Snippet } = $props();
+  if (PUBLIC_CONVEX_URL) setupConvex(PUBLIC_CONVEX_URL);
+</script>
+
+{#if PUBLIC_CONVEX_URL}
+  {@render children()}
+{:else}
+  <p>Set PUBLIC_CONVEX_URL in this app's .env.local.</p>
+{/if}
 `,
     );
     return;

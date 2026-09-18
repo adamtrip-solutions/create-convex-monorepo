@@ -100,32 +100,33 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
   }
 }
 
-// Preserve the Nuxt feature scenarios and exercise both package managers.
 for (const packageManager of ['pnpm', 'bun'] as const) {
-  const nuxtScenarios = [
+  for (const scenario of [
+    { label: 'Nuxt only', apps: 'nuxt' },
+    { label: 'Nuxt + Vite (blank)', apps: 'nuxt,vite', example: 'none' },
+    { label: 'Next + Nuxt', apps: 'next,nuxt' },
+    { label: 'Nuxt + SvelteKit + Vite', apps: 'nuxt,sveltekit,vite' },
+    { label: 'SvelteKit messages', apps: 'sveltekit' },
     {
-      label: 'Nuxt only',
-      apps: 'nuxt',
-      auth: 'none',
-    },
-    {
-      label: 'Nuxt + Vite (blank)',
-      apps: 'nuxt,vite',
-      auth: 'none',
+      label: 'SvelteKit + Next blank',
+      apps: 'sveltekit,next',
       example: 'none',
     },
     {
-      label: 'Next + Nuxt',
-      apps: 'next,nuxt',
-      auth: 'none',
+      label: 'All six frameworks',
+      apps: 'next,vite,tanstack-start,react-router,expo,sveltekit',
     },
-  ];
-  for (const scenario of nuxtScenarios) {
+    {
+      label: 'All seven frameworks',
+      apps: 'next,vite,tanstack-start,react-router,expo,sveltekit,astro',
+    },
+  ]) {
     const label = `${packageManager === 'bun' ? 'Bun ' : ''}${scenario.label}`;
     if (!scenarios.some((existing) => existing.label === label))
       scenarios.push({
         ...scenario,
         label,
+        auth: 'none',
         ...(packageManager === 'bun' ? { packageManager } : {}),
         expected: [],
       });

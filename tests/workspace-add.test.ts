@@ -479,7 +479,7 @@ it('checks backend contract guards again when an app plan is applied', async () 
   expect(await snapshot(workspace.root)).toEqual(before);
 });
 
-it.each(frameworks)(
+it.each<Framework>([...frameworks, 'sveltekit'])(
   'links only the public URL into the new %s app',
   async (framework) => {
     const workspace = await fixture('none');
@@ -506,7 +506,7 @@ it.each(frameworks)(
         ? 'NEXT_PUBLIC'
         : framework === 'expo'
           ? 'EXPO_PUBLIC'
-          : framework === 'astro'
+          : framework === 'sveltekit' || framework === 'astro'
             ? 'PUBLIC'
             : 'VITE';
     expect(after['apps/extra/.env.local']).toBe(
@@ -594,7 +594,7 @@ it('adds Clerk to a blank workspace without replacing a customized schema', asyn
   expect(await readFile(path, 'utf8')).toBe(custom);
 });
 
-it.each(frameworks)(
+it.each<Framework>([...frameworks, 'sveltekit'])(
   'assigns the workspace-index port to a new %s app',
   async (framework) => {
     const workspace = await fixture('none');
@@ -1744,6 +1744,185 @@ it('respects per-app blank overrides when adding Convex Auth', async () => {
   expect(files['apps/web/src/messages.tsx']).toContain('api.messages');
 });
 
+describe('SvelteKit workspace additions', () => {
+  it.each<Example>(['none', 'messages'])(
+    'adds the %s starter without changing existing files',
+    async (example) => {
+      const workspace = await fixture(example);
+      const before = await snapshot(workspace.root);
+      const plan = await planAddApp(workspace, {
+        name: 'svelte',
+        framework: 'sveltekit',
+      });
+      expect(await snapshot(workspace.root)).toEqual(before);
+      await applyPlan(plan, { dryRun: true });
+      expect(await snapshot(workspace.root)).toEqual(before);
+      await applyPlan(plan);
+      const after = await snapshot(workspace.root);
+      for (const [path, contents] of Object.entries(before)) {
+        if (!['package.json', 'convex-monorepo.json'].includes(path))
+          expect(after[path], path).toBe(contents);
+      }
+      expect(after['apps/svelte/src/Providers.svelte']).toContain(
+        'setupConvex',
+      );
+      expect(after['apps/svelte/src/providers.tsx']).toBeUndefined();
+      expect(after['apps/svelte/src/routes/+page.svelte']).toContain(
+        example === 'none' ? '<h1>svelte</h1>' : '<Messages',
+      );
+      expect(Boolean(after['apps/svelte/src/convex-api.type-test.ts'])).toBe(
+        example === 'messages',
+      );
+      const reloaded = await loadWorkspace(workspace.root);
+      expect(reloaded.config.apps).toContainEqual({
+        name: 'svelte',
+        framework: 'sveltekit',
+      });
+    },
+  );
+  it.each<Auth>(['clerk', 'convex-auth', 'workos', 'better-auth'])(
+    'rejects an app addition to a %s workspace before writes',
+    async (auth) => {
+      const workspace = await fixture('messages', auth);
+      const before = await snapshot(workspace.root);
+      await expect(
+        planAddApp(workspace, { name: 'svelte', framework: 'sveltekit' }),
+      ).rejects.toThrow('SvelteKit currently supports only --auth none');
+      expect(await snapshot(workspace.root)).toEqual(before);
+    },
+  );
+  it.each(['clerk', 'convex-auth', 'workos', 'better-auth', 'custom'])(
+    'rejects adding %s auth to a SvelteKit workspace before writes',
+    async (auth) => {
+      const workspace = await fixture('messages', 'none', 'sveltekit');
+      const before = await snapshot(workspace.root);
+      await expect(
+        planAddAuth(workspace, auth as 'clerk' | 'convex-auth'),
+      ).rejects.toThrow('SvelteKit currently supports only --auth none');
+      expect(await snapshot(workspace.root)).toEqual(before);
+    },
+  );
+});
+
+it.each(['\n', '\r\n'])(
+  'adds SvelteKit to a legacy workspace with %j line endings and preserves custom root configuration',
+  async (newline) => {
+    const workspace = await fixture('none');
+    const setupPath = join(workspace.root, 'scripts/convex-setup.mjs');
+    const legacySetup = (await readFile(setupPath, 'utf8'))
+      .replace(/    case 'sveltekit':\n      return 'PUBLIC_CONVEX_URL';\n/, '')
+      .replace(/\r?\n/g, newline);
+    expect(legacySetup).not.toContain("case 'sveltekit'");
+    await writeFile(setupPath, legacySetup);
+    const ignorePath = join(workspace.root, '.prettierignore');
+    const customIgnore =
+      (await readFile(ignorePath, 'utf8'))
+        .replace('**/.svelte-kit/\n', '')
+        .replace('**/build/\n', '')
+        .replace(/\r?\n/g, newline) +
+      '# User settings' +
+      newline +
+      'custom-output/';
+    await writeFile(ignorePath, customIgnore);
+    const turboPath = join(workspace.root, 'turbo.json');
+    const rootTurbo = JSON.parse(await readFile(turboPath, 'utf8'));
+    rootTurbo.tasks.build.outputs = ['custom-dist/**'];
+    rootTurbo.tasks.build.env = ['CUSTOM_BUILD_ENV'];
+    rootTurbo.tasks.dev.passThroughEnv = ['CUSTOM_DEV_ENV'];
+    rootTurbo.tasks.custom = { cache: false };
+    const customTurbo = JSON.stringify(rootTurbo, null, 4) + newline;
+    await writeFile(turboPath, customTurbo);
+    const before = await snapshot(workspace.root);
+    const plan = await planAddApp(workspace, {
+      name: 'svelte',
+      framework: 'sveltekit',
+    });
+    expect(await snapshot(workspace.root)).toEqual(before);
+    await applyPlan(plan, { dryRun: true });
+    expect(await snapshot(workspace.root)).toEqual(before);
+    await applyPlan(plan);
+    const after = await snapshot(workspace.root);
+    for (const [path, contents] of Object.entries(before)) {
+      if (
+        ![
+          'package.json',
+          'convex-monorepo.json',
+          'scripts/convex-setup.mjs',
+          '.prettierignore',
+        ].includes(path)
+      )
+        expect(after[path], path).toBe(contents);
+    }
+    expect(after['turbo.json']).toBe(customTurbo);
+    expect(after['.prettierignore']).toBe(
+      `${customIgnore}${newline}**/.svelte-kit/${newline}**/build/${newline}`,
+    );
+    expect(after['scripts/convex-setup.mjs']).toContain(
+      `case 'sveltekit':${newline}      return 'PUBLIC_CONVEX_URL';`,
+    );
+    expect(JSON.parse(after['apps/svelte/turbo.json']!)).toEqual({
+      extends: ['//'],
+      tasks: {
+        dev: { passThroughEnv: ['PUBLIC_*'] },
+        build: {
+          inputs: ['$TURBO_DEFAULT$', '.env*'],
+          outputs: ['.svelte-kit/**', 'build/**'],
+          env: ['PUBLIC_*'],
+        },
+        typecheck: { env: ['PUBLIC_*'] },
+      },
+    });
+    expect(after['apps/svelte/prettier.config.js']).toContain(
+      "createRequire(import.meta.url).resolve('prettier-plugin-svelte')",
+    );
+    await writeFile(
+      join(workspace.root, 'packages/backend/.env.local'),
+      'CONVEX_URL=https://legacy-linked.convex.cloud\n',
+    );
+    await promisify(execFile)(
+      process.execPath,
+      [await realpath(setupPath), '--link-only'],
+      {
+        cwd: workspace.root,
+      },
+    );
+    expect(
+      await readFile(join(workspace.root, 'apps/svelte/.env.local'), 'utf8'),
+    ).toBe('PUBLIC_CONVEX_URL=https://legacy-linked.convex.cloud\n');
+    const nextPlan = await planAddApp(await loadWorkspace(workspace.root), {
+      name: 'second-svelte',
+      framework: 'sveltekit',
+    });
+    expect(
+      nextPlan.changes.some((change) =>
+        ['scripts/convex-setup.mjs', '.prettierignore', 'turbo.json'].includes(
+          change.path,
+        ),
+      ),
+    ).toBe(false);
+  },
+);
+
+it.each(['customized', 'missing'])(
+  'rejects a %s setup script before adding SvelteKit without writes',
+  async (state) => {
+    const workspace = await fixture('none');
+    const path = join(workspace.root, 'scripts/convex-setup.mjs');
+    if (state === 'missing') await rm(path);
+    else
+      await writeFile(
+        path,
+        `${await readFile(path, 'utf8')}\n// Custom setup behavior must survive.\n`,
+      );
+    const before = await snapshot(workspace.root);
+    await expect(
+      planAddApp(workspace, { name: 'svelte', framework: 'sveltekit' }),
+    ).rejects.toThrow(
+      'Customized or missing scripts/convex-setup.mjs cannot be updated safely for SvelteKit',
+    );
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
 it('adds Astro to a customized pre-Astro Vite workspace and updates its URL helper and Turbo environment', async () => {
   const workspace = await fixture('messages', 'none', 'vite');
   const root = workspace.root;
@@ -2283,6 +2462,44 @@ it.each(['npm', 'yarn', 'unknown'])(
   },
 );
 
+it.each(['pnpm', 'bun'] as const)(
+  'rejects SvelteKit addition to a %s OAuth workspace without writes',
+  async (packageManager) => {
+    const cwd = await mkdtemp(join(tmpdir(), 'ccm-add-oauth-test-'));
+    temporary.push(cwd);
+    const root = await generateProject(
+      {
+        name: 'sample',
+        apps: 'next',
+        auth: 'convex-auth',
+        oauth: 'github,google',
+        packageManager,
+        install: false,
+        git: false,
+      },
+      { cwd },
+    );
+    const workspace = await loadWorkspace(root);
+    const before = await snapshot(root);
+    await expect(
+      planAddApp(workspace, { name: 'svelte', framework: 'sveltekit' }),
+    ).rejects.toThrow('SvelteKit currently supports only --auth none');
+    expect(await snapshot(root)).toEqual(before);
+  },
+);
+
+it.each(['pnpm', 'bun'] as const)(
+  'rejects OAuth installation in a %s SvelteKit workspace without writes',
+  async (manager) => {
+    const workspace = await fixture('messages', 'none', 'sveltekit', manager);
+    const before = await snapshot(workspace.root);
+    await expect(
+      planAddAuth(workspace, 'convex-auth', { oauth: 'github,google' }),
+    ).rejects.toThrow('SvelteKit currently supports only --auth none');
+    expect(await snapshot(workspace.root)).toEqual(before);
+  },
+);
+
 describe.each<Example>(['messages', 'none'])(
   'adds Better Auth with %s',
   (example) => {
@@ -2783,7 +3000,7 @@ describe('adding Nuxt', () => {
       const before = await snapshot(workspace.root);
       await expect(
         planAddApp(workspace, { name: 'portal', framework: 'nuxt' }),
-      ).rejects.toThrow('Nuxt supports only auth none');
+      ).rejects.toThrow('Nuxt currently supports only --auth none');
       expect(await snapshot(workspace.root)).toEqual(before);
     },
   );
@@ -2798,7 +3015,7 @@ describe('adding Nuxt', () => {
       await rm(join(workspace.root, 'apps/web/package.json'));
       const before = await snapshot(workspace.root);
       await expect(planAddAuth(workspace, auth)).rejects.toThrow(
-        'Nuxt supports only auth none',
+        'Nuxt currently supports only --auth none',
       );
       expect(await snapshot(workspace.root)).toEqual(before);
     },
@@ -3017,7 +3234,7 @@ describe.each(['pnpm', 'bun'] as const)(
         const before = await snapshot(workspace.root);
         await expect(
           planAddAuth(workspace, 'convex-auth', { oauth }),
-        ).rejects.toThrow('Nuxt supports only auth none');
+        ).rejects.toThrow('Nuxt currently supports only --auth none');
         expect(await snapshot(workspace.root)).toEqual(before);
       },
     );
@@ -3031,7 +3248,7 @@ describe.each(['pnpm', 'bun'] as const)(
         const before = await snapshot(workspace.root);
         await expect(
           planAddApp(workspace, { name: 'portal', framework: 'nuxt' }),
-        ).rejects.toThrow('Nuxt supports only auth none');
+        ).rejects.toThrow('Nuxt currently supports only --auth none');
         expect(await snapshot(workspace.root)).toEqual(before);
       },
     );

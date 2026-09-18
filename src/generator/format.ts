@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { extname } from 'node:path';
 import { format, type Options } from 'prettier';
 
@@ -11,6 +12,7 @@ const extensions = new Set([
   '.vue',
   '.ts',
   '.tsx',
+  '.svelte',
   '.mts',
   '.cts',
   '.js',
@@ -36,7 +38,18 @@ export async function formatGeneratedFile(
   )
     return source;
   if (!extensions.has(extname(path))) return source;
-  return format(source, { ...formattingOptions, filepath: path });
+  return format(source, {
+    ...formattingOptions,
+    filepath: path,
+    ...(extname(path) === '.svelte'
+      ? {
+          plugins: [
+            createRequire(import.meta.url).resolve('prettier-plugin-svelte'),
+          ],
+          parser: 'svelte',
+        }
+      : {}),
+  });
 }
 
 /** Accept formatting differences in older starters, but retain code/comment conflicts. */
