@@ -76,6 +76,16 @@ jobs:
           - apps: next,vite,tanstack-start,expo
             auth: convex-auth
             example: none
+          - apps: next,expo
+            auth: better-auth
+          - apps: vite,tanstack-start
+            auth: better-auth
+          - apps: next,expo
+            auth: better-auth
+            example: none
+          - apps: vite,tanstack-start
+            auth: better-auth
+            example: none
           - apps: next,vite,tanstack-start,expo
             auth: none
             example: none

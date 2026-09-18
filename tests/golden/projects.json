@@ -114,5 +114,29 @@
     "auth": "convex-auth",
     "example": "none",
     "expected": [["web", "vite", "VITE", "@convex-dev/auth"]]
+  },
+  {
+    "label": "All four + Better Auth (messages)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "better-auth",
+    "example": "messages",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "better-auth"],
+      ["admin", "vite", "VITE", "better-auth"],
+      ["app", "tanstack-start", "VITE", "better-auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "better-auth"]
+    ]
+  },
+  {
+    "label": "All four + Better Auth (none)",
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "better-auth",
+    "example": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", "better-auth"],
+      ["admin", "vite", "VITE", "better-auth"],
+      ["app", "tanstack-start", "VITE", "better-auth"],
+      ["mobile", "expo", "EXPO_PUBLIC", "better-auth"]
+    ]
   }
 ]

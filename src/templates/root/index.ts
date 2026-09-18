@@ -3,6 +3,7 @@ import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
 import { versions as v } from '../versions.js';
 import { formattingOptions } from '../../generator/format.js';
+import { betterAuthSetup } from '../../integrations/auth/better-auth/setup.js';
 import { convexAuthSetup } from '../../integrations/auth/convex-auth/setup.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
@@ -34,6 +35,16 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
       ),
     );
     scripts['convex:auth-keys'] = 'node scripts/convex-auth-keys.mjs';
+  }
+  if (options.auth === 'better-auth') {
+    await ctx.write(
+      'scripts/better-auth-env.mjs',
+      await readFile(
+        new URL('../../../assets/setup/better-auth-env.mjs', import.meta.url),
+        'utf8',
+      ),
+    );
+    scripts['convex:better-auth-env'] = 'node scripts/better-auth-env.mjs';
   }
   for (const app of options.apps)
     scripts[`dev:${app.name}`] = `pnpm --filter @${scope}/${app.name} dev`;
@@ -84,7 +95,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   });
   await ctx.write(
     '.gitignore',
-    `node_modules/\n.turbo/\n.next/\n.output/\ndist/\n.expo/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
+    `node_modules/\n.turbo/\n.next/\n.output/\ndist/\n.expo/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : options.auth === 'better-auth' ? '!.env.better-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
   );
   await ctx.json('convex-monorepo.json', {
     version: 1,
@@ -184,9 +195,11 @@ ${options.example === 'messages' ? 'The backend checks identity and uses an owne
 `
     : options.auth === 'convex-auth'
       ? convexAuthSetup(scope, options.example === 'messages')
-      : options.example === 'none'
-        ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run pnpm convex:dev to regenerate the shared API.\n`
-        : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
+      : options.auth === 'better-auth'
+        ? betterAuthSetup(options)
+        : options.example === 'none'
+          ? `No example tables or functions are included. Add tables to packages/backend/convex/schema.ts and functions to that directory, then run pnpm convex:dev to regenerate the shared API.\n`
+          : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
 `
 }
 ## Development
@@ -210,7 +223,7 @@ import { api } from '@${scope}/backend/api';
 import type { Doc, Id } from '@${scope}/backend/dataModel';
 \`\`\`
 
-These package exports point directly to official Convex generated files. Keep convex/_generated committed. Run convex:dev after adding backend modules. Do not bundle declarations or copy backend code into apps. ${options.example === 'messages' ? 'Each app includes convex-api.type-test.ts with positive and negative compile-time assertions.' : options.auth === 'convex-auth' ? 'The API includes authentication functions and gains typed references when you add functions and run Convex code generation.' : 'The API starts empty and gains typed references when you add functions and run Convex code generation.'} Backend build checks types, it does not deploy functions.
+These package exports point directly to official Convex generated files. Keep convex/_generated committed. Run convex:dev after adding backend modules. Do not bundle declarations or copy backend code into apps. ${options.example === 'messages' ? 'Each app includes convex-api.type-test.ts with positive and negative compile-time assertions.' : options.auth === 'convex-auth' || options.auth === 'better-auth' ? 'The API includes authentication functions and gains typed references when you add functions and run Convex code generation.' : 'The API starts empty and gains typed references when you add functions and run Convex code generation.'} Backend build checks types, it does not deploy functions.
 
 TanStack Start uses client Convex hooks. Server-side data preloading is not configured. Next uses the App Router. Expo uses the default Metro workspace resolver and the SDK's React/React Native versions. Avoid independently upgrading React in one app.
 
@@ -218,7 +231,7 @@ TanStack Start uses client Convex hooks. Server-side data preloading is not conf
 
 Deploy the backend explicitly with pnpm --filter @${scope}/backend exec convex deploy, then set each hosting provider's matching public URL and build that app. Never use production deploy keys for local development. Public variables are embedded at build time; rebuild after changing them.
 
-A missing URL screen means that app's .env.local needs its framework-specific URL. ${options.auth === 'convex-auth' ? 'For sign-in failures, check JWT_PRIVATE_KEY and JWKS on the selected deployment and confirm auth.config.ts, auth.ts, and http.ts were pushed.' : 'Authentication failures usually mean the Clerk convex JWT template or deployment issuer is missing.'} If generated types are missing, run convex:dev from the backend package and verify that .d.ts files are committed. Metro cache problems after dependency changes can be cleared with pnpm --filter @${scope}/${options.apps.find((a) => a.framework === 'expo')?.name ?? options.apps[0]?.name} exec expo start --clear when using Expo. No symlink resolver overrides should be needed.
+A missing URL screen means that app's .env.local needs its framework-specific URL. ${options.auth === 'better-auth' ? 'For sign-in failures, check deployment BETTER_AUTH_SECRET, SITE_URL, and trusted origins, each frontend HTTP action URL, and the component registration. See Better Auth setup above.' : options.auth === 'convex-auth' ? 'For sign-in failures, check JWT_PRIVATE_KEY and JWKS on the selected deployment and confirm auth.config.ts, auth.ts, and http.ts were pushed.' : 'Authentication failures usually mean the Clerk convex JWT template or deployment issuer is missing.'} If generated types are missing, run convex:dev from the backend package and verify that .d.ts files are committed. Metro cache problems after dependency changes can be cleared with pnpm --filter @${scope}/${options.apps.find((a) => a.framework === 'expo')?.name ?? options.apps[0]?.name} exec expo start --clear when using Expo. No symlink resolver overrides should be needed.
 `,
   );
 }
