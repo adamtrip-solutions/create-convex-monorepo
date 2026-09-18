@@ -1,3 +1,4 @@
+import { workosBindings } from '../integrations/auth/workos/index.js';
 import type {
   AppSpec,
   Auth,
@@ -22,6 +23,7 @@ export const frameworks: readonly Framework[] = [
   'next',
   'vite',
   'tanstack-start',
+  'react-router',
   'expo',
 ];
 export const oauthProviders: readonly OAuthProvider[] = ['github', 'google'];
@@ -74,9 +76,14 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
   if (example !== 'none' && example !== 'messages')
     throw new Error(`Unknown example "${example}". Choose none or messages.`);
   const auth = raw.auth ?? 'none';
-  if (auth !== 'none' && auth !== 'clerk' && auth !== 'convex-auth')
+  if (
+    auth !== 'none' &&
+    auth !== 'clerk' &&
+    auth !== 'convex-auth' &&
+    auth !== 'workos'
+  )
     throw new Error(
-      `Unknown auth provider "${auth}". Choose none, clerk, or convex-auth.`,
+      `Unknown auth provider "${auth}". Choose none, clerk, convex-auth, or workos.`,
     );
   const oauth = normalizeOAuthProviders(raw.oauth, auth);
   const used = new Set<string>();
@@ -128,6 +135,13 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     used.add(appName);
     return { name: appName, framework };
   });
+  if (auth === 'workos') {
+    const unsupported = apps.find((app) => !workosBindings[app.framework]);
+    if (unsupported)
+      throw new Error(
+        `WorkOS AuthKit is not supported by this generator for framework "${unsupported.framework}". Choose ${Object.keys(workosBindings).join(', ')}.${unsupported.framework === 'expo' ? ' No official Expo / React Native AuthKit SDK is available.' : ''}`,
+      );
+  }
   return {
     name,
     apps,

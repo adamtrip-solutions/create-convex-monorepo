@@ -50,7 +50,7 @@ CONVEX_SITE_URL is supplied by Convex. auth.config.ts uses it as the issuer with
 
 ${messages ? 'Messages belong to the Convex Auth users table ID returned by getAuthUserId(ctx). Different sessions for the same account share those messages.' : 'The blank starter includes auth tables and auth functions, but no messages example. Use getAuthUserId(ctx) and enforce authorization in each protected function you add.'} Switching from Clerk changes the owner key from tokenIdentifier to the Convex Auth users table ID and requires a data migration. Provider replacement is not supported. Install Convex Auth in an existing no-auth workspace with add auth convex-auth.
 
-Next.js and TanStack Start use client authentication only. Server-side authentication, authenticated SSR, Next.js server providers, and auth middleware are not configured. ${oauth.length ? 'Magic links' : 'OAuth, magic links'}, email verification, password reset, and MFA are outside this starter.
+Next.js, TanStack Start, and React Router use client authentication only. Server-side authentication, authenticated SSR, Next.js server providers, and auth middleware are not configured. ${oauth.length ? 'Magic links' : 'OAuth, magic links'}, email verification, password reset, and MFA are outside this starter.
 `;
 }
 

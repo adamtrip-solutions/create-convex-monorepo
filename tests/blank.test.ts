@@ -17,16 +17,27 @@ it('normalizes example selection and rejects unsupported examples', () => {
   );
 });
 
-describe.each(['none', 'clerk', 'convex-auth'])(
+describe.each(['none', 'clerk', 'convex-auth', 'workos'])(
   'blank projects with %s auth',
   (auth) => {
-    it.each([
-      'next',
-      'vite',
-      'tanstack-start',
-      'expo',
-      'next,admin:vite,portal:tanstack-start,expo',
-    ])('generates %s without demo code', async (apps) => {
+    it.each(
+      auth === 'workos'
+        ? [
+            'next',
+            'vite',
+            'tanstack-start',
+            'next,admin:vite,portal:tanstack-start',
+          ]
+        : [
+            'next',
+            'vite',
+            'tanstack-start',
+            'expo',
+            'react-router',
+            'next,admin:vite,portal:tanstack-start,expo',
+            'next,admin:vite,portal:tanstack-start,expo,router:react-router',
+          ],
+    )('generates %s without demo code', async (apps) => {
       const cwd = await mkdtemp(join(tmpdir(), 'ccm-blank-'));
       try {
         const root = await generateProject(
@@ -71,19 +82,27 @@ describe.each(['none', 'clerk', 'convex-auth'])(
                 ? 'src/main.tsx'
                 : app.framework === 'expo'
                   ? 'App.tsx'
-                  : 'src/routes/index.tsx';
+                  : app.framework === 'react-router'
+                    ? 'app/routes/home.tsx'
+                    : 'src/routes/index.tsx';
           expect(await read(`${dir}/${entry}`)).toContain(
             app.framework === 'expo'
               ? `<Text>${app.name}</Text>`
               : `<h1>${app.name}</h1>`,
           );
-          expect(await read(`${dir}/${entry}`)).toContain('<Providers>');
+          expect(
+            await read(
+              `${dir}/${app.framework === 'react-router' ? 'app/root.tsx' : entry}`,
+            ),
+          ).toContain('<Providers>');
           expect(await read(`${dir}/src/providers.tsx`)).toContain(
             auth === 'clerk'
               ? 'ConvexProviderWithClerk'
               : auth === 'convex-auth'
                 ? 'ConvexAuthProvider'
-                : 'ConvexProvider',
+                : auth === 'workos'
+                  ? 'ConvexProviderWithAuth'
+                  : 'ConvexProvider',
           );
         }
         expect(files.includes('packages/backend/convex/auth.config.ts')).toBe(

@@ -20,9 +20,9 @@ as add or doctor. Inside an existing workspace, running without arguments opens
 the management menu. Commands: add app, add auth clerk, doctor, env sync,
 upgrade --check. No global or project installation is required.
 
-  --apps <list>             next,vite,tanstack-start,expo or web:next,admin:vite
+  --apps <list>             next,vite,tanstack-start,react-router,expo or web:next,admin:vite
   --example <name>         messages (default) or none for blank apps
-  --auth <provider>         none (default), clerk, or convex-auth
+  --auth <provider>         none (default), clerk, convex-auth, or workos
   --oauth <providers>       github,google (requires --auth convex-auth)
   --package-manager <name>  pnpm (default) or bun
   --install / --no-install  Install generated dependencies
@@ -146,6 +146,7 @@ export async function runCreate(
                 next: 'Next.js',
                 vite: 'Vite + React',
                 'tanstack-start': 'TanStack Start',
+                'react-router': 'React Router v7',
                 expo: 'Expo / React Native',
               }[value],
             })),
@@ -186,6 +187,7 @@ export async function runCreate(
           options: [
             { value: 'none', label: 'None' },
             { value: 'clerk', label: 'Clerk' },
+            { value: 'workos', label: 'WorkOS AuthKit' },
             { value: 'convex-auth', label: 'Convex Auth (email + password)' },
           ],
         }),
@@ -245,6 +247,6 @@ export async function runCreate(
   });
   const run = (script: string) => scriptCommand(options.packageManager, script);
   console.log(
-    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : `  ${options.packageManager} install\n`}${options.initConvex ? `  ${run('dev')}` : `  ${run('convex:setup')}\n  ${run('dev')}`}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
+    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : `  ${options.packageManager} install\n`}${options.initConvex ? `  ${run('dev')}` : `  ${run('convex:setup')}\n  ${run('dev')}`}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'workos' ? '\nAdd WorkOS settings from .env.workos.example and complete the auth setup in README.md.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
   );
 }

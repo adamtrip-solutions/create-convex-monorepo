@@ -1,4 +1,5 @@
 import { scriptCommand, workspaceScript } from '../package-manager/index.js';
+import { createHash } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parsers } from 'prettier/plugins/typescript';
@@ -122,6 +123,52 @@ async function verifyMessages(
   }
 }
 
+async function equivalentLegacySetupHelper(
+  path: string,
+  current: string | null,
+  baseline: string,
+) {
+  if (current === null) return false;
+  try {
+    const formatted = await formatGeneratedFile(path, current);
+    const mapping =
+      /export function publicVariable\(framework\) \{[\s\S]*?^\}/m;
+    const currentMapping = formatted.match(mapping)?.[0];
+    if (!currentMapping) return false;
+    const frameworks = new Set(
+      [...currentMapping.matchAll(/case '([^']+)':/g)].map((match) => match[1]),
+    );
+    // Older releases lack cases for newer frameworks. Only remove those
+    // branches from the generated map; compare all remaining code/comments.
+    const legacy = baseline.replace(mapping, (generatedMapping) =>
+      generatedMapping.replace(
+        /((?:    case '[^']+':\n)+)(      return '[^']+';\n)/g,
+        (_branch, cases: string, result: string) => {
+          const retained = cases.replace(
+            /    case '([^']+)':\n/g,
+            (line, framework: string) =>
+              frameworks.has(framework) ? line : '',
+          );
+          return retained ? retained + result : '';
+        },
+      ),
+    );
+    if (await equivalentGeneratedFile(path, current, legacy)) return true;
+    // The pre-Bun helper also predates React Router. Recognize its exact
+    // formatted body, while checking its framework map separately. Never
+    // replace user changes outside the missing framework cases.
+    return (
+      currentMapping === legacy.match(mapping)?.[0] &&
+      createHash('sha256')
+        .update(formatted.replace(mapping, ''))
+        .digest('hex') ===
+        '7cb94228bbba1afde8f8d896a8ecd40078a78922f71bd55b750f5c9694bc30ac'
+    );
+  } catch {
+    return false;
+  }
+}
+
 function mergePackage(
   currentText: string,
   beforeText: string,
@@ -211,6 +258,29 @@ export async function planAddApp(
     example,
     workspace.config.auth,
   );
+  const baseline = await render(
+    workspace,
+    workspace.config.apps,
+    workspace.config.example,
+    workspace.config.auth,
+  );
+  const setupPath = 'scripts/convex-setup.mjs';
+  const setupBefore = await guardedRead(workspace, plan, setupPath);
+  const setupAfter = generated.get(setupPath)!;
+  const setupBaseline = baseline.get(setupPath)!;
+  if (
+    (await equivalentGeneratedFile(setupPath, setupBefore, setupBaseline)) ||
+    (await equivalentGeneratedFile(setupPath, setupBefore, setupAfter)) ||
+    (await equivalentLegacySetupHelper(setupPath, setupBefore, setupBaseline))
+  ) {
+    const after = retainNewlines(setupAfter, setupBefore);
+    if (setupBefore !== after)
+      plan.changes.push({ path: setupPath, before: setupBefore, after });
+  } else {
+    plan.notes.push(
+      `${setupPath} is missing or customized. Copy the current helper from a fresh project or update its framework map to support ${app.framework} before running ${scriptCommand(workspace.config.packageManager, 'convex:setup')} or ${scriptCommand(workspace.config.packageManager, 'convex:link')}.`,
+    );
+  }
   const newPort =
     (app.framework === 'expo' ? 8081 : 3000) + workspace.config.apps.length;
   for (const existing of workspace.config.apps) {
@@ -228,7 +298,8 @@ export async function planAddApp(
     );
     if (
       existing.framework === 'vite' ||
-      existing.framework === 'tanstack-start'
+      existing.framework === 'tanstack-start' ||
+      existing.framework === 'react-router'
     ) {
       const configPath = `apps/${existing.name}/vite.config.ts`;
       const config = await guardedRead(workspace, plan, configPath);
@@ -246,10 +317,15 @@ export async function planAddApp(
   if (example === 'messages') await verifyMessages(workspace, plan, generated);
   if (workspace.config.auth !== 'none') {
     const files =
-      workspace.config.auth === 'clerk'
+      workspace.config.auth !== 'convex-auth'
         ? ['auth.config.ts']
         : ['auth.config.ts', 'auth.ts', 'http.ts'];
-    const label = workspace.config.auth === 'clerk' ? 'Clerk' : 'Convex Auth';
+    const label =
+      workspace.config.auth === 'clerk'
+        ? 'Clerk'
+        : workspace.config.auth === 'workos'
+          ? 'WorkOS AuthKit'
+          : 'Convex Auth';
     const baseline = workspace.config.oauth?.length
       ? await render(
           workspace,
@@ -276,6 +352,27 @@ export async function planAddApp(
   for (const [path, after] of generated) {
     if (path.startsWith(`${dir}/`))
       plan.changes.push({ path, before: null, after });
+  }
+  if (app.framework === 'react-router') {
+    const path = '.prettierignore';
+    const before = await guardedRead(workspace, plan, path);
+    const lines = (before ?? '').split(/\r?\n/);
+    const missing = ['.react-router', 'build']
+      .filter(
+        (output) =>
+          !lines.includes(`**/${output}/`) &&
+          !lines.includes(`${dir}/${output}/`),
+      )
+      .map((output) => `${dir}/${output}/`);
+    if (missing.length)
+      plan.changes.push({
+        path,
+        before,
+        after: retainNewlines(
+          `${before ?? ''}${before && !before.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`,
+          before,
+        ),
+      });
   }
   const path = 'package.json';
   const before = await guardedRead(workspace, plan, path);
@@ -333,6 +430,10 @@ export async function planAddApp(
   if (workspace.config.auth === 'clerk')
     plan.notes.push(
       `Add the Clerk keys listed in apps/${app.name}/.env.clerk.example.`,
+    );
+  if (workspace.config.auth === 'workos')
+    plan.notes.push(
+      `Add the WorkOS settings listed in apps/${app.name}/.env.workos.example.`,
     );
   return plan;
 }
@@ -604,18 +705,24 @@ async function patchAuthSchema(
 
 export async function planAddAuth(
   workspace: Workspace,
-  provider: 'clerk' | 'convex-auth',
+  provider: 'clerk' | 'convex-auth' | 'workos',
   options: { oauth?: string | readonly string[] } = {},
 ): Promise<ChangePlan> {
-  if (provider !== 'clerk' && provider !== 'convex-auth')
-    throw new Error('Choose add auth clerk or add auth convex-auth.');
+  if (
+    provider !== 'clerk' &&
+    provider !== 'convex-auth' &&
+    provider !== 'workos'
+  )
+    throw new Error(
+      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
+    );
   if (options.oauth !== undefined && workspace.config.auth !== 'none')
     throw new Error(
       'Authentication is already configured. Adding OAuth to an existing workspace requires manual edits. See the README OAuth instructions. No files were changed.',
     );
   const oauth = normalizeOAuthProviders(options.oauth, provider);
-  const label = (auth: 'clerk' | 'convex-auth') =>
-    auth === 'clerk' ? 'Clerk' : 'Convex Auth';
+  const label = (auth: 'clerk' | 'convex-auth' | 'workos') =>
+    auth === 'clerk' ? 'Clerk' : auth === 'workos' ? 'WorkOS' : 'Convex Auth';
   if (workspace.config.auth !== 'none' && workspace.config.auth !== provider)
     throw new Error(
       `${label(workspace.config.auth)} is already configured. Switching authentication providers requires a manual migration.`,
@@ -626,6 +733,24 @@ export async function planAddAuth(
     return plan;
   }
   await verifyWorkspace(workspace, plan);
+  normalizeOptions({
+    name: workspace.config.name,
+    apps: workspace.config.apps,
+    example: workspace.config.example,
+    auth: provider,
+  });
+  if (provider === 'workos') {
+    for (const app of workspace.config.apps) {
+      if (app.framework !== 'next') continue;
+      for (const location of ['src/middleware.ts', 'middleware.ts']) {
+        const path = `apps/${app.name}/${location}`;
+        if ((await guardedRead(workspace, plan, path)) !== null)
+          throw new Error(
+            `Conflict in ${path}: manually migrate this middleware to apps/${app.name}/src/proxy.ts and integrate WorkOS AuthKit with authkitProxy. Next.js 16 cannot use both middleware.ts and proxy.ts. No files were changed.`,
+          );
+      }
+    }
+  }
   const backendBefore = await render(
     workspace,
     workspace.config.apps,
@@ -639,7 +764,7 @@ export async function planAddAuth(
     provider,
     oauth,
   );
-  if (provider === 'clerk' && workspace.config.example === 'messages')
+  if (provider !== 'convex-auth' && workspace.config.example === 'messages')
     await verifyMessages(workspace, plan, backendBefore);
   async function patchFiles(
     before: Files,
@@ -675,11 +800,11 @@ export async function planAddAuth(
     }
   }
   await patchFiles(backendBefore, backendAfter, (path) =>
-    (provider === 'clerk'
+    (provider !== 'convex-auth'
       ? [
           'packages/backend/convex/access.ts',
           'packages/backend/convex/auth.config.ts',
-          'packages/backend/.env.clerk.example',
+          `packages/backend/.env.${provider}.example`,
         ]
       : [
           'packages/backend/convex/access.ts',
@@ -739,6 +864,69 @@ export async function planAddAuth(
       `Generated types refresh on the next ${scriptCommand(workspace.config.packageManager, 'convex:dev')} or convex codegen. Sign-in needs ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}.`,
     );
   }
+  if (provider === 'workos') {
+    const path = 'turbo.json';
+    const current = await guardedRead(workspace, plan, path);
+    if (current === null) throw new Error('Missing turbo.json.');
+    const config = object(JSON.parse(current), path);
+    const tasks = { ...object(config.tasks, path) };
+    const beforeTasks = object(
+      object(JSON.parse(backendBefore.get(path)!), path).tasks,
+      path,
+    );
+    const afterTasks = object(
+      object(JSON.parse(backendAfter.get(path)!), path).tasks,
+      path,
+    );
+    let changed = false;
+    for (const name of ['dev', 'build']) {
+      const previous = object(beforeTasks[name], path).passThroughEnv;
+      const target = object(afterTasks[name], path).passThroughEnv;
+      if (tasks[name] === undefined)
+        throw new Error(
+          `Conflict in ${path}: tasks.${name} is missing. No files were changed.`,
+        );
+      const task = object(tasks[name], path);
+      const existing = task.passThroughEnv;
+      if (
+        !Array.isArray(previous) ||
+        !Array.isArray(target) ||
+        (existing !== undefined &&
+          (!Array.isArray(existing) ||
+            existing.some((value) => typeof value !== 'string')))
+      )
+        throw new Error(
+          `Conflict in ${path}: tasks.${name}.passThroughEnv must be a string array. No files were changed.`,
+        );
+      const additions = target.filter((value) => !previous.includes(value));
+      const values = [...((existing as string[] | undefined) ?? [])];
+      for (const value of additions) {
+        if (!values.includes(value)) {
+          values.push(value);
+          changed = true;
+        }
+      }
+      tasks[name] = { ...task, passThroughEnv: values };
+    }
+    if (changed)
+      plan.changes.push({
+        path,
+        before: current,
+        after: retainNewlines(json({ ...config, tasks }), current),
+      });
+    const ignorePath = '.gitignore';
+    const ignore = await guardedRead(workspace, plan, ignorePath);
+    if (ignore === null) throw new Error('Missing .gitignore.');
+    if (!ignore.split(/\r?\n/).includes('!.env.workos.example'))
+      plan.changes.push({
+        path: ignorePath,
+        before: ignore,
+        after: retainNewlines(
+          `${ignore.replace(/\r?\n/g, '\n')}${ignore.endsWith('\n') || ignore.length === 0 ? '' : '\n'}!.env.workos.example\n`,
+          ignore,
+        ),
+      });
+  }
   for (const app of workspace.config.apps) {
     if (oauth.length && app.framework === 'expo') {
       const path = `apps/${app.name}/app.json`;
@@ -785,7 +973,11 @@ export async function planAddAuth(
     throw new Error('Generated authentication setup instructions are missing.');
   const setup = `${readme.slice(start, end).trim()}\n\nRun ${workspace.config.packageManager} install after applying this change.${workspace.config.example === 'messages' ? ' Existing public messages have no owner and will not appear in authenticated accounts. This command does not migrate stored data.' : ''}\n`;
   const setupPath =
-    provider === 'clerk' ? 'CLERK_SETUP.md' : 'CONVEX_AUTH_SETUP.md';
+    provider === 'clerk'
+      ? 'CLERK_SETUP.md'
+      : provider === 'workos'
+        ? 'WORKOS_SETUP.md'
+        : 'CONVEX_AUTH_SETUP.md';
   const existing = await guardedRead(workspace, plan, setupPath);
   if (existing !== null && existing !== setup)
     throw new Error(
@@ -800,7 +992,9 @@ export async function planAddAuth(
   plan.notes.push(
     provider === 'clerk'
       ? `Run ${workspace.config.packageManager} install and follow CLERK_SETUP.md to configure Clerk keys and the Convex issuer.`
-      : `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}, and follow CONVEX_AUTH_SETUP.md.`,
+      : provider === 'workos'
+        ? `Run ${workspace.config.packageManager} install and follow WORKOS_SETUP.md to configure AuthKit and the Convex issuer.`
+        : `Run ${workspace.config.packageManager} install, then ${scriptCommand(workspace.config.packageManager, 'convex:auth-keys')}, and follow CONVEX_AUTH_SETUP.md.`,
   );
   return plan;
 }

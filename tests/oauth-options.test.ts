@@ -46,7 +46,7 @@ describe('OAuth options', () => {
     ]);
     expect(normalizeOptions(parsed.raw).oauth).toEqual(['github', 'google']);
   });
-  it.each(['none', 'clerk'])(
+  it.each(['none', 'clerk', 'workos'])(
     'rejects OAuth with %s auth including an empty explicit value',
     (auth) => {
       for (const oauth of ['github', '', []])
@@ -176,8 +176,8 @@ it.each(['github', [1], ['unknown']])(
     expect(() => parseWorkspaceConfig({ ...metadata, oauth })).toThrow();
   },
 );
-it('rejects OAuth metadata with another auth provider', () => {
+it.each(['clerk', 'workos'])('rejects OAuth metadata with %s auth', (auth) => {
   expect(() =>
-    parseWorkspaceConfig({ ...metadata, auth: 'clerk', oauth: ['github'] }),
+    parseWorkspaceConfig({ ...metadata, auth, oauth: ['github'] }),
   ).toThrow('--oauth requires');
 });

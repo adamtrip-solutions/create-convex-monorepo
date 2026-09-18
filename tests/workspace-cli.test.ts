@@ -91,15 +91,18 @@ afterEach(() => {
 });
 
 describe('workspace argument parsing', () => {
-  it.each(['clerk', 'convex-auth'])('parses %s installation', (provider) => {
-    expect(parseWorkspaceCommand(['add', 'auth', provider])).toMatchObject({
-      command: 'add-auth',
-      provider,
-    });
-  });
-  it('names both supported providers for an invalid provider', () => {
+  it.each(['clerk', 'convex-auth', 'workos'])(
+    'parses %s installation',
+    (provider) => {
+      expect(parseWorkspaceCommand(['add', 'auth', provider])).toMatchObject({
+        command: 'add-auth',
+        provider,
+      });
+    },
+  );
+  it('names all supported providers for an invalid provider', () => {
     expect(() => parseWorkspaceCommand(['add', 'auth', 'other'])).toThrow(
-      'Choose add auth clerk or add auth convex-auth.',
+      'Choose add auth clerk, add auth convex-auth, or add auth workos.',
     );
   });
 
@@ -369,37 +372,40 @@ describe('workspace command routing', () => {
       'Registry unavailable',
     );
   });
-  it('prompts for an app and optional installation in a terminal', async () => {
-    process.stdin.isTTY = true;
-    process.stdout.isTTY = true;
-    mocks.select
-      .mockResolvedValueOnce('add-app')
-      .mockResolvedValueOnce('vite')
-      .mockResolvedValueOnce('none');
-    mocks.text.mockResolvedValueOnce('admin');
-    mocks.confirm.mockResolvedValueOnce(true);
-    await runWorkspace(['add'], '1.2.3');
-    expect(mocks.app).toHaveBeenCalledWith(workspace, {
-      name: 'admin',
-      framework: 'vite',
-      example: 'none',
-    });
-    expect(mocks.confirm).toHaveBeenCalledOnce();
-    expect(mocks.apply).toHaveBeenCalledOnce();
-    expect(mocks.install).toHaveBeenCalledOnce();
-    expect(mocks.app.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.confirm.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.confirm.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.apply.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.select).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: 'Starter content?',
-        initialValue: 'messages',
-      }),
-    );
-  });
+  it.each(['vite', 'react-router'])(
+    'prompts for a %s app and optional installation in a terminal',
+    async (framework) => {
+      process.stdin.isTTY = true;
+      process.stdout.isTTY = true;
+      mocks.select
+        .mockResolvedValueOnce('add-app')
+        .mockResolvedValueOnce(framework)
+        .mockResolvedValueOnce('none');
+      mocks.text.mockResolvedValueOnce('admin');
+      mocks.confirm.mockResolvedValueOnce(true);
+      await runWorkspace(['add'], '1.2.3');
+      expect(mocks.app).toHaveBeenCalledWith(workspace, {
+        name: 'admin',
+        framework,
+        example: 'none',
+      });
+      expect(mocks.confirm).toHaveBeenCalledOnce();
+      expect(mocks.apply).toHaveBeenCalledOnce();
+      expect(mocks.install).toHaveBeenCalledOnce();
+      expect(mocks.app.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.confirm.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.confirm.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.apply.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.select).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          message: 'Starter content?',
+          initialValue: 'messages',
+        }),
+      );
+    },
+  );
   it('does not prompt for installation during an interactive dry run', async () => {
     process.stdin.isTTY = true;
     process.stdout.isTTY = true;
@@ -545,7 +551,7 @@ describe('upgrade mutations', () => {
   });
 });
 
-it.each(['clerk', 'convex-auth'])(
+it.each(['clerk', 'convex-auth', 'workos'])(
   'offers and dispatches %s interactively',
   async (provider) => {
     process.stdin.isTTY = true;
@@ -560,6 +566,7 @@ it.each(['clerk', 'convex-auth'])(
         options: [
           { value: 'clerk', label: 'Clerk' },
           { value: 'convex-auth', label: 'Convex Auth' },
+          { value: 'workos', label: 'WorkOS AuthKit' },
         ],
       }),
     );
@@ -595,7 +602,7 @@ it('installs Convex Auth dependencies after applying the plan', async () => {
     mocks.install.mock.invocationCallOrder[0]!,
   );
 });
-it.each(['clerk', 'convex-auth'])(
+it.each(['clerk', 'convex-auth', 'workos'])(
   'uses configured %s for an interactive repeat',
   async (auth) => {
     process.stdin.isTTY = true;

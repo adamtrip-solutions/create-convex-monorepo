@@ -7,7 +7,8 @@ import { format } from 'prettier';
 import { normalizeOptions } from '../dist/index.js';
 
 const apps =
-  process.env.CCM_APPS ?? 'next,admin:vite,portal:tanstack-start,expo';
+  process.env.CCM_APPS ??
+  'next,admin:vite,portal:tanstack-start,router:react-router,expo';
 const auth = process.env.CCM_AUTH ?? 'none';
 const oauth = process.env.CCM_OAUTH || undefined;
 const example = process.env.CCM_EXAMPLE ?? 'messages';
@@ -116,7 +117,7 @@ try {
     command(['add', 'app', 'dry-run-only', '--framework', 'expo', '--dry-run']);
     if ((await snapshot()) !== before)
       throw new Error('Dry-run changed workspace files');
-    // Exercise migration of all four existing apps, and adding apps after auth setup.
+    // Exercise migration of all existing apps, and adding apps after auth setup.
     if (example === 'none' && auth === 'clerk')
       command(['add', 'auth', 'clerk', '--no-install']);
     for (const app of selections.slice(1))
@@ -165,6 +166,7 @@ try {
           next: 'src/app/page.tsx',
           vite: 'src/main.tsx',
           'tanstack-start': 'src/routes/index.tsx',
+          'react-router': 'app/root.tsx',
           expo: 'App.tsx',
         }[app.framework],
       );
@@ -230,8 +232,30 @@ export type MissingModule = typeof api.notAModule;
       lines.push(
         `${prefix}_CLERK_PUBLISHABLE_KEY=pk_test_${Buffer.from('test.clerk.accounts.dev$').toString('base64')}`,
       );
-      if (app.framework === 'next' || app.framework === 'tanstack-start')
+      if (
+        app.framework === 'next' ||
+        app.framework === 'tanstack-start' ||
+        app.framework === 'react-router'
+      )
         lines.push('CLERK_SECRET_KEY=sk_test_not_a_real_secret');
+    }
+    if (auth === 'workos') {
+      lines.push(`${prefix}_WORKOS_CLIENT_ID=client_test_fixture`);
+      const server = app.framework !== 'vite';
+      const redirectVariable =
+        app.framework === 'tanstack-start'
+          ? 'WORKOS_REDIRECT_URI'
+          : `${prefix}_WORKOS_REDIRECT_URI`;
+      lines.push(
+        `${redirectVariable}=http://localhost:${3000 + config.apps.indexOf(app)}${server ? '/callback' : '/'}`,
+      );
+      if (server)
+        lines.push(
+          'WORKOS_CLIENT_ID=client_test_fixture',
+          `WORKOS_COOKIE_NAME=wos-session-${app.name}`,
+          'WORKOS_API_KEY=sk_test_not_a_real_secret',
+          'WORKOS_COOKIE_PASSWORD=not-a-real-cookie-password-32-characters',
+        );
     }
     await writeFile(
       join(project, 'apps', app.name, '.env.local'),
@@ -258,7 +282,9 @@ export type MissingModule = typeof api.notAModule;
         ? '.next/static'
         : app.framework === 'tanstack-start'
           ? 'dist/client'
-          : 'dist',
+          : app.framework === 'react-router'
+            ? 'build/client'
+            : 'dist',
     );
     for (const file of await readdir(output, { recursive: true })) {
       if (!/\.(?:js|hbc)$/.test(file)) continue;
@@ -267,6 +293,7 @@ export type MissingModule = typeof api.notAModule;
         'Messages must contain 1 to 1000 characters.',
         'by_owner',
         'sk_test_not_a_real_secret',
+        'not-a-real-cookie-password-32-characters',
       ]) {
         if (contents.includes(Buffer.from(forbidden)))
           throw new Error(

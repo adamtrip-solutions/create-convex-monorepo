@@ -19,7 +19,7 @@ afterEach(async () => {
   );
 });
 async function fixture(
-  auth: 'clerk' | 'convex-auth' = 'clerk',
+  auth: 'clerk' | 'convex-auth' | 'workos' = 'clerk',
   packageManager: 'pnpm' | 'bun' = 'pnpm',
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'ccm-upgrade-test-'));
@@ -28,7 +28,10 @@ async function fixture(
     {
       name: 'sample',
       packageManager,
-      apps: 'web:next,mobile:expo',
+      apps:
+        auth === 'workos'
+          ? 'web:next,admin:vite,start:tanstack-start'
+          : 'web:next,mobile:expo',
       auth,
       example: 'messages',
       install: false,
@@ -604,6 +607,34 @@ it('upgrades Convex Auth and Auth.js pins from generated manifest baselines', as
   }
   for (const [path, content] of Object.entries(before))
     if (!path.endsWith('package.json')) expect(after[path], path).toBe(content);
+  expect(
+    (await planUpgrade(await loadWorkspace(workspace.root))).changes,
+  ).toEqual([]);
+});
+
+it('upgrades each official WorkOS SDK pin without rewriting source files', async () => {
+  const workspace = await fixture('workos');
+  const entries = [
+    ['web', '@workos-inc/authkit-nextjs', versions.workosNext],
+    ['web', '@workos-inc/node', versions.workosNode],
+    ['start', '@workos-inc/node', versions.workosNode],
+    ['admin', '@workos-inc/authkit-react', versions.workosReact],
+    ['start', '@workos/authkit-tanstack-react-start', versions.workosTanstack],
+  ] as const;
+  for (const [app, dependency] of entries)
+    await edit(workspace.root, `apps/${app}/package.json`, (pkg) => {
+      pkg.dependencies[dependency] = '0.0.1';
+    });
+  const before = await snapshot(workspace.root);
+  await applyPlan(await planUpgrade(workspace));
+  const after = await snapshot(workspace.root);
+  for (const [app, dependency, version] of entries)
+    expect(
+      JSON.parse(after[`apps/${app}/package.json`]!).dependencies[dependency],
+    ).toBe(version);
+  for (const [path, contents] of Object.entries(before))
+    if (!path.endsWith('package.json'))
+      expect(after[path], path).toBe(contents);
   expect(
     (await planUpgrade(await loadWorkspace(workspace.root))).changes,
   ).toEqual([]);

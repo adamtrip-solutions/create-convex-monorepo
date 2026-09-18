@@ -196,6 +196,11 @@ describe('generated project golden matrix', () => {
           expect(
             await read('packages/backend/convex/auth.config.ts'),
           ).toContain("applicationID: 'convex'");
+        } else if (scenario.auth === 'workos') {
+          expect(access).toContain('ctx.auth.getUserIdentity()');
+          expect(access).toMatch(/if \(!identity\) throw/);
+          expect(access).toContain('return identity.subject');
+          expect(access).not.toContain('tokenIdentifier');
         } else if (scenario.auth === 'convex-auth') {
           expect(access).toContain('getAuthUserId(ctx)');
           expect(access).toContain('Promise<string>');
@@ -240,6 +245,38 @@ describe('generated project golden matrix', () => {
         for (const variable of ['JWT_PRIVATE_KEY', 'JWKS', 'SITE_URL'])
           expect(deploymentEnv).toContain(variable);
         expect(await read('README.md')).toContain('## Convex Auth setup');
+      }
+      if (scenario.auth === 'workos') {
+        const readme = await read('README.md');
+        expect(readme).toContain(`${run} convex:setup`);
+        expect(readme).toContain(
+          manager === 'bun'
+            ? 'bun run --cwd packages/backend convex env set WORKOS_CLIENT_ID'
+            : 'pnpm --filter @golden-app/backend exec convex env set WORKOS_CLIENT_ID',
+        );
+        if (manager === 'bun') expect(readme).not.toContain('pnpm');
+        expect(await read('packages/backend/convex/auth.config.ts')).toContain(
+          'WORKOS_CLIENT_ID',
+        );
+        expect(await read('packages/backend/.env.workos.example')).toContain(
+          'WORKOS_CLIENT_ID',
+        );
+        expect(await read('README.md')).toContain('## WorkOS setup');
+        expect(await read('README.md')).toContain('WORKOS_COOKIE_NAME');
+        expect(await read('README.md')).toContain(
+          'https://workos.com/docs/authkit/sessions#sign-out-uris',
+        );
+        expect(await read('README.md')).toContain('session JWT template');
+        expect(await read('README.md')).toContain(
+          'aud claim equal to that same client ID',
+        );
+        expect(await read('packages/backend/convex/auth.config.ts')).toContain(
+          'applicationID: clientId',
+        );
+        expect(await read('packages/backend/.env.workos.example')).toContain(
+          'https://api.workos.com/user_management/client_',
+        );
+        expect(await read('.gitignore')).toContain('!.env.workos.example');
       }
       for (const [name, framework, prefix, sdk] of scenario.expected) {
         const dir = `apps/${name}`;
@@ -385,6 +422,73 @@ describe('generated project golden matrix', () => {
             );
             expect(providers).not.toContain('@convex-dev/auth/nextjs');
           }
+        } else if (scenario.auth === 'workos') {
+          const pin =
+            framework === 'next'
+              ? versions.workosNext
+              : framework === 'vite'
+                ? versions.workosReact
+                : versions.workosTanstack;
+          expect(app.dependencies).toHaveProperty(sdk!, pin);
+          expect(providers).toContain('ConvexProviderWithAuth');
+          expect(providers).toContain('<Authenticated>');
+          expect(providers).toContain('<AuthLoading>');
+          expect(providers).toContain('<Unauthenticated>');
+          expect(providers).toContain('<AuthControls');
+          expect(providers).not.toMatch(
+            /WORKOS_API_KEY|WORKOS_COOKIE_PASSWORD/,
+          );
+          const env = await read(`${dir}/.env.workos.example`);
+          expect(env).toContain(`${prefix}_WORKOS_CLIENT_ID=\n`);
+          expect(env).not.toMatch(
+            /(?:NEXT_PUBLIC|VITE|EXPO_PUBLIC)_WORKOS_(?:API_KEY|COOKIE_PASSWORD)\s*=/,
+          );
+          if (framework === 'vite') {
+            expect(env).not.toMatch(
+              /WORKOS_API_KEY=|WORKOS_COOKIE_PASSWORD=|WORKOS_COOKIE_NAME=/,
+            );
+            expect(providers).toContain('getAccessToken');
+            const controls = await read(`${dir}/src/auth-controls.tsx`);
+            expect(controls).toContain('if (!url)');
+            expect(controls).toContain('Reload sign-in');
+            expect(controls).toContain('finally');
+          } else {
+            expect(app.dependencies).toHaveProperty(
+              '@workos-inc/node',
+              versions.workosNode,
+            );
+            expect(env).toContain('WORKOS_API_KEY=');
+            expect(env).toContain('WORKOS_COOKIE_PASSWORD=');
+            expect(env).toContain(`WORKOS_COOKIE_NAME=wos-session-${name}\n`);
+            expect(providers).toContain('useAccessToken');
+          }
+          const controls = await read(`${dir}/src/auth-controls.tsx`);
+          expect(controls).toMatch(/signIn|sign-in/);
+          expect(controls).toContain(
+            'signOut({ returnTo: window.location.origin })',
+          );
+          expect(controls).toMatch(/loading/i);
+          expect(controls).toContain('error');
+          expect(controls).not.toContain('alert(');
+          if (framework === 'next') {
+            expect(await read(`${dir}/src/proxy.ts`)).toContain('authkitProxy');
+            expect(await read(`${dir}/src/app/callback/route.ts`)).toContain(
+              'handleAuth',
+            );
+            expect(await read(`${dir}/src/app/sign-in/route.ts`)).toContain(
+              'getSignInUrl',
+            );
+          } else if (framework === 'tanstack-start') {
+            expect(await read(`${dir}/src/start.ts`)).toContain(
+              'authkitMiddleware',
+            );
+            expect(await read(`${dir}/src/routes/callback.tsx`)).toContain(
+              'handleCallbackRoute',
+            );
+            expect(await read(`${dir}/src/routes/sign-in.tsx`)).toContain(
+              'getSignInUrl',
+            );
+          }
         } else if (sdk) {
           expect(app.dependencies).toHaveProperty(sdk);
           expect(providers).toContain('ConvexProviderWithClerk');
@@ -419,6 +523,70 @@ describe('generated project golden matrix', () => {
           expect(await read(`${dir}/src/routes/index.tsx`)).toContain(
             "createFileRoute('/')",
           );
+        } else if (framework === 'react-router') {
+          expect(app.scripts).toMatchObject({
+            dev: 'react-router dev',
+            build: 'react-router build',
+            start: 'react-router-serve ./build/server/index.js',
+            typecheck: 'react-router typegen && tsc',
+            lint: 'eslint .',
+          });
+          for (const dependency of [
+            'react-router',
+            '@react-router/node',
+            '@react-router/serve',
+          ])
+            expect(app.dependencies).toHaveProperty(dependency);
+          expect(app.devDependencies).toHaveProperty('@react-router/dev');
+          expect(await json(`${dir}/turbo.json`)).toEqual({
+            extends: ['//'],
+            tasks: { build: { outputs: ['build/**'] } },
+          });
+          expect(await read(`${dir}/.gitignore`)).toBe(
+            '/.react-router/\n/build/\n',
+          );
+          expect(await read(`${dir}/eslint.config.js`)).toContain(
+            '**/.react-router/**',
+          );
+          expect(await read(`${dir}/eslint.config.js`)).toContain(
+            '**/build/**',
+          );
+
+          expect(await read(`${dir}/react-router.config.ts`)).toContain(
+            'ssr: true',
+          );
+          expect(await read(`${dir}/react-router.config.ts`)).toContain(
+            'v8_middleware: true',
+          );
+          expect(await read(`${dir}/vite.config.ts`)).toContain(
+            'reactRouter()',
+          );
+          expect(await read(`${dir}/app/routes.ts`)).toContain(
+            "index('routes/home.tsx')",
+          );
+          const rootEntry = await read(`${dir}/app/root.tsx`);
+          expect(rootEntry).toContain('<Providers>');
+          expect(rootEntry).toContain('<Outlet');
+          expect(rootEntry).toContain('../src/auth.server');
+          const route = await read(`${dir}/app/routes/home.tsx`);
+          expect(route).toContain('<AuthControls');
+          expect(route).not.toMatch(
+            /export (?:async )?function loader|export const loader/,
+          );
+          expect(providers).toContain('import.meta.env.VITE_CONVEX_URL');
+          const serverAuth = await read(`${dir}/src/auth.server.ts`);
+          if (scenario.auth === 'clerk') {
+            expect(serverAuth).toContain('rootAuthLoader');
+            expect(serverAuth).toContain('clerkMiddleware');
+            expect(serverAuth).toContain('@clerk/react-router/server');
+            expect(await read(`${dir}/.env.clerk.example`)).toContain(
+              'CLERK_SECRET_KEY=',
+            );
+            expect(providers).toContain('useRouteLoaderData');
+            expect(providers).toContain('loaderData={loaderData}');
+          } else {
+            expect(serverAuth).not.toContain('@clerk/');
+          }
         } else if (framework === 'expo') {
           expect(app.dependencies).toMatchObject({
             expo: versions.expo,
