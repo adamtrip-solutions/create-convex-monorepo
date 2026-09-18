@@ -64,6 +64,11 @@ export async function getOwner(ctx: QueryCtx | MutationCtx): Promise<string> {
 `,
     );
     for (const app of ctx.options.apps) {
+      if (app.framework === 'astro')
+        await ctx.write(
+          `apps/${app.name}/auth.config.mjs`,
+          'export default [];\n',
+        );
       const { native } = platform(app);
       await ctx.mergePackage(`apps/${app.name}/package.json`, {
         dependencies: {

@@ -28,12 +28,14 @@ const frameworks: Record<Framework, string[]> = {
   vite: ['vite', '@vitejs/plugin-react', 'react-dom'],
   'tanstack-start': ['@tanstack/react-start', 'vite', 'react-dom'],
   expo: ['expo', 'react-native'],
+  astro: ['astro', '@astrojs/react', '@astrojs/check', 'react-dom'],
 };
 const clerk: Record<Framework, string> = {
   next: '@clerk/nextjs',
   vite: '@clerk/react',
   'tanstack-start': '@clerk/tanstack-react-start',
   expo: '@clerk/expo',
+  astro: '@clerk/astro',
 };
 const baselines: Record<string, string> = {
   convex: versions.convex,
@@ -41,6 +43,10 @@ const baselines: Record<string, string> = {
   '@auth/core': versions.authCore,
   react: versions.react,
   typescript: versions.typescript,
+  astro: versions.astro,
+  '@astrojs/react': versions.astroReact,
+  '@astrojs/check': versions.astroCheck,
+  '@clerk/astro': versions.clerkAstro,
   next: versions.next,
   vite: versions.vite,
   expo: versions.expo,
@@ -517,7 +523,9 @@ export async function doctor(
         ? 'NEXT_PUBLIC'
         : app.framework === 'expo'
           ? 'EXPO_PUBLIC'
-          : 'VITE';
+          : app.framework === 'astro'
+            ? 'PUBLIC'
+            : 'VITE';
     const env = await environment(directory);
     let envFiles: string[] = [];
     try {
@@ -539,8 +547,8 @@ export async function doctor(
         'JWKS',
       ]) {
         if (
-          ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC'].some((publicPrefix) =>
-            values.get(`${publicPrefix}_${secret}`),
+          ['NEXT_PUBLIC', 'VITE', 'EXPO_PUBLIC', 'PUBLIC'].some(
+            (publicPrefix) => values.get(`${publicPrefix}_${secret}`),
           )
         )
           exposed.add(secret);
@@ -592,6 +600,21 @@ export async function doctor(
         `${directory}/tsconfig.json is missing.`,
         'Restore the app TypeScript configuration.',
       );
+    if (app.framework === 'astro') {
+      for (const file of [
+        'astro.config.mjs',
+        'auth.config.mjs',
+        'src/pages/index.astro',
+        ...(config.auth === 'clerk' ? ['src/middleware.ts'] : []),
+      ]) {
+        if ((await text(`${directory}/${file}`)) === null)
+          issue(
+            'astro-config-missing',
+            `${directory}/${file} is missing.`,
+            'Restore the generated Astro configuration and client-only island entry point.',
+          );
+      }
+    }
     if (app.framework === 'expo') {
       const metro =
         (await text(`${directory}/metro.config.cjs`)) ??

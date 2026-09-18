@@ -25,6 +25,7 @@ describe.each(['none', 'clerk', 'convex-auth'])(
       'vite',
       'tanstack-start',
       'expo',
+      'astro',
       'next,admin:vite,portal:tanstack-start,expo',
     ])('generates %s without demo code', async (apps) => {
       const cwd = await mkdtemp(join(tmpdir(), 'ccm-blank-'));
@@ -71,7 +72,9 @@ describe.each(['none', 'clerk', 'convex-auth'])(
                 ? 'src/main.tsx'
                 : app.framework === 'expo'
                   ? 'App.tsx'
-                  : 'src/routes/index.tsx';
+                  : app.framework === 'astro'
+                    ? 'src/App.tsx'
+                    : 'src/routes/index.tsx';
           expect(await read(`${dir}/${entry}`)).toContain(
             app.framework === 'expo'
               ? `<Text>${app.name}</Text>`

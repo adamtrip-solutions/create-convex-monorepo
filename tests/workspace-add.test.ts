@@ -68,7 +68,13 @@ async function snapshot(
   return result;
 }
 
-const frameworks: Framework[] = ['next', 'vite', 'tanstack-start', 'expo'];
+const frameworks: Framework[] = [
+  'next',
+  'vite',
+  'tanstack-start',
+  'expo',
+  'astro',
+];
 describe.each<Example>(['none', 'messages'])(
   'add app with %s content',
   (example) => {
@@ -323,7 +329,9 @@ it.each(frameworks)(
         ? 'NEXT_PUBLIC'
         : framework === 'expo'
           ? 'EXPO_PUBLIC'
-          : 'VITE';
+          : framework === 'astro'
+            ? 'PUBLIC'
+            : 'VITE';
     expect(after['apps/extra/.env.local']).toBe(
       `${prefix}_CONVEX_URL=https://current.convex.cloud\n`,
     );
@@ -415,14 +423,16 @@ it.each(frameworks)(
     const workspace = await fixture('none');
     const plan = await planAddApp(workspace, { name: 'extra', framework });
     await applyPlan(plan);
-    if (framework === 'next' || framework === 'expo') {
+    if (framework === 'next' || framework === 'expo' || framework === 'astro') {
       const pkg = JSON.parse(
         await readFile(join(workspace.root, 'apps/extra/package.json'), 'utf8'),
       );
       expect(pkg.scripts.dev).toBe(
         framework === 'next'
           ? 'next dev --port 3001'
-          : 'expo start --port 8082',
+          : framework === 'astro'
+            ? 'astro dev --port 3001'
+            : 'expo start --port 8082',
       );
     } else {
       expect(
@@ -1554,4 +1564,84 @@ it('respects per-app blank overrides when adding Convex Auth', async () => {
     '@convex-dev/auth/react',
   );
   expect(files['apps/web/src/messages.tsx']).toContain('api.messages');
+});
+
+it('adds Astro to a customized pre-Astro Vite workspace and updates its URL helper and Turbo environment', async () => {
+  const workspace = await fixture('messages', 'none', 'vite');
+  const root = workspace.root;
+  const setupPath = join(root, 'scripts/convex-setup.mjs');
+  await writeFile(
+    setupPath,
+    (await readFile(setupPath, 'utf8')).replace(
+      "    case 'astro':\n      return 'PUBLIC_CONVEX_URL';\n",
+      '',
+    ),
+  );
+  for (const path of ['.gitignore', '.prettierignore']) {
+    const full = join(root, path);
+    await writeFile(
+      full,
+      (await readFile(full, 'utf8'))
+        .split('\n')
+        .filter((line) => !line.includes('.astro'))
+        .join('\n') + 'custom-output/\n',
+    );
+  }
+  const turboPath = join(root, 'turbo.json');
+  const turbo = JSON.parse(await readFile(turboPath, 'utf8'));
+  turbo.tasks.build.env = ['VITE_*', 'CUSTOM_PUBLIC'];
+  turbo.tasks.dev.passThroughEnv = ['VITE_*', 'CUSTOM_DEV'];
+  await writeFile(turboPath, JSON.stringify(turbo));
+  const entryPath = join(root, 'apps/web/src/main.tsx');
+  const customized =
+    (await readFile(entryPath, 'utf8')) + '\n// Keep my app changes.\n';
+  await writeFile(entryPath, customized);
+  await writeFile(
+    join(root, 'packages/backend/.env.local'),
+    'CONVEX_URL=https://example.convex.cloud\n',
+  );
+  const before = await snapshot(root);
+  const plan = await planAddApp(workspace, {
+    name: 'island',
+    framework: 'astro',
+  });
+  await applyPlan(plan, { dryRun: true });
+  expect(await snapshot(root)).toEqual(before);
+  await applyPlan(plan);
+  expect(await readFile(entryPath, 'utf8')).toBe(customized);
+  expect(await readFile(setupPath, 'utf8')).toContain(
+    "return 'PUBLIC_CONVEX_URL'",
+  );
+  const updated = JSON.parse(await readFile(turboPath, 'utf8'));
+  expect(updated.tasks.build.env).toEqual([
+    'VITE_*',
+    'CUSTOM_PUBLIC',
+    'PUBLIC_*',
+  ]);
+  expect(updated.tasks.dev.passThroughEnv).toEqual([
+    'VITE_*',
+    'CUSTOM_DEV',
+    'PUBLIC_*',
+  ]);
+  for (const path of ['.gitignore', '.prettierignore']) {
+    const contents = await readFile(join(root, path), 'utf8');
+    expect(contents).toContain('custom-output/');
+    expect(contents).toContain('.astro/');
+  }
+  expect(await readFile(join(root, 'apps/island/.env.local'), 'utf8')).toBe(
+    'PUBLIC_CONVEX_URL=https://example.convex.cloud\n',
+  );
+});
+
+it('rejects a customized pre-Astro URL helper before writing an app', async () => {
+  const workspace = await fixture('none', 'none', 'vite');
+  await writeFile(
+    join(workspace.root, 'scripts/convex-setup.mjs'),
+    '// Custom setup helper\n',
+  );
+  const before = await snapshot(workspace.root);
+  await expect(
+    planAddApp(workspace, { name: 'island', framework: 'astro' }),
+  ).rejects.toThrow('restore the generated setup helper');
+  expect(await snapshot(workspace.root)).toEqual(before);
 });

@@ -1,6 +1,6 @@
 # create-convex-monorepo
 
-A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, or a combination, with optional Clerk or Convex Auth authentication.
+A TypeScript CLI that generates pnpm and Turborepo workspaces with multiple frontends sharing one typed Convex backend. Choose Next.js, Vite + React, TanStack Start, Expo, Astro + React island, or a combination, with optional Clerk or Convex Auth authentication.
 
 The generator composes framework templates and auth adapters. It does not copy a single starter and delete unwanted pieces. Choose blank apps or a messages example. The example includes a query and mutation, plus compile-time assertions for the shared API's argument and return types.
 
@@ -86,7 +86,7 @@ Existing workspaces with metadata version 1, including projects created with 0.2
 
 ### Changes and conflicts
 
-Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app or package paths, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend.
+Commands plan every file before applying changes. They reject unsafe paths, symlinks, existing app or package paths, conflicting scripts or dependencies, and customized auth files that would need replacement. App addition requires the generated `apps/*` and `packages/*` workspace layout and Turbo dev script. Adding a messages UI also requires the generated messages backend contract; use `--example none` with a customized backend. Adding Astro to an older workspace also updates its recognized setup helper, adds `PUBLIC_*` to Turbo settings, and ignores `.astro/` output. A customized setup helper that cannot be upgraded causes a conflict before writes.
 
 Package addition creates plain TypeScript source with shared lint and typecheck settings. Add `"@<scope>/<name>": "workspace:*"` to each consuming app's dependencies, then run `pnpm install`. Next configs are updated when they match the generated config apart from the `transpilePackages` string list, so repeated `add package` calls keep appending. A missing config or any other customization produces a note with the required manual edit. Other frameworks need no config change.
 
@@ -164,6 +164,9 @@ The choice applies to the whole workspace. `--example messages` keeps the existi
 | `vite`           | Vite + React             | `VITE_CONVEX_URL`        |
 | `tanstack-start` | TanStack Start with Vite | `VITE_CONVEX_URL`        |
 | `expo`           | Expo / React Native      | `EXPO_PUBLIC_CONVEX_URL` |
+| `astro`          | Astro + React island     | `PUBLIC_CONVEX_URL`      |
+
+Astro generates a static page with a React island mounted through `client:only="react"`. Convex and auth run in the browser. Its `typecheck` script uses `astro check`; Clerk uses the official `@clerk/astro` integration and middleware. No SSR adapter is needed for the static page.
 
 Versions are pinned in the templates. Start uses ordinary Convex React hooks; server-side Convex prefetching is not configured. Expo's build command exports JavaScript, not native application binaries. See [research and upstream caveats](docs/research.md).
 
@@ -250,7 +253,7 @@ Dynamic Convex declarations refer to backend source modules. Client TypeScript p
 
 ## Authentication
 
-New projects accept `none`, `clerk`, or `convex-auth` across all four frameworks and both starters. Existing no-auth workspaces accept `add auth clerk` or `add auth convex-auth`. Both providers support `add app`.
+New projects accept `none`, `clerk`, or `convex-auth` across all five frameworks and both starters. Existing no-auth workspaces accept `add auth clerk` or `add auth convex-auth`. Both providers support `add app`.
 
 `--auth convex-auth` and `add auth convex-auth` configure email and password sign-up/sign-in, sign-out, and per-user backend access. Web apps use the client ConvexAuthProvider; Expo persists tokens with expo-secure-store. No frontend public auth keys or password-flow redirect scheme are needed. Next.js and TanStack Start do not configure server-side authentication or authenticated SSR. OAuth, magic links, email verification, password reset, and MFA are outside this starter.
 

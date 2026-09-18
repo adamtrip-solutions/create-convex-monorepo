@@ -16,6 +16,7 @@ export const frameworks: readonly Framework[] = [
   'vite',
   'tanstack-start',
   'expo',
+  'astro',
 ];
 const reserved = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9]|node_modules)$/i;
 export function validateProjectName(name: string): string | undefined {

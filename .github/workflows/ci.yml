@@ -57,6 +57,16 @@ jobs:
         include:
           - apps: next
             auth: none
+          - apps: astro
+            auth: none
+          - apps: astro,expo
+            auth: clerk
+          - apps: astro,next
+            auth: convex-auth
+            example: none
+          - apps: vite,astro
+            auth: none
+            workspaceCommands: '1'
           - apps: vite
             auth: none
           - apps: tanstack-start

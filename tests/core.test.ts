@@ -78,7 +78,7 @@ describe('options', () => {
   it.each([
     { apps: 'next,' },
     { apps: 'x:next,x:vite' },
-    { apps: 'astro' },
+    { apps: 'unsupported' },
     { apps: 'backend:next' },
     { apps: 'eslint-config:vite' },
     { apps: [] },
@@ -283,3 +283,24 @@ describe('setup recovery and cancellation', () => {
     expect(await readFile(join(target, 'user-file'), 'utf8')).toBe('keep me');
   });
 });
+
+it.each(['none', 'clerk', 'convex-auth'])(
+  'selects Astro with every framework and %s auth',
+  (auth) => {
+    const raw = parseCommand([
+      '--apps',
+      'astro,next,vite,tanstack-start,expo,island:astro',
+      '--auth',
+      auth,
+    ]).raw;
+    expect(normalizeOptions(raw).apps).toEqual([
+      { name: 'web', framework: 'astro' },
+      { name: 'app', framework: 'next' },
+      { name: 'admin', framework: 'vite' },
+      { name: 'app-2', framework: 'tanstack-start' },
+      { name: 'mobile', framework: 'expo' },
+      { name: 'island', framework: 'astro' },
+    ]);
+    expect(selectTemplate('astro').label).toBe('Astro + React island');
+  },
+);

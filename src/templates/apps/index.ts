@@ -2,6 +2,7 @@ import type { AppTemplate, Framework } from '../../generator/types.js';
 import { nextTemplate } from './next/index.js';
 import { viteTemplate } from './vite/index.js';
 import { tanstackStartTemplate } from './tanstack-start/index.js';
+import { astroTemplate } from './astro/index.js';
 import { expoTemplate } from './expo/index.js';
 
 export const appTemplates: Record<Framework, AppTemplate> = {
@@ -9,4 +10,5 @@ export const appTemplates: Record<Framework, AppTemplate> = {
   vite: viteTemplate,
   'tanstack-start': tanstackStartTemplate,
   expo: expoTemplate,
+  astro: astroTemplate,
 };

@@ -31,7 +31,11 @@ async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), 'ccm-workspace-core-'));
   directories.push(dir);
   const root = await generateProject(
-    { name: 'fixture', apps: 'next,vite,tanstack-start,expo', example: 'none' },
+    {
+      name: 'fixture',
+      apps: 'next,vite,tanstack-start,expo,island:astro',
+      example: 'none',
+    },
     { cwd: dir },
   );
   return loadWorkspace(root);
@@ -234,7 +238,7 @@ describe('workspace transactions', () => {
 });
 
 describe('environment sync', () => {
-  it('links only public URLs for all four frameworks, preserves settings, and is idempotent', async () => {
+  it('links only public URLs for all five frameworks, preserves settings, and is idempotent', async () => {
     const ws = await fixture();
     await writeFile(
       join(ws.root, 'packages/backend/.env'),
@@ -260,6 +264,9 @@ describe('environment sync', () => {
     }
     expect(await readText(ws.root, 'apps/web/.env.local')).toContain(
       'OTHER="first\nsecond"',
+    );
+    expect(await readText(ws.root, 'apps/island/.env.local')).toBe(
+      'PUBLIC_CONVEX_URL=https://current.convex.cloud\n',
     );
     expect((await planEnvSync(ws)).changes).toEqual([]);
   });

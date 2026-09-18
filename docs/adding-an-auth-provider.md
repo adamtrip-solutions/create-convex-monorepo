@@ -12,6 +12,8 @@ An auth adapter runs after framework generation and owns authentication wiring a
 
 The none adapter demonstrates file ownership. The Clerk adapter demonstrates a binding map that selects SDKs by framework. Keep provider-specific framework details in the adapter; do not introduce auth branches into every app template.
 
+For Astro, also write `auth.config.mjs` with the integration list consumed by `astro.config.mjs`. Providers that need no Astro integration export an empty list. Clerk supplies its official integration and middleware, and imports `useAuth` from `@clerk/astro/react` without a React `ClerkProvider`.
+
 Convex Auth is the second adapter; its independent provider writer lives in `src/integrations/auth/convex-auth/providers.ts`.
 
 `writeProviders` currently implements no-auth and Clerk-compatible provider wiring. A provider with a different session protocol should supply its own provider module or extend that helper with a concrete contract. Do not force an unrelated SDK through Clerk's `useAuth` shape.
