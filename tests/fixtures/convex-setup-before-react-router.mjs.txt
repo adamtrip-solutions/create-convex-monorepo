@@ -13,7 +13,6 @@ export function publicVariable(framework) {
       return 'NEXT_PUBLIC_CONVEX_URL';
     case 'vite':
     case 'tanstack-start':
-    case 'react-router':
       return 'VITE_CONVEX_URL';
     case 'expo':
       return 'EXPO_PUBLIC_CONVEX_URL';

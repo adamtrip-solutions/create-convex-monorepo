@@ -27,18 +27,33 @@ const frameworks: Record<Framework, string[]> = {
   next: ['next', 'react-dom'],
   vite: ['vite', '@vitejs/plugin-react', 'react-dom'],
   'tanstack-start': ['@tanstack/react-start', 'vite', 'react-dom'],
+  'react-router': [
+    'react-router',
+    '@react-router/dev',
+    '@react-router/node',
+    '@react-router/serve',
+    'isbot',
+    'vite',
+    'react-dom',
+  ],
   expo: ['expo', 'react-native'],
 };
 const clerk: Record<Framework, string> = {
   next: '@clerk/nextjs',
   vite: '@clerk/react',
   'tanstack-start': '@clerk/tanstack-react-start',
+  'react-router': '@clerk/react-router',
   expo: '@clerk/expo',
 };
 const baselines: Record<string, string> = {
   convex: versions.convex,
   '@convex-dev/auth': versions.convexAuth,
   '@auth/core': versions.authCore,
+  'react-router': versions.reactRouter,
+  '@react-router/dev': versions.reactRouter,
+  '@react-router/node': versions.reactRouter,
+  '@react-router/serve': versions.reactRouter,
+  '@clerk/react-router': versions.clerkReactRouter,
   react: versions.react,
   typescript: versions.typescript,
   next: versions.next,
@@ -574,7 +589,9 @@ export async function doctor(
     if (config.auth === 'clerk') {
       const required = [
         `${prefix}_CLERK_PUBLISHABLE_KEY`,
-        ...(app.framework === 'next' || app.framework === 'tanstack-start'
+        ...(app.framework === 'next' ||
+        app.framework === 'tanstack-start' ||
+        app.framework === 'react-router'
           ? ['CLERK_SECRET_KEY']
           : []),
       ];
@@ -682,6 +699,8 @@ function probeTypes(
     config.config,
     compiler.sys,
     dirname(configPath),
+    undefined,
+    configPath,
   );
   if (parsed.errors.some((error) => error.code !== 18003))
     return `TS${parsed.errors[0]!.code}`;

@@ -95,6 +95,15 @@ describe('options', () => {
       );
     },
   );
+  it.each(['react-router', 'web:react-router'])(
+    'accepts %s through CLI options',
+    (apps) => {
+      expect(normalizeOptions(parseCommand(['--apps', apps]).raw).apps).toEqual(
+        [{ name: 'web', framework: 'react-router' }],
+      );
+      expect(selectTemplate('react-router').id).toBe('react-router');
+    },
+  );
   it('selects framework adapters', () =>
     expect(selectTemplate('next').id).toBe('next'));
   it('parses flag negation', () =>

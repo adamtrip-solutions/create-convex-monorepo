@@ -15,6 +15,7 @@ export const frameworks: readonly Framework[] = [
   'next',
   'vite',
   'tanstack-start',
+  'react-router',
   'expo',
 ];
 const reserved = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9]|node_modules)$/i;

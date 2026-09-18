@@ -61,6 +61,12 @@ jobs:
             auth: none
           - apps: tanstack-start
             auth: none
+          - apps: react-router
+            auth: none
+          - apps: react-router,expo
+            auth: clerk
+          - apps: react-router,vite
+            auth: convex-auth
           - apps: expo
             auth: none
           - apps: next,expo
@@ -73,20 +79,20 @@ jobs:
             auth: convex-auth
           - apps: vite,tanstack-start
             auth: convex-auth
-          - apps: next,vite,tanstack-start,expo
+          - apps: next,vite,tanstack-start,react-router,expo
             auth: convex-auth
             example: none
-          - apps: next,vite,tanstack-start,expo
+          - apps: next,vite,tanstack-start,react-router,expo
             auth: none
             example: none
-          - apps: next,vite,tanstack-start,expo
+          - apps: next,vite,tanstack-start,react-router,expo
             auth: clerk
             example: none
-          - apps: next,admin:vite,portal:tanstack-start,expo
+          - apps: next,admin:vite,portal:tanstack-start,router:react-router,expo
             auth: clerk
             example: messages
             workspaceCommands: '1'
-          - apps: next,admin:vite,portal:tanstack-start,expo
+          - apps: next,admin:vite,portal:tanstack-start,router:react-router,expo
             auth: clerk
             example: none
             workspaceCommands: '1'

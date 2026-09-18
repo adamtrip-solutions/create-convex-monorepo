@@ -2,6 +2,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
   writeFile,
   mkdir,
@@ -9,6 +10,8 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { generateProject } from '../src/generator/index.js';
 import type { Auth, Example, Framework } from '../src/generator/types.js';
@@ -68,7 +71,166 @@ async function snapshot(
   return result;
 }
 
-const frameworks: Framework[] = ['next', 'vite', 'tanstack-start', 'expo'];
+const frameworks: Framework[] = [
+  'next',
+  'vite',
+  'tanstack-start',
+  'expo',
+  'react-router',
+];
+
+async function olderSetupHelper() {
+  // Captured with git show main:assets/setup/convex-setup.mjs so this also
+  // runs in shallow checkouts without a local main ref.
+  const older = await readFile(
+    new URL(
+      './fixtures/convex-setup-before-react-router.mjs.txt',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  return older.replace(/^\s*case ['"]react-router['"]:\r?\n/gm, '');
+}
+
+it.each(['react-router', 'expo'] as const)(
+  'upgrades an older generated setup helper when adding %s',
+  async (framework) => {
+    const workspace = await fixture('none');
+    const path = 'scripts/convex-setup.mjs';
+    const target = await readFile(join(workspace.root, path), 'utf8');
+    let older = await olderSetupHelper();
+    if (framework === 'expo')
+      older = older.replace(
+        /    case 'expo':\n      return 'EXPO_PUBLIC_CONVEX_URL';\n/,
+        '',
+      );
+    await writeFile(join(workspace.root, path), older);
+    const plan = await planAddApp(workspace, {
+      name: 'router',
+      framework,
+    });
+    expect(plan.changes).toContainEqual({ path, before: older, after: target });
+    expect(await readFile(join(workspace.root, path), 'utf8')).toBe(older);
+    await applyPlan(plan);
+    expect(await readFile(join(workspace.root, path), 'utf8')).toBe(target);
+    await writeFile(
+      join(workspace.root, 'packages/backend/.env.local'),
+      'CONVEX_URL=https://test.convex.cloud\n',
+    );
+    const { stdout } = await promisify(execFile)(process.execPath, [
+      await realpath(join(workspace.root, path)),
+      '--link-only',
+    ]);
+    expect(stdout).toContain('Linked apps/router/.env.local');
+    expect(
+      await readFile(join(workspace.root, 'apps/router/.env.local'), 'utf8'),
+    ).toBe(
+      `${framework === 'expo' ? 'EXPO_PUBLIC' : 'VITE'}_CONVEX_URL=https://test.convex.cloud\n`,
+    );
+  },
+);
+
+it.each(['comment', 'mapping', 'extra case', 'invalid syntax'])(
+  'preserves a setup helper with a custom %s and explains how to update it',
+  async (customization) => {
+    const workspace = await fixture('none');
+    const path = 'scripts/convex-setup.mjs';
+    const older = await olderSetupHelper();
+    const customized =
+      customization === 'comment'
+        ? `${older}\n// Keep our custom setup.\n`
+        : customization === 'mapping'
+          ? older.replace('VITE_CONVEX_URL', 'CUSTOM_CONVEX_URL')
+          : customization === 'extra case'
+            ? older.replace("case 'vite':", "case 'custom':\n    case 'vite':")
+            : `${older}\nsyntax error!\n`;
+    await writeFile(join(workspace.root, path), customized);
+    const plan = await planAddApp(workspace, {
+      name: 'router',
+      framework: 'react-router',
+    });
+    expect(plan.changes.some((change) => change.path === path)).toBe(false);
+    expect(plan.notes).toContain(
+      `${path} is missing or customized. Copy the current helper from a fresh project or update its framework map to support react-router before running pnpm convex:setup or pnpm convex:link.`,
+    );
+    await applyPlan(plan);
+    expect(await readFile(join(workspace.root, path), 'utf8')).toBe(customized);
+  },
+);
+
+it.each([
+  ['LF with a trailing newline', '\n', true],
+  ['CRLF with a trailing newline', '\r\n', true],
+  ['LF without a trailing newline', '\n', false],
+  ['CRLF without a trailing newline', '\r\n', false],
+] as const)(
+  'adds React Router artifact settings to a legacy workspace using %s',
+  async (_label, newline, trailingNewline) => {
+    const workspace = await fixture('none');
+    const prettier =
+      (await readFile(join(workspace.root, '.prettierignore'), 'utf8'))
+        .split('\n')
+        .filter(
+          (line) => !['**/.react-router/', '**/build/', ''].includes(line),
+        )
+        .concat(['# Keep our custom output', 'custom-artifacts/'])
+        .join(newline) + (trailingNewline ? newline : '');
+    await writeFile(join(workspace.root, '.prettierignore'), prettier);
+    const eslintPath = join(workspace.root, 'packages/eslint-config/index.js');
+    const eslint =
+      (await readFile(eslintPath, 'utf8'))
+        .replace(/'\*\*\/\.react-router\/\*\*',?\s*/g, '')
+        .replace(/'\*\*\/build\/\*\*',?\s*/g, '') +
+      '\n// Keep our custom lint configuration.\n';
+    await writeFile(eslintPath, eslint);
+    const turboPath = join(workspace.root, 'turbo.json');
+    const turbo = JSON.parse(await readFile(turboPath, 'utf8'));
+    turbo.tasks.build.outputs = turbo.tasks.build.outputs.filter(
+      (output: string) => output !== 'build/**',
+    );
+    turbo.tasks.build.outputs.push('custom-artifacts/**');
+    await writeFile(turboPath, JSON.stringify(turbo));
+    const gitignorePath = join(workspace.root, '.gitignore');
+    await writeFile(
+      gitignorePath,
+      (await readFile(gitignorePath, 'utf8')).replace(
+        /^\.react-router\/\n|^build\/\n/gm,
+        '',
+      ),
+    );
+    const before = await snapshot(workspace.root);
+    const plan = await planAddApp(workspace, {
+      name: 'router',
+      framework: 'react-router',
+    });
+    await applyPlan(plan, { dryRun: true });
+    expect(await snapshot(workspace.root)).toEqual(before);
+    await applyPlan(plan);
+    const after = await snapshot(workspace.root);
+    expect(after['.prettierignore']).toBe(
+      prettier +
+        (trailingNewline ? '' : newline) +
+        ['apps/router/.react-router/', 'apps/router/build/', ''].join(newline),
+    );
+    for (const [path, contents] of Object.entries(before)) {
+      if (
+        !['package.json', 'convex-monorepo.json', '.prettierignore'].includes(
+          path,
+        )
+      )
+        expect(after[path], path).toBe(contents);
+    }
+    expect(JSON.parse(after['apps/router/turbo.json']!)).toEqual({
+      extends: ['//'],
+      tasks: { build: { outputs: ['build/**'] } },
+    });
+    expect(after['apps/router/.gitignore']).toBe('/.react-router/\n/build/\n');
+    expect(after['apps/router/eslint.config.js']).toMatch(
+      /\{\s*ignores: \['\*\*\/\.react-router\/\*\*', '\*\*\/build\/\*\*'\],?\s*\}/,
+    );
+  },
+);
+
 describe.each<Example>(['none', 'messages'])(
   'add app with %s content',
   (example) => {
@@ -79,6 +241,10 @@ describe.each<Example>(['none', 'messages'])(
           'adds %s without modifying the backend or existing app',
           async (framework) => {
             const workspace = await fixture(example, auth);
+            await writeFile(
+              join(workspace.root, 'apps/web/src/app/page.tsx'),
+              '// Customized existing page\n',
+            );
             const before = await snapshot(workspace.root);
             const plan = await planAddApp(workspace, {
               name: 'added',
@@ -438,7 +604,7 @@ it.each(frameworks)(
 it('keeps unique development ports through sequential app additions', async () => {
   let workspace = await fixture('none');
   for (const [index, framework] of (
-    ['vite', 'tanstack-start', 'next'] as const
+    ['vite', 'tanstack-start', 'next', 'react-router'] as const
   ).entries()) {
     const name = `added-${index}`;
     await applyPlan(await planAddApp(workspace, { name, framework }));
@@ -450,12 +616,13 @@ it('keeps unique development ports through sequential app additions', async () =
   );
   expect(files['apps/added-0/vite.config.ts']).toContain('port: 3001');
   expect(files['apps/added-1/vite.config.ts']).toContain('port: 3002');
+  expect(files['apps/added-3/vite.config.ts']).toContain('port: 3004');
   expect(JSON.parse(files['apps/added-2/package.json']!).scripts.dev).toBe(
     'next dev --port 3003',
   );
 });
 
-it.each(['next', 'vite'] as const)(
+it.each(['next', 'vite', 'react-router'] as const)(
   'rejects a new app port claimed by customized %s configuration',
   async (framework) => {
     const workspace = await fixture('none', 'none', framework);

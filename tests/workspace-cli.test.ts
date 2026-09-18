@@ -362,37 +362,40 @@ describe('workspace command routing', () => {
       'Registry unavailable',
     );
   });
-  it('prompts for an app and optional installation in a terminal', async () => {
-    process.stdin.isTTY = true;
-    process.stdout.isTTY = true;
-    mocks.select
-      .mockResolvedValueOnce('add-app')
-      .mockResolvedValueOnce('vite')
-      .mockResolvedValueOnce('none');
-    mocks.text.mockResolvedValueOnce('admin');
-    mocks.confirm.mockResolvedValueOnce(true);
-    await runWorkspace(['add'], '1.2.3');
-    expect(mocks.app).toHaveBeenCalledWith(workspace, {
-      name: 'admin',
-      framework: 'vite',
-      example: 'none',
-    });
-    expect(mocks.confirm).toHaveBeenCalledOnce();
-    expect(mocks.apply).toHaveBeenCalledOnce();
-    expect(mocks.install).toHaveBeenCalledOnce();
-    expect(mocks.app.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.confirm.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.confirm.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.apply.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.select).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: 'Starter content?',
-        initialValue: 'messages',
-      }),
-    );
-  });
+  it.each(['vite', 'react-router'])(
+    'prompts for a %s app and optional installation in a terminal',
+    async (framework) => {
+      process.stdin.isTTY = true;
+      process.stdout.isTTY = true;
+      mocks.select
+        .mockResolvedValueOnce('add-app')
+        .mockResolvedValueOnce(framework)
+        .mockResolvedValueOnce('none');
+      mocks.text.mockResolvedValueOnce('admin');
+      mocks.confirm.mockResolvedValueOnce(true);
+      await runWorkspace(['add'], '1.2.3');
+      expect(mocks.app).toHaveBeenCalledWith(workspace, {
+        name: 'admin',
+        framework,
+        example: 'none',
+      });
+      expect(mocks.confirm).toHaveBeenCalledOnce();
+      expect(mocks.apply).toHaveBeenCalledOnce();
+      expect(mocks.install).toHaveBeenCalledOnce();
+      expect(mocks.app.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.confirm.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.confirm.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.apply.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.select).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          message: 'Starter content?',
+          initialValue: 'messages',
+        }),
+      );
+    },
+  );
   it('does not prompt for installation during an interactive dry run', async () => {
     process.stdin.isTTY = true;
     process.stdout.isTTY = true;
