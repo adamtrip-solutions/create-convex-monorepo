@@ -26,7 +26,7 @@ pnpm test:package
 
 The package smoke test installs the tarball in a temporary directory and exercises its binary, exports, starter assets and URL linker. Registry commands such as `pnpm create convex-monorepo` use the published package, not your checkout.
 
-Install and check the generated project when changing templates. `pnpm test:e2e` runs the repository's generated-project checks; inspect its script and CI configuration for the current matrix. `pnpm test:backend` runs backend behavior tests. These commands can need network access and more time than unit tests. A template snapshot does not prove that its framework builds.
+Install and check the generated project when changing templates. `pnpm test:e2e` runs the repository's generated-project checks; `.github/ci-matrix.json` holds the current matrix. Feature PRs build the entries marked `smoke`, and the release PR builds all of them. See [What CI runs](docs/releases.md#what-ci-runs). `pnpm test:backend` runs backend behavior tests. These commands can need network access and more time than unit tests. A template snapshot does not prove that its framework builds.
 
 ## Scope a change
 

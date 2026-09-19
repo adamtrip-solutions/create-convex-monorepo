@@ -1,0 +1,371 @@
+[
+  {
+    "apps": "nuxt,sveltekit,vite",
+    "auth": "none",
+    "example": "messages",
+    "smoke": true
+  },
+  {
+    "apps": "nuxt",
+    "auth": "none",
+    "example": "messages"
+  },
+  {
+    "apps": "nuxt",
+    "auth": "none",
+    "example": "messages",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "nuxt,vite",
+    "auth": "none",
+    "example": "none"
+  },
+  {
+    "apps": "vite,nuxt",
+    "auth": "none",
+    "example": "messages",
+    "workspaceCommands": "1",
+    "smoke": true
+  },
+  {
+    "apps": "sveltekit",
+    "auth": "none",
+    "example": "messages"
+  },
+  {
+    "apps": "sveltekit,next",
+    "auth": "none",
+    "example": "none"
+  },
+  {
+    "apps": "vite,sveltekit",
+    "auth": "none",
+    "example": "messages",
+    "workspaceCommands": "1"
+  },
+  {
+    "apps": "vite,sveltekit",
+    "auth": "none",
+    "example": "messages",
+    "workspaceCommands": "1",
+    "packageManager": "bun",
+    "smoke": true
+  },
+  {
+    "apps": "sveltekit,react-router",
+    "auth": "none",
+    "example": "none"
+  },
+  {
+    "apps": "astro,react-router",
+    "auth": "better-auth"
+  },
+  {
+    "apps": "astro,react-router",
+    "auth": "better-auth",
+    "packageManager": "bun",
+    "smoke": true
+  },
+  {
+    "apps": "astro,react-router",
+    "auth": "better-auth",
+    "example": "none"
+  },
+  {
+    "apps": "astro,react-router",
+    "auth": "better-auth",
+    "example": "none",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "astro,react-router",
+    "auth": "clerk"
+  },
+  {
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "oauth": "github,google"
+  },
+  {
+    "apps": "astro,react-router",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next",
+    "auth": "none"
+  },
+  {
+    "apps": "astro",
+    "auth": "none"
+  },
+  {
+    "apps": "astro,expo",
+    "auth": "clerk",
+    "smoke": true
+  },
+  {
+    "apps": "astro,next",
+    "auth": "convex-auth",
+    "example": "none"
+  },
+  {
+    "apps": "vite,astro",
+    "auth": "none",
+    "workspaceCommands": "1"
+  },
+  {
+    "apps": "vite,astro",
+    "auth": "none",
+    "workspaceCommands": "1",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "vite",
+    "auth": "none"
+  },
+  {
+    "apps": "tanstack-start",
+    "auth": "none",
+    "smoke": true
+  },
+  {
+    "apps": "react-router",
+    "auth": "none"
+  },
+  {
+    "apps": "react-router,expo",
+    "auth": "clerk"
+  },
+  {
+    "apps": "react-router,vite",
+    "auth": "convex-auth"
+  },
+  {
+    "apps": "react-router,vite",
+    "auth": "convex-auth",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "react-router,vite",
+    "auth": "convex-auth",
+    "oauth": "github,google"
+  },
+  {
+    "apps": "react-router,vite",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "expo",
+    "auth": "none"
+  },
+  {
+    "apps": "next,expo",
+    "auth": "none"
+  },
+  {
+    "apps": "next,expo",
+    "auth": "clerk"
+  },
+  {
+    "apps": "vite,tanstack-start",
+    "auth": "clerk"
+  },
+  {
+    "apps": "next,vite,tanstack-start",
+    "auth": "workos",
+    "example": "messages",
+    "smoke": true
+  },
+  {
+    "apps": "next,vite,tanstack-start",
+    "auth": "workos",
+    "example": "none"
+  },
+  {
+    "apps": "next,expo",
+    "auth": "convex-auth"
+  },
+  {
+    "apps": "next,expo",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "smoke": true
+  },
+  {
+    "apps": "next,expo",
+    "auth": "convex-auth",
+    "oauth": "github,google",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "vite,tanstack-start",
+    "auth": "convex-auth",
+    "oauth": "github",
+    "example": "none"
+  },
+  {
+    "apps": "vite,tanstack-start",
+    "auth": "convex-auth"
+  },
+  {
+    "apps": "next,vite,tanstack-start,react-router,expo",
+    "auth": "convex-auth",
+    "example": "none"
+  },
+  {
+    "apps": "next,vite,tanstack-start,react-router,expo",
+    "auth": "none",
+    "example": "none"
+  },
+  {
+    "apps": "next,vite,tanstack-start,react-router,expo",
+    "auth": "clerk",
+    "example": "none"
+  },
+  {
+    "apps": "next,admin:vite,portal:tanstack-start,router:react-router,expo",
+    "auth": "clerk",
+    "example": "messages",
+    "workspaceCommands": "1"
+  },
+  {
+    "apps": "next,admin:vite,portal:tanstack-start,router:react-router,expo",
+    "auth": "clerk",
+    "example": "none",
+    "workspaceCommands": "1",
+    "smoke": true
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "none",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "clerk",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "none",
+    "example": "none",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "clerk",
+    "example": "none",
+    "packageManager": "bun",
+    "workspaceCommands": "1"
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "example": "none",
+    "packageManager": "bun",
+    "smoke": true
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "convex-auth",
+    "example": "none"
+  },
+  {
+    "apps": "react-router,vite",
+    "auth": "better-auth"
+  },
+  {
+    "apps": "react-router,vite",
+    "auth": "better-auth",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,expo",
+    "auth": "better-auth"
+  },
+  {
+    "apps": "vite,tanstack-start",
+    "auth": "better-auth"
+  },
+  {
+    "apps": "next,expo",
+    "auth": "better-auth",
+    "example": "none"
+  },
+  {
+    "apps": "vite,tanstack-start",
+    "auth": "better-auth",
+    "example": "none"
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "none",
+    "example": "none"
+  },
+  {
+    "apps": "next,vite,tanstack-start,expo",
+    "auth": "clerk",
+    "example": "none"
+  },
+  {
+    "apps": "next,admin:vite,portal:tanstack-start,expo",
+    "auth": "clerk",
+    "example": "messages",
+    "workspaceCommands": "1"
+  },
+  {
+    "apps": "next,admin:vite,portal:tanstack-start,expo",
+    "auth": "clerk",
+    "example": "none",
+    "workspaceCommands": "1"
+  },
+  {
+    "apps": "next,vite,tanstack-start",
+    "auth": "workos",
+    "example": "messages",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,vite,tanstack-start",
+    "auth": "workos",
+    "example": "none",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,expo",
+    "auth": "better-auth",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "vite,tanstack-start",
+    "auth": "better-auth",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,expo",
+    "auth": "better-auth",
+    "example": "none",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "vite,tanstack-start",
+    "auth": "better-auth",
+    "example": "none",
+    "packageManager": "bun"
+  }
+]
