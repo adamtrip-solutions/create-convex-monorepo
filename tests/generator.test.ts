@@ -398,6 +398,7 @@ describe('generated project golden matrix', () => {
           `${dir}/src/${framework === 'nuxt' ? 'components/Providers.vue' : svelte ? 'Providers.svelte' : 'providers.tsx'}`,
         );
         if (framework === 'nuxt') {
+          expect(app.scripts?.postinstall).toBe('nuxt prepare');
           expect(app.dependencies).not.toHaveProperty('react');
           expect(app.dependencies).not.toHaveProperty('react-dom');
           expect(app.devDependencies).not.toHaveProperty('@types/react');

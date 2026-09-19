@@ -12,6 +12,7 @@ export const nuxtTemplate: AppTemplate = {
       dev: `nuxt dev --dotenv .env.local --port ${port(ctx, app)}`,
       build: 'nuxt build --dotenv .env.local',
       preview: 'nuxt preview --dotenv .env.local',
+      postinstall: 'nuxt prepare',
       typecheck:
         'nuxt prepare && vue-tsc --noEmit -p .nuxt/tsconfig.json && vue-tsc --noEmit -p .nuxt/tsconfig.server.json',
       lint: 'eslint .',

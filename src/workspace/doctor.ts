@@ -913,8 +913,15 @@ export async function doctor(
     if (backendName && resolved.get(directory)?.has('typescript')) {
       checkAbort();
       try {
-        const failure = probeTypes(root, directory, backendName);
-        if (failure)
+        const failure = probeTypes(root, directory, backendName, app.framework);
+        if (failure && typeof failure !== 'string')
+          issue(
+            'app-tsconfig-generated',
+            `${directory}/${failure.path} is missing; the backend type probe was skipped.`,
+            `Run ${config.packageManager} install with lifecycle scripts enabled, or run ${config.packageManager} ${config.packageManager === 'bun' ? 'run' : 'exec'} ${failure.command} in ${directory}, then rerun doctor.`,
+            'warning',
+          );
+        else if (failure)
           issue(
             'backend-types',
             `${directory} cannot consume typed backend exports (${failure}).`,
@@ -962,7 +969,8 @@ function probeTypes(
   root: string,
   directory: string,
   backend: string,
-): string | null {
+  framework: Framework,
+): string | { path: string; command: string } | null {
   const require = createRequire(join(root, directory, 'package.json'));
   const compiler = require('typescript') as typeof ts;
   const configPath = join(root, directory, 'tsconfig.json');
@@ -975,8 +983,34 @@ function probeTypes(
     undefined,
     configPath,
   );
-  if (parsed.errors.some((error) => error.code !== 18003))
-    return `TS${parsed.errors[0]!.code}`;
+  const configErrors = parsed.errors.filter((error) => error.code !== 18003);
+  if (configErrors.length) {
+    const generated =
+      framework === 'nuxt'
+        ? { path: '.nuxt/tsconfig.json', command: 'nuxt prepare' }
+        : framework === 'sveltekit'
+          ? { path: '.svelte-kit/tsconfig.json', command: 'svelte-kit sync' }
+          : null;
+    if (generated) {
+      const path = join(root, directory, generated.path).replaceAll('\\', '/');
+      // Only a missing framework-generated base is recoverable by preparing the
+      // app. Other missing configs and malformed configs must remain errors.
+      if (
+        !compiler.sys.fileExists(path) &&
+        configErrors.every(
+          (error) =>
+            error.code === 5083 &&
+            compiler
+              .flattenDiagnosticMessageText(error.messageText, '\n')
+              .includes(`'${path}'`),
+        )
+      )
+        return generated;
+    }
+    return [...new Set(configErrors.map((error) => `TS${error.code}`))].join(
+      ', ',
+    );
+  }
   const file = join(root, directory, '__ccm_doctor_probe__.ts');
   const source = `import { api } from ${JSON.stringify(`${backend}/api`)};\nimport type { DataModel } from ${JSON.stringify(`${backend}/dataModel`)};\ntype Assert<T extends false> = T;\nexport type ApiIsTyped = Assert<0 extends (1 & typeof api) ? true : false>;\nexport type ModelIsTyped = Assert<0 extends (1 & DataModel) ? true : false>;\nexport type ApiHasKnownKeys = Assert<string extends keyof typeof api ? true : false>;\n`;
   const options: ts.CompilerOptions = {

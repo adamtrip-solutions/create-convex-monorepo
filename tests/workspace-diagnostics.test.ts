@@ -61,6 +61,24 @@ async function snapshot(root: string): Promise<Record<string, string>> {
   }
   return files;
 }
+async function installProbeCompiler(root: string) {
+  const require = createRequire(import.meta.url);
+  // Use the real compiler through a fixture-local package, without an install.
+  await put(
+    root,
+    'node_modules/typescript/package.json',
+    JSON.stringify({
+      name: 'typescript',
+      version: versions.typescript,
+      main: 'index.cjs',
+    }),
+  );
+  await put(
+    root,
+    'node_modules/typescript/index.cjs',
+    `module.exports = require(${JSON.stringify(require.resolve('typescript'))});`,
+  );
+}
 
 describe('workspace doctor', () => {
   it.each([
@@ -608,22 +626,7 @@ closing secret"
   });
   it('resolves app-local type libraries in the in-memory probe and detects an untyped API', async () => {
     const workspace = await fixture('web:vite');
-    const require = createRequire(import.meta.url);
-    // The fixture uses the real compiler through a local package entry, without an install.
-    await put(
-      workspace.root,
-      'node_modules/typescript/package.json',
-      JSON.stringify({
-        name: 'typescript',
-        version: versions.typescript,
-        main: 'index.cjs',
-      }),
-    );
-    await put(
-      workspace.root,
-      'node_modules/typescript/index.cjs',
-      `module.exports = require(${JSON.stringify(require.resolve('typescript'))});`,
-    );
+    await installProbeCompiler(workspace.root);
     await put(
       workspace.root,
       'apps/web/tsconfig.json',
@@ -724,6 +727,107 @@ closing secret"
       ),
     ).toEqual([]);
   });
+  it.each([
+    ['nuxt', '.nuxt', 'nuxt prepare', 'pnpm'],
+    ['nuxt', '.nuxt', 'nuxt prepare', 'bun'],
+    ['sveltekit', '.svelte-kit', 'svelte-kit sync', 'pnpm'],
+    ['sveltekit', '.svelte-kit', 'svelte-kit sync', 'bun'],
+  ] as const)(
+    'warns for missing %s generated config and resumes the real probe with %s (%s, %s)',
+    async (framework, generated, command, manager) => {
+      const workspace = await fixture(`web:${framework}`, 'none', manager);
+      const { root } = workspace;
+      await installProbeCompiler(root);
+      await mkdir(join(root, 'node_modules/@diagnostics'), { recursive: true });
+      for (const name of ['backend', 'typescript-config'])
+        await symlink(
+          join(root, 'packages', name),
+          join(root, 'node_modules/@diagnostics', name),
+        );
+      const config = JSON.parse(
+        await readFile(join(root, 'apps/web/tsconfig.json'), 'utf8'),
+      );
+      // Keep each framework's actual extends shape, including SvelteKit's array.
+      config.compilerOptions = { strict: true, types: [] };
+      await put(root, 'apps/web/tsconfig.json', JSON.stringify(config));
+      await put(
+        root,
+        'packages/backend/convex/_generated/api.d.ts',
+        'export declare const api: { messages: { list: { _type: "query" } } };\n',
+      );
+      await put(
+        root,
+        'packages/backend/convex/_generated/dataModel.d.ts',
+        'export type DataModel = { messages: { document: { body: string } } };\n',
+      );
+      const probeIssues = (report: Awaited<ReturnType<typeof doctor>>) =>
+        report.issues.filter((issue) =>
+          ['app-tsconfig-generated', 'backend-types', 'type-probe'].includes(
+            issue.code,
+          ),
+        );
+      const before = await snapshot(root);
+      const missing = await doctor(workspace);
+      expect(probeIssues(missing)).toEqual([
+        {
+          code: 'app-tsconfig-generated',
+          severity: 'warning',
+          message: `apps/web/${generated}/tsconfig.json is missing; the backend type probe was skipped.`,
+          fix: `Run ${manager} install with lifecycle scripts enabled, or run ${manager} ${manager === 'bun' ? 'run' : 'exec'} ${command} in apps/web, then rerun doctor.`,
+        },
+      ]);
+      expect(
+        missing.checks.some((check) => check.includes('resolves backend API')),
+      ).toBe(false);
+      expect(await snapshot(root)).toEqual(before);
+
+      // A second, unrelated missing base must not be downgraded to a warning.
+      await put(
+        root,
+        'apps/web/tsconfig.json',
+        JSON.stringify({
+          ...config,
+          extends: [`./${generated}/tsconfig.json`, './missing-base.json'],
+        }),
+      );
+      expect(probeIssues(await doctor(workspace))).toEqual([
+        expect.objectContaining({
+          code: 'backend-types',
+          severity: 'error',
+          message: expect.stringContaining('TS5083'),
+        }),
+      ]);
+      await put(root, 'apps/web/tsconfig.json', JSON.stringify(config));
+      await put(
+        root,
+        `apps/web/${generated}/tsconfig.json`,
+        JSON.stringify({
+          compilerOptions: {
+            module: 'ESNext',
+            moduleResolution: 'Bundler',
+            target: 'ES2023',
+          },
+        }),
+      );
+      const healthy = await doctor(workspace);
+      expect(probeIssues(healthy)).toEqual([]);
+      expect(healthy.checks).toContain(
+        'apps/web resolves backend API and data model types without an untyped API.',
+      );
+      await put(
+        root,
+        'packages/backend/convex/_generated/api.d.ts',
+        'export declare const api: any;\n',
+      );
+      expect(probeIssues(await doctor(workspace))).toEqual([
+        expect.objectContaining({ code: 'backend-types', severity: 'error' }),
+      ]);
+      await put(root, `apps/web/${generated}/tsconfig.json`, '{ invalid json');
+      expect(probeIssues(await doctor(workspace))).toEqual([
+        expect.objectContaining({ code: 'backend-types', severity: 'error' }),
+      ]);
+    },
+  );
   it('detects installed version drift and incompatible workspace SDK versions', async () => {
     const workspace = await fixture('web:vite');
     await put(
