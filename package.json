@@ -1,6 +1,6 @@
 {
   "name": "create-convex-monorepo",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Generate typed Convex monorepos with composable frontend and authentication adapters.",
   "license": "MIT",
   "type": "module",
