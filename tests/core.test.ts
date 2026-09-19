@@ -452,3 +452,76 @@ it.each(['pnpm', 'bun'])(
     expect(await readdir(cwd)).toEqual([]);
   },
 );
+
+describe('Nuxt options', () => {
+  it.each(['nuxt', 'nuxt,next', 'web:next,portal:nuxt', 'nuxt,sveltekit,vite'])(
+    'accepts %s with auth none',
+    (apps) => {
+      expect(
+        normalizeOptions(
+          parseCommand(['--apps', apps, '--auth', 'none']).raw,
+        ).apps.some((app) => app.framework === 'nuxt'),
+      ).toBe(true);
+      expect(selectTemplate('nuxt').id).toBe('nuxt');
+    },
+  );
+  it.each(['clerk', 'convex-auth', 'workos', 'better-auth'])(
+    'rejects Nuxt with %s before creating files',
+    async (auth) => {
+      const cwd = await temp();
+      for (const apps of ['nuxt', 'next,nuxt']) {
+        expect(() => normalizeOptions({ apps, auth })).toThrow(
+          'Nuxt currently supports only --auth none.',
+        );
+        await expect(
+          generateProject({ name: 'unsupported', apps, auth }, { cwd }),
+        ).rejects.toThrow('Nuxt currently supports only --auth none');
+        expect(await readdir(cwd)).toEqual([]);
+      }
+    },
+  );
+});
+
+describe.each(['pnpm', 'bun'] as const)(
+  'Nuxt integration with %s',
+  (packageManager) => {
+    it('coexists with every framework without authentication', () => {
+      const options = normalizeOptions({
+        apps: 'next,vite,tanstack-start,expo,router:react-router,island:astro,svelte:sveltekit,portal:nuxt',
+        auth: 'none',
+        packageManager,
+      });
+      expect(options.apps.map((app) => app.framework)).toEqual([
+        'next',
+        'vite',
+        'tanstack-start',
+        'expo',
+        'react-router',
+        'astro',
+        'sveltekit',
+        'nuxt',
+      ]);
+      expect(options.packageManager).toBe(packageManager);
+    });
+    it.each(['github', 'google', 'github,google'])(
+      'rejects Convex Auth OAuth %s before creating files',
+      async (oauth) => {
+        const cwd = await temp();
+        const options = {
+          name: 'unsupported-oauth',
+          apps: 'next,portal:nuxt',
+          auth: 'convex-auth',
+          oauth,
+          packageManager,
+        };
+        expect(() => normalizeOptions(options)).toThrow(
+          'Nuxt currently supports only --auth none',
+        );
+        await expect(generateProject(options, { cwd })).rejects.toThrow(
+          'Nuxt currently supports only --auth none',
+        );
+        expect(await readdir(cwd)).toEqual([]);
+      },
+    );
+  },
+);

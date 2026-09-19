@@ -16,7 +16,7 @@ import {
   normalizeOAuthProviders,
   validateProjectName,
 } from '../generator/options.js';
-import { versions } from '../templates/versions.js';
+import { nodeEngines, versions } from '../templates/versions.js';
 import { validateAuthCompatibility } from '../integrations/auth/index.js';
 import { readBackendEnvironment } from './env.js';
 import {
@@ -298,6 +298,94 @@ async function planAstroSupport(
   }
 }
 
+/** Upgrade root support files when Nuxt is added to an older workspace. */
+async function planNuxtSupport(
+  workspace: Workspace,
+  plan: ChangePlan,
+  generated: Files,
+) {
+  const readmePath = 'README.md';
+  const readme = await guardedRead(workspace, plan, readmePath);
+  const requirement = `Use Node ${nodeEngines.nuxt} and ${workspace.config.packageManager} ${versions[workspace.config.packageManager]}.`;
+  if (!readme?.includes(nodeEngines.nuxt)) {
+    const after = readme?.match(/^Use Node 22\.12\+(?= and (?:pnpm|bun) )/m)
+      ? readme.replace(
+          /^Use Node 22\.12\+(?= and (?:pnpm|bun) )/m,
+          `Use Node ${nodeEngines.nuxt}`,
+        )
+      : `${readme ?? ''}\n\n${requirement}\n`;
+    plan.changes.push({
+      path: readmePath,
+      before: readme,
+      after: retainNewlines(after, readme),
+    });
+  }
+  const setupPath = 'scripts/convex-setup.mjs';
+  const setup = await guardedRead(workspace, plan, setupPath);
+  const target = generated.get(setupPath)!;
+  if (
+    !plan.changes.some((change) => change.path === setupPath) &&
+    !(await equivalentGeneratedFile(setupPath, setup, target))
+  )
+    throw new Error(
+      `Conflict in ${setupPath}: customized URL linking cannot be updated for Nuxt. Restore the generated helper before adding Nuxt, then reapply custom changes. No files were changed.`,
+    );
+  const path = 'turbo.json';
+  const before = await guardedRead(workspace, plan, path);
+  if (before === null) throw new Error('Missing turbo.json.');
+  const config = object(JSON.parse(before), path);
+  const tasks = object(config.tasks, path);
+  for (const [task, key, value] of [
+    ['dev', 'passThroughEnv', 'NUXT_PUBLIC_*'],
+    ['build', 'env', 'NUXT_PUBLIC_*'],
+    ['build', 'outputs', '.nuxt/**'],
+  ] as const) {
+    const settings = object(tasks[task], path);
+    const values = settings[key] ?? [];
+    if (
+      !Array.isArray(values) ||
+      values.some((entry) => typeof entry !== 'string')
+    )
+      throw new Error(
+        `Conflict in turbo.json: tasks.${task}.${key} must be a string array to add Nuxt support. No files were changed.`,
+      );
+    if (
+      key !== 'outputs' &&
+      values.some((entry) => entry.startsWith('!NUXT_PUBLIC_'))
+    )
+      throw new Error(
+        `Conflict in turbo.json: tasks.${task}.${key} excludes Nuxt public variables. Remove the exclusion before adding Nuxt. No files were changed.`,
+      );
+    if (!values.includes(value)) settings[key] = [...values, value];
+    tasks[task] = settings;
+  }
+  config.tasks = tasks;
+  if (JSON.stringify(config) !== JSON.stringify(JSON.parse(before)))
+    plan.changes.push({
+      path,
+      before,
+      after: retainNewlines(
+        await formatGeneratedFile(path, json(config)),
+        before,
+      ),
+    });
+  for (const [path, pattern] of [
+    ['.gitignore', '.nuxt/'],
+    ['.prettierignore', '**/.nuxt/'],
+  ] as const) {
+    const before = await guardedRead(workspace, plan, path);
+    if (!before?.split(/\r?\n/).includes(pattern))
+      plan.changes.push({
+        path,
+        before,
+        after: retainNewlines(
+          `${before ?? ''}${before && !before.endsWith('\n') ? '\n' : ''}${pattern}\n`,
+          before,
+        ),
+      });
+  }
+}
+
 export async function planAddApp(
   workspace: Workspace,
   options: { name: string; framework: Framework; example?: Example },
@@ -413,6 +501,8 @@ export async function planAddApp(
         `Development port ${newPort} is already configured in apps/${existing.name}. Choose a different port there before adding this app.`,
       );
   }
+  if (app.framework === 'nuxt')
+    await planNuxtSupport(workspace, plan, generated);
   if (app.framework === 'astro')
     await planAstroSupport(workspace, plan, generated);
   if (example === 'messages') await verifyMessages(workspace, plan, generated);
@@ -492,6 +582,18 @@ export async function planAddApp(
   const before = await guardedRead(workspace, plan, path);
   if (before === null) throw new Error('Missing root package.json.');
   const manifest = object(JSON.parse(before), path);
+  if (app.framework === 'nuxt') {
+    const engines = object(manifest.engines, path);
+    if (
+      engines.node !== undefined &&
+      engines.node !== nodeEngines.default &&
+      engines.node !== nodeEngines.nuxt
+    )
+      throw new Error(
+        `Conflict in package.json: engines.node is customized. Set it to "${nodeEngines.nuxt}" before adding Nuxt. No files were changed.`,
+      );
+    manifest.engines = { ...engines, node: nodeEngines.nuxt };
+  }
   const scripts = { ...object(manifest.scripts, path) };
   const script = `dev:${app.name}`;
   if (Object.hasOwn(scripts, script))

@@ -1070,5 +1070,79 @@
       ["app-3", "sveltekit", "PUBLIC", null],
       ["app-4", "astro", "PUBLIC", null]
     ]
+  },
+  {
+    "label": "Nuxt only",
+    "apps": "nuxt",
+    "auth": "none",
+    "expected": [["web", "nuxt", "NUXT_PUBLIC", null]]
+  },
+  {
+    "label": "Nuxt + Vite (blank)",
+    "apps": "nuxt,vite",
+    "example": "none",
+    "auth": "none",
+    "expected": [
+      ["web", "nuxt", "NUXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null]
+    ]
+  },
+  {
+    "label": "Next + Nuxt",
+    "apps": "next,nuxt",
+    "auth": "none",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["app", "nuxt", "NUXT_PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Nuxt + SvelteKit + Vite",
+    "apps": "nuxt,sveltekit,vite",
+    "auth": "none",
+    "expected": [
+      ["web", "nuxt", "NUXT_PUBLIC", null],
+      ["app", "sveltekit", "PUBLIC", null],
+      ["admin", "vite", "VITE", null]
+    ]
+  },
+  {
+    "label": "Bun Nuxt only",
+    "apps": "nuxt",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [["web", "nuxt", "NUXT_PUBLIC", null]]
+  },
+  {
+    "label": "Bun Nuxt + Vite (blank)",
+    "apps": "nuxt,vite",
+    "example": "none",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "nuxt", "NUXT_PUBLIC", null],
+      ["admin", "vite", "VITE", null]
+    ]
+  },
+  {
+    "label": "Bun Next + Nuxt",
+    "apps": "next,nuxt",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "next", "NEXT_PUBLIC", null],
+      ["app", "nuxt", "NUXT_PUBLIC", null]
+    ]
+  },
+  {
+    "label": "Bun Nuxt + SvelteKit + Vite",
+    "apps": "nuxt,sveltekit,vite",
+    "auth": "none",
+    "packageManager": "bun",
+    "expected": [
+      ["web", "nuxt", "NUXT_PUBLIC", null],
+      ["app", "sveltekit", "PUBLIC", null],
+      ["admin", "vite", "VITE", null]
+    ]
   }
 ]

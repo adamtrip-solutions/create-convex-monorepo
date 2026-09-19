@@ -47,7 +47,7 @@ it.each([
     const root = await generateProject(
       {
         name: 'formatted',
-        apps: `next,admin:vite,portal:tanstack-start,expo${auth === 'none' ? ',svelte:sveltekit' : ''}`,
+        apps: `next,admin:vite,portal:tanstack-start,expo${auth === 'none' ? ',vue:nuxt,svelte:sveltekit' : ''}`,
         auth,
         example,
         install: false,
@@ -65,7 +65,7 @@ it.each([
     expect(pkg.devDependencies.prettier).toBe('3.8.3');
     for (const entry of await readdir(root, { recursive: true })) {
       const path = entry.split(sep).join('/');
-      if (!/\.(?:[cm]?[jt]sx?|svelte|json|css|html|md|ya?ml)$/.test(path))
+      if (!/\.(?:[cm]?[jt]sx?|vue|svelte|json|css|html|md|ya?ml)$/.test(path))
         continue;
       const source = await readFile(join(root, path), 'utf8');
       if (path.includes('/_generated/')) {

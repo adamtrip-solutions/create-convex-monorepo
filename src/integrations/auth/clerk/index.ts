@@ -43,8 +43,7 @@ export default { providers: [{ domain, applicationID: 'convex' }] } satisfies Au
     for (const app of ctx.options.apps) {
       const dir = `apps/${app.name}`;
       const binding = bindings[app.framework];
-      if (!binding)
-        throw new Error('SvelteKit currently supports only --auth none.');
+      if (!binding) throw new Error(`Clerk does not support ${app.framework}.`);
       const { native, prefix } = platform(app);
       const sdk =
         app.framework === 'astro' ? '@clerk/astro/react' : binding.sdk;

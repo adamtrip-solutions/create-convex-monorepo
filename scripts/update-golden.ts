@@ -102,6 +102,10 @@ for (const packageManager of ['pnpm', 'bun'] as const) {
 
 for (const packageManager of ['pnpm', 'bun'] as const) {
   for (const scenario of [
+    { label: 'Nuxt only', apps: 'nuxt' },
+    { label: 'Nuxt + Vite (blank)', apps: 'nuxt,vite', example: 'none' },
+    { label: 'Next + Nuxt', apps: 'next,nuxt' },
+    { label: 'Nuxt + SvelteKit + Vite', apps: 'nuxt,sveltekit,vite' },
     { label: 'SvelteKit messages', apps: 'sveltekit' },
     {
       label: 'SvelteKit + Next blank',

@@ -27,13 +27,16 @@ afterEach(async () => {
       .map((dir) => rm(dir, { recursive: true, force: true })),
   );
 });
-async function fixture(packageManager: 'pnpm' | 'bun' = 'pnpm') {
+async function fixture(
+  packageManager: 'pnpm' | 'bun' = 'pnpm',
+  apps = 'next,vite,tanstack-start,expo,router:react-router,svelte:sveltekit,island:astro',
+) {
   const dir = await mkdtemp(join(tmpdir(), 'ccm-workspace-core-'));
   directories.push(dir);
   const root = await generateProject(
     {
       name: 'fixture',
-      apps: 'next,vite,tanstack-start,expo,router:react-router,svelte:sveltekit,island:astro',
+      apps,
       example: 'none',
       packageManager,
     },
@@ -330,4 +333,21 @@ it('uses bun setup guidance when env sync needs a deployment', async () => {
   await expect(planEnvSync(workspace)).rejects.toThrow(
     'Run bun run convex:setup first.',
   );
+});
+
+it('syncs the Nuxt runtime URL with dry run and idempotency', async () => {
+  const ws = await fixture('pnpm', 'next,portal:nuxt');
+  await writeFile(
+    join(ws.root, 'packages/backend/.env.local'),
+    'CONVEX_URL=https://nuxt.convex.cloud\nCONVEX_DEPLOY_KEY=never-copy\n',
+  );
+  const before = await contents(ws.root);
+  const plan = await planEnvSync(ws, { app: 'portal' });
+  await applyPlan(plan, { dryRun: true });
+  expect(await contents(ws.root)).toEqual(before);
+  await applyPlan(plan);
+  expect(await readText(ws.root, 'apps/portal/.env.local')).toBe(
+    'NUXT_PUBLIC_CONVEX_URL=https://nuxt.convex.cloud\n',
+  );
+  expect((await planEnvSync(ws, { app: 'portal' })).changes).toEqual([]);
 });

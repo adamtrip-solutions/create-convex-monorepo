@@ -1,6 +1,6 @@
 # Adding a framework
 
-Supported IDs are `next`, `vite`, `tanstack-start`, `react-router`, `expo`, and `astro`.
+Supported IDs are `next`, `vite`, `tanstack-start`, `react-router`, `expo`, `astro`, `sveltekit`, and `nuxt`.
 
 Start with current framework and Convex documentation, then install a minimal upstream example. Record the exact versions and workspace constraints in `docs/research.md`. A successful single-package app is not enough evidence for a workspace adapter.
 
@@ -10,8 +10,8 @@ Start with current framework and Convex documentation, then install a minimal up
 2. Create `src/templates/apps/<id>/index.ts` exporting an `AppTemplate`. Use `context.write`, `context.json`, and shared manifest helpers. Generate framework files under `apps/${app.name}`.
 3. Register it in `src/templates/apps/index.ts` and add the interactive label in `src/commands/create.ts`.
 4. Generate the public Convex environment variable with the framework's required prefix. Use statically named environment access where the bundler requires it. Add its public variable to `publicVariable` in `assets/setup/convex-setup.mjs`, update the generated README environment table, and test URL linking for the new framework.
-5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own the provider and auth-control components. React uses `src/providers.tsx` and `src/auth-controls.tsx`; Svelte uses `src/Providers.svelte` and `src/AuthControls.svelte`. The framework template must not write those files.
-6. Declare the framework's UI runtime, `react` or `svelte`, in `src/integrations/auth/shared.ts`. Each auth adapter declares `supportedRuntimes`. Shared manifests use the runtime to include React dependencies only where needed. Add platform environment handling and provider components for that runtime. Add a Clerk binding only if it is supported. Compatibility validation must reject unsupported combinations during create, add app, and add auth before output is written.
+5. Provide a framework entry point that mounts `Providers`, `AuthControls`, and a typed message UI. Auth adapters own the provider and auth-control components. React uses `src/providers.tsx` and `src/auth-controls.tsx`; Svelte uses `src/Providers.svelte` and `src/AuthControls.svelte`. Nuxt uses `src/plugins/convex.client.ts`, `src/components/Providers.vue`, and `src/components/AuthControls.vue`. The framework template must not write those files.
+6. Declare the framework's UI runtime, `react`, `svelte`, or `vue`, in `src/integrations/auth/shared.ts`. Each auth adapter declares `supportedRuntimes`. Shared manifests use the runtime to include React dependencies only where needed. Add platform environment handling and provider components for that runtime. Add a Clerk binding only if it is supported. Compatibility validation must reject unsupported combinations during create, add app, and add auth before output is written.
 7. Add versions, development/build/typecheck/lint scripts, and any route-generation step the framework needs on a clean checkout.
 
 The SvelteKit template composes the shared TypeScript ESLint rules with `eslint-plugin-svelte`. Its TypeScript config extends both the shared base and SvelteKit's generated config. Its app-local Prettier config loads the pinned Svelte plugin, which the generator also loads from its own installation to format components before writing.
@@ -28,7 +28,7 @@ Do not add a declaration bundler, a generic API cast, or copied backend code. Ch
 
 ## Verify before registration is considered supported
 
-Generate the framework alone, with another frontend, and with every advertised auth provider. Cover both `--example messages` and `--example none`; use the shared entry-content helper so blank apps do not import demo files. Install from a clean directory, typecheck, lint, and run a production build. For a native framework, run its actual JavaScript bundler for supported platforms. Exercise the query and mutation against a development backend when credentials or local deployment tooling are available; report separately when that check was skipped.
+Generate the framework alone, with another frontend, and with every advertised auth provider. Cover both `--example messages` and `--example none`; use runtime-appropriate entry content so blank apps do not import demo files. Install from a clean directory, typecheck, lint, and run a production build. For a native framework, run its actual JavaScript bundler for supported platforms. Exercise the query and mutation against a development backend when credentials or local deployment tooling are available; report separately when that check was skipped.
 
 Add focused output assertions, option-selection coverage, and representative generated-project CI coverage. Tests must catch missing generated declarations and widened argument/return types. Update README support notes and this guide if the framework introduces a new integration contract.
 
@@ -36,7 +36,19 @@ Add focused output assertions, option-selection coverage, and representative gen
 
 Add the framework's dependency expectations and diagnostic checks to `src/workspace/doctor.ts`. Verify that `add app` renders the framework at its real workspace index so development ports remain distinct. Add command tests for a new app next to an existing customized app, both starter choices, inherited auth, automatic URL linking, and a dry run. Extend the command E2E matrix to install and build the added framework.
 
-The add planner uses the same template as project creation. It copies the new application's files and updates workspace metadata and root scripts. The planner refreshes recognized unmodified setup helpers for every framework. Astro also adds its Turbo environment settings and output ignores. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
+The add planner uses the same template as project creation. It copies the new application's files and updates workspace metadata and root scripts. The planner refreshes recognized unmodified setup helpers for every framework. Adding Nuxt also adds its Turbo environment and output settings and appends `.nuxt` ignore patterns. Astro adds its Turbo environment settings and output ignores. A customized setup helper causes a conflict before writes; restore the generated helper, add Nuxt, then reapply custom changes. Avoid reading external project state inside a template; the planner needs to render it independently in a temporary directory.
+
+## Nuxt and Vue
+
+Nuxt supports auth `none` only. Clerk, Convex Auth, WorkOS, and Better Auth have no integrated Vue binding here, so Nuxt rejects them and Convex Auth OAuth. `validateAuthCompatibility` rejects other providers during option normalization and before `add auth` plans files, including when Nuxt is not the first app. Add-app validation uses the workspace's existing auth.
+
+The none adapter selects Vue output through `uiRuntime`. Install `convex-vue` in a `.client.ts` plugin, and mount query components inside `ClientOnly`. Keep `ssr: true`; neither server rendering nor production builds should query Convex. Read `runtimeConfig.public.convexUrl`, populated by `NUXT_PUBLIC_CONVEX_URL`. Include that prefix in URL linking, doctor secret checks, and Turbo environment inputs.
+
+Prettier formats `.vue` files with its built-in Vue parser, so Nuxt needs no additional formatting dependency.
+
+The Nuxt app uses `srcDir: 'src/'` so the shared `src/convex-api.type-test.ts` belongs to its compiler program. `nuxt prepare && vue-tsc --noEmit` uses the generated Nuxt tsconfig without a frontend `rootDir`. Lint composes `eslint-plugin-vue` essential rules with the shared TypeScript rules, using `vue-eslint-parser` and the TypeScript parser for script blocks. Ignore `.nuxt` and `.output` in lint, formatting, and git.
+
+## Better Auth bindings
 
 For Better Auth, provide a statically accessed public `CONVEX_SITE_URL` alongside `CONVEX_URL` with the framework's environment prefix. Browser clients use `ConvexBetterAuthProvider` with the Convex and cross-domain client plugins. Expo uses the Expo client plugin and SecureStore on native platforms, selecting the cross-domain plugin on web. Include both starters in generated-project typecheck, lint, and build checks, with JavaScript exports for Expo.
 

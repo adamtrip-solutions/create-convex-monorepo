@@ -55,6 +55,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - apps: nuxt,sveltekit,vite
+            auth: none
+            example: messages
+          - apps: nuxt
+            auth: none
+            example: messages
+          - apps: nuxt
+            auth: none
+            example: messages
+            packageManager: bun
+          - apps: nuxt,vite
+            auth: none
+            example: none
+          - apps: vite,nuxt
+            auth: none
+            example: messages
+            workspaceCommands: '1'
           - apps: sveltekit
             auth: none
             example: messages

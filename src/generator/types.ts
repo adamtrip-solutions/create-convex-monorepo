@@ -6,8 +6,9 @@ export type Framework =
   | 'tanstack-start'
   | 'react-router'
   | 'expo'
-  | 'sveltekit'
-  | 'astro';
+  | 'astro'
+  | 'nuxt'
+  | 'sveltekit';
 export type Auth = 'none' | 'clerk' | 'convex-auth' | 'workos' | 'better-auth';
 export type OAuthProvider = 'github' | 'google';
 export type PackageManagerId = 'pnpm' | 'bun';

@@ -6,7 +6,7 @@ import {
 import { readFile } from 'node:fs/promises';
 import type { GeneratorContext } from '../../generator/types.js';
 import { getPackageVersion } from '../../version.js';
-import { versions as v } from '../versions.js';
+import { nodeEngines, versions as v } from '../versions.js';
 import { formattingOptions } from '../../generator/format.js';
 import { publicVariable } from '../../../assets/setup/convex-setup.mjs';
 
@@ -16,6 +16,7 @@ import { convexAuthSetup } from '../../integrations/auth/convex-auth/setup.js';
 
 export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   const { options, scope } = ctx;
+  const hasNuxt = options.apps.some((app) => app.framework === 'nuxt');
   const manager = options.packageManager;
   const run = (script: string) => scriptCommand(manager, script);
   const exec = (name: string, command: string) =>
@@ -90,14 +91,14 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
           trustedDependencies: ['esbuild', 'sharp', 'unrs-resolver'],
         }
       : {}),
-    engines: { node: '>=22.12.0' },
+    engines: { node: hasNuxt ? nodeEngines.nuxt : nodeEngines.default },
     scripts,
     devDependencies: { turbo: v.turbo, prettier: v.prettier },
   });
   await ctx.json('.prettierrc.json', formattingOptions);
   await ctx.write(
     '.prettierignore',
-    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.expo/\n**/.astro/\n**/.output/\n**/.svelte-kit/\n**/.react-router/\n**/build/\n**/dist/\n**/.turbo/\nbun.lock\npnpm-lock.yaml\n.env*\n**/.env*\n',
+    'node_modules/\n**/_generated/\n**/routeTree.gen.ts\n**/.next/\n**/.nuxt/\n**/.svelte-kit/\n**/.expo/\n**/.astro/\n**/.output/\n**/.react-router/\n**/build/\n**/dist/\n**/.turbo/\nbun.lock\npnpm-lock.yaml\n.env*\n**/.env*\n',
   );
   if (manager === 'pnpm')
     await ctx.write(
@@ -117,6 +118,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
           'NEXT_PUBLIC_*',
           'VITE_*',
           'EXPO_PUBLIC_*',
+          'NUXT_PUBLIC_*',
           'PUBLIC_*',
         ],
       },
@@ -130,8 +132,15 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
           '.output/**',
           '.svelte-kit/**',
           'build/**',
+          '.nuxt/**',
         ],
-        env: ['NEXT_PUBLIC_*', 'VITE_*', 'EXPO_PUBLIC_*', 'PUBLIC_*'],
+        env: [
+          'NEXT_PUBLIC_*',
+          'VITE_*',
+          'EXPO_PUBLIC_*',
+          'PUBLIC_*',
+          'NUXT_PUBLIC_*',
+        ],
         passThroughEnv: [
           'CLERK_SECRET_KEY',
           ...(options.auth === 'workos' ? ['WORKOS_*'] : []),
@@ -144,7 +153,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
   });
   await ctx.write(
     '.gitignore',
-    `node_modules/\n.turbo/\n.next/\n.output/\n.react-router/\nbuild/\ndist/\n.expo/\n.astro/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'better-auth' ? '!.env.better-auth.example\n' : ''}${options.auth === 'workos' ? '!.env.workos.example\n' : ''}${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
+    `node_modules/\n.turbo/\n.next/\n.nuxt/\n.output/\n.react-router/\nbuild/\ndist/\n.expo/\n.astro/\n.env*\n!.env.example\n!.env.clerk.example\n${options.auth === 'better-auth' ? '!.env.better-auth.example\n' : ''}${options.auth === 'workos' ? '!.env.workos.example\n' : ''}${options.auth === 'convex-auth' ? '!.env.convex-auth.example\n' : ''}*.tsbuildinfo\n.DS_Store\n.convex/\n`,
   );
   await ctx.json('convex-monorepo.json', {
     version: 1,
@@ -193,7 +202,7 @@ export async function generateRoot(ctx: GeneratorContext): Promise<void> {
     'packages/eslint-config/index.js',
     `import tseslint from 'typescript-eslint';
 export default tseslint.config(
-  { ignores: ['**/_generated/**', '**/routeTree.gen.ts', '**/node_modules/**', '**/dist/**', '**/.next/**', '**/.expo/**', '**/.astro/**', '**/.output/**', '**/.react-router/**', '**/build/**'] },
+  { ignores: ['**/_generated/**', '**/routeTree.gen.ts', '**/node_modules/**', '**/dist/**', '**/.next/**', '**/.nuxt/**', '**/.expo/**', '**/.astro/**', '**/.output/**', '**/.react-router/**', '**/build/**'] },
   ...tseslint.configs.recommended,
   { files: ['**/*.cjs'], rules: { '@typescript-eslint/no-require-imports': 'off' } },
   { rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }] } },
@@ -211,7 +220,7 @@ ${options.apps.map((a) => a.framework).join(', ')} applications share one Convex
 
 ## Install and run
 
-Use Node 22.12+ and ${manager} ${v[manager]}. Commit ${manager === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml'} after installation.
+Use Node ${hasNuxt ? nodeEngines.nuxt : '22.12+'} and ${manager} ${v[manager]}. Commit ${manager === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml'} after installation.
 
 \`\`\`sh
 ${manager} install
@@ -268,6 +277,7 @@ ${options.example === 'messages' ? 'The backend checks identity and uses an owne
             : `The unauthenticated example is a public message board. Anyone with the deployment URL can read and send messages. Add authentication and abuse controls before exposing sensitive data.
 `
 }
+${options.apps.some((app) => app.framework === 'nuxt') ? 'Nuxt supports auth none only. Its Convex client runs in a client-only plugin, and query components mount inside ClientOnly. NUXT_PUBLIC_CONVEX_URL populates runtimeConfig.public.convexUrl. Dev, build, and preview load .env.local; production Node servers read this variable from their environment.\n' : ''}
 ${options.apps.some((app) => app.framework === 'sveltekit') ? 'SvelteKit currently supports only --auth none. Set PUBLIC_CONVEX_URL in its .env.local before typechecking or building. The root layout mounts Providers.svelte, which calls setupConvex for its children.\n' : ''}
 ## Shared backend types
 

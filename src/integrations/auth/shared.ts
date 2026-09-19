@@ -4,7 +4,7 @@ import type {
   GeneratorContext,
 } from '../../generator/types.js';
 
-export type UiRuntime = 'react' | 'svelte';
+export type UiRuntime = 'react' | 'svelte' | 'vue';
 const runtimes: Record<Framework, UiRuntime> = {
   next: 'react',
   vite: 'react',
@@ -12,6 +12,7 @@ const runtimes: Record<Framework, UiRuntime> = {
   expo: 'react',
   'react-router': 'react',
   sveltekit: 'svelte',
+  nuxt: 'vue',
   astro: 'react',
 };
 export function uiRuntime(framework: Framework): UiRuntime {
@@ -21,13 +22,15 @@ export function uiRuntime(framework: Framework): UiRuntime {
 export function platform(app: AppSpec) {
   const native = app.framework === 'expo';
   const prefix =
-    app.framework === 'next'
-      ? 'NEXT_PUBLIC'
-      : native
-        ? 'EXPO_PUBLIC'
-        : app.framework === 'sveltekit' || app.framework === 'astro'
-          ? 'PUBLIC'
-          : 'VITE';
+    app.framework === 'nuxt'
+      ? 'NUXT_PUBLIC'
+      : app.framework === 'next'
+        ? 'NEXT_PUBLIC'
+        : native
+          ? 'EXPO_PUBLIC'
+          : app.framework === 'astro' || app.framework === 'sveltekit'
+            ? 'PUBLIC'
+            : 'VITE';
   const env = (name: string) =>
     app.framework === 'sveltekit'
       ? `PUBLIC_${name}`
@@ -45,6 +48,34 @@ export async function writeProviders(
     providerProps?: string;
   },
 ): Promise<void> {
+  if (uiRuntime(app.framework) === 'vue') {
+    await ctx.write(
+      `apps/${app.name}/src/plugins/convex.client.ts`,
+      `import { defineNuxtPlugin, useRuntimeConfig } from '#app';
+import { convexVue } from 'convex-vue';
+
+export default defineNuxtPlugin((nuxtApp) => {
+  const url = useRuntimeConfig().public.convexUrl;
+  if (url) nuxtApp.vueApp.use(convexVue, { url });
+});
+`,
+    );
+    await ctx.write(
+      `apps/${app.name}/src/components/Providers.vue`,
+      `<script setup lang="ts">
+import { useRuntimeConfig } from '#app';
+import { ClientOnly } from '#components';
+const config = useRuntimeConfig();
+</script>
+
+<template>
+  <p v-if="!config.public.convexUrl">Set NUXT_PUBLIC_CONVEX_URL in this app's .env.local.</p>
+  <ClientOnly v-else><slot /></ClientOnly>
+</template>
+`,
+    );
+    return;
+  }
   if (uiRuntime(app.framework) === 'svelte') {
     if (auth) throw new Error('SvelteKit currently supports only --auth none.');
     await ctx.write(

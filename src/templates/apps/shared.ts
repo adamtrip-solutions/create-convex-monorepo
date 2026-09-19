@@ -40,12 +40,14 @@ export async function common(
   app: AppSpec,
   env: string,
   ignores: string[] = [],
+  eslintConfig?: string,
 ): Promise<void> {
   const dir = `apps/${app.name}`;
   await context.write(
     `${dir}/eslint.config.js`,
-    uiRuntime(app.framework) === 'svelte'
-      ? `import config from '@${context.scope}/eslint-config';
+    eslintConfig ??
+      (uiRuntime(app.framework) === 'svelte'
+        ? `import config from '@${context.scope}/eslint-config';
 import svelte from 'eslint-plugin-svelte';
 import tseslint from 'typescript-eslint';
 import svelteConfig from './svelte.config.js';
@@ -56,7 +58,7 @@ export default [
   { files: ['**/*.svelte'], languageOptions: { parserOptions: { parser: tseslint.parser, svelteConfig } } },
 ];
 `
-      : `import config from '@${context.scope}/eslint-config';\nexport default ${ignores.length ? `[{ ignores: ${JSON.stringify(ignores)} }, ...config]` : 'config'};\n`,
+        : `import config from '@${context.scope}/eslint-config';\nexport default ${ignores.length ? `[{ ignores: ${JSON.stringify(ignores)} }, ...config]` : 'config'};\n`),
   );
   await context.write(
     `${dir}/.env.example`,

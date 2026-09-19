@@ -23,6 +23,8 @@ export function validateAuthCompatibility(
     : undefined;
   for (const app of apps) {
     if (adapter?.supportedRuntimes.includes(uiRuntime(app.framework))) continue;
+    if (app.framework === 'nuxt')
+      throw new Error('Nuxt currently supports only --auth none.');
     if (app.framework === 'sveltekit')
       throw new Error('SvelteKit currently supports only --auth none.');
     if (adapter)

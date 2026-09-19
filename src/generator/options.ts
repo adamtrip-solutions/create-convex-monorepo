@@ -26,6 +26,7 @@ export const frameworks: readonly Framework[] = [
   'tanstack-start',
   'react-router',
   'expo',
+  'nuxt',
   'sveltekit',
   'astro',
 ];

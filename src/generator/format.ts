@@ -9,6 +9,7 @@ export const formattingOptions = {
 } satisfies Options;
 
 const extensions = new Set([
+  '.vue',
   '.ts',
   '.tsx',
   '.svelte',
