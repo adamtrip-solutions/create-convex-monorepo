@@ -53,11 +53,33 @@ Verify the migration with a new release through the workflow. Retrying an alread
 
 Merge regular PRs with Conventional Commit titles. Release-please maintains the version/changelog PR. Merging it creates a GitHub release and explicitly dispatches `publish.yml` at its tag. Dispatch works even when the release was created with `GITHUB_TOKEN`.
 
-The publishing workflow rejects branches, prereleases, missing releases, moved tags, and commits outside `main` history. It runs reusable CI against the exact release SHA: lint, formatting, typecheck, unit/generator tests, tarball smoke tests, Windows checks, and the generated-project build matrix. The Linux job uploads the tarball only after its smoke test passes.
+The publishing workflow rejects branches, prereleases, missing releases, moved tags, and commits outside `main` history. It runs reusable CI against the exact release SHA: lint, formatting, typecheck, unit/generator tests, tarball smoke tests, and Windows checks. It skips the generated-project build matrix, which already passed on the release PR. See [What CI runs](#what-ci-runs). The Linux job uploads the tarball only after its smoke test passes.
 
 A separate job in the `npm` environment downloads that same artifact, validates its package name/version/bin/repository, and publishes it with provenance. It does not rebuild the archive. Publishing is serialized across versions so concurrent releases cannot race to update the latest tag. Node 24 and an OIDC-capable npm CLI are configured explicitly. No PR job receives npm publishing credentials or an OIDC write permission.
 
 The dispatch uses the tag rather than checking out a tag inside a workflow started on `main`. npm provenance reads the workflow event's commit, so both the event and checked-out source must identify the release. [npm provenance](https://docs.npmjs.com/generating-provenance-statements/).
+
+## What CI runs
+
+Building every generated project takes 71 jobs, so each change gets that run once.
+
+| Trigger                  | Generator checks  | Generated projects |
+| ------------------------ | ----------------- | ------------------ |
+| Feature PR               | Linux and Windows | 10 smoke entries   |
+| Release PR               | Linux and Windows | All 71             |
+| Manual run of `ci.yml`   | Linux and Windows | All 71             |
+| Push to `main`           | Linux             | None               |
+| Publish at a release tag | Linux and Windows | None               |
+
+`main` requires up-to-date branches, so a squash commit has the same tree as the PR run that tested it. The push run only keeps the dependency cache warm for later PRs. Release-please rebuilds the release PR after every merge, and its full run is the gate. A failure there costs a fix PR. A failure after the tag exists costs a new release.
+
+`.github/ci-matrix.json` lists the generated projects. Entries with `"smoke": true` run on feature PRs, and `tests/ci-plan.test.ts` fails when that subset misses a framework, auth provider or package manager. Add new combinations to the JSON file. `scripts/ci-plan.mjs` picks the scope for each trigger.
+
+A combination outside the smoke subset can break without failing its feature PR. The release PR catches it. For a risky change, run every project on the branch first:
+
+```sh
+gh workflow run ci.yml --repo adamtrip-solutions/create-convex-monorepo --ref my-branch
+```
 
 ## Retry a failed publication
 

@@ -16,11 +16,30 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  plan:
+    name: Plan CI scope
+    runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.plan.outputs.os }}
+      projects: ${{ steps.plan.outputs.projects }}
+      project-count: ${{ steps.plan.outputs.project-count }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          RELEASE_REF: ${{ inputs.ref }}
+        run: node scripts/ci-plan.mjs
   generator:
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ fromJSON(needs.plan.outputs.os) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -49,229 +68,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   generated-projects:
+    needs: plan
+    # An empty matrix is an error, so the job is skipped when nothing is planned.
+    if: needs.plan.outputs.project-count != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - apps: nuxt,sveltekit,vite
-            auth: none
-            example: messages
-          - apps: nuxt
-            auth: none
-            example: messages
-          - apps: nuxt
-            auth: none
-            example: messages
-            packageManager: bun
-          - apps: nuxt,vite
-            auth: none
-            example: none
-          - apps: vite,nuxt
-            auth: none
-            example: messages
-            workspaceCommands: '1'
-          - apps: sveltekit
-            auth: none
-            example: messages
-          - apps: sveltekit,next
-            auth: none
-            example: none
-          - apps: vite,sveltekit
-            auth: none
-            example: messages
-            workspaceCommands: '1'
-          - apps: vite,sveltekit
-            auth: none
-            example: messages
-            workspaceCommands: '1'
-            packageManager: bun
-          - apps: sveltekit,react-router
-            auth: none
-            example: none
-          - apps: astro,react-router
-            auth: better-auth
-          - apps: astro,react-router
-            auth: better-auth
-            packageManager: bun
-          - apps: astro,react-router
-            auth: better-auth
-            example: none
-          - apps: astro,react-router
-            auth: better-auth
-            example: none
-            packageManager: bun
-          - apps: astro,react-router
-            auth: clerk
-          - apps: astro,react-router
-            auth: convex-auth
-            packageManager: bun
-          - apps: astro,react-router
-            auth: convex-auth
-            oauth: github,google
-          - apps: astro,react-router
-            auth: convex-auth
-            oauth: github,google
-            packageManager: bun
-          - apps: next
-            auth: none
-          - apps: astro
-            auth: none
-          - apps: astro,expo
-            auth: clerk
-          - apps: astro,next
-            auth: convex-auth
-            example: none
-          - apps: vite,astro
-            auth: none
-            workspaceCommands: '1'
-          - apps: vite,astro
-            auth: none
-            workspaceCommands: '1'
-            packageManager: bun
-          - apps: vite
-            auth: none
-          - apps: tanstack-start
-            auth: none
-          - apps: react-router
-            auth: none
-          - apps: react-router,expo
-            auth: clerk
-          - apps: react-router,vite
-            auth: convex-auth
-          - apps: react-router,vite
-            auth: convex-auth
-            packageManager: bun
-          - apps: react-router,vite
-            auth: convex-auth
-            oauth: github,google
-          - apps: react-router,vite
-            auth: convex-auth
-            oauth: github,google
-            packageManager: bun
-          - apps: expo
-            auth: none
-          - apps: next,expo
-            auth: none
-          - apps: next,expo
-            auth: clerk
-          - apps: vite,tanstack-start
-            auth: clerk
-          - apps: next,vite,tanstack-start
-            auth: workos
-            example: messages
-          - apps: next,vite,tanstack-start
-            auth: workos
-            example: none
-          - apps: next,expo
-            auth: convex-auth
-          - apps: next,expo
-            auth: convex-auth
-            oauth: github,google
-          - apps: next,expo
-            auth: convex-auth
-            oauth: github,google
-            packageManager: bun
-          - apps: vite,tanstack-start
-            auth: convex-auth
-            oauth: github
-            example: none
-          - apps: vite,tanstack-start
-            auth: convex-auth
-          - apps: next,vite,tanstack-start,react-router,expo
-            auth: convex-auth
-            example: none
-          - apps: next,vite,tanstack-start,react-router,expo
-            auth: none
-            example: none
-          - apps: next,vite,tanstack-start,react-router,expo
-            auth: clerk
-            example: none
-          - apps: next,admin:vite,portal:tanstack-start,router:react-router,expo
-            auth: clerk
-            example: messages
-            workspaceCommands: '1'
-          - apps: next,admin:vite,portal:tanstack-start,router:react-router,expo
-            auth: clerk
-            example: none
-            workspaceCommands: '1'
-          - apps: next,vite,tanstack-start,expo
-            auth: none
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: clerk
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: convex-auth
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: none
-            example: none
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: clerk
-            example: none
-            packageManager: bun
-            workspaceCommands: '1'
-          - apps: next,vite,tanstack-start,expo
-            auth: convex-auth
-            example: none
-            packageManager: bun
-          - apps: next,vite,tanstack-start,expo
-            auth: convex-auth
-            example: none
-          - apps: react-router,vite
-            auth: better-auth
-          - apps: react-router,vite
-            auth: better-auth
-            packageManager: bun
-          - apps: next,expo
-            auth: better-auth
-          - apps: vite,tanstack-start
-            auth: better-auth
-          - apps: next,expo
-            auth: better-auth
-            example: none
-          - apps: vite,tanstack-start
-            auth: better-auth
-            example: none
-          - apps: next,vite,tanstack-start,expo
-            auth: none
-            example: none
-          - apps: next,vite,tanstack-start,expo
-            auth: clerk
-            example: none
-          - apps: next,admin:vite,portal:tanstack-start,expo
-            auth: clerk
-            example: messages
-            workspaceCommands: '1'
-          - apps: next,admin:vite,portal:tanstack-start,expo
-            auth: clerk
-            example: none
-            workspaceCommands: '1'
-          - apps: next,vite,tanstack-start
-            auth: workos
-            example: messages
-            packageManager: bun
-          - apps: next,vite,tanstack-start
-            auth: workos
-            example: none
-            packageManager: bun
-          - apps: next,expo
-            auth: better-auth
-            packageManager: bun
-          - apps: vite,tanstack-start
-            auth: better-auth
-            packageManager: bun
-          - apps: next,expo
-            auth: better-auth
-            example: none
-            packageManager: bun
-          - apps: vite,tanstack-start
-            auth: better-auth
-            example: none
-            packageManager: bun
+        include: ${{ fromJSON(needs.plan.outputs.projects) }}
     env:
       CCM_PACKAGE_MANAGER: ${{ matrix.packageManager || 'pnpm' }}
       CCM_WORKSPACE_COMMANDS: ${{ matrix.workspaceCommands || '0' }}
@@ -299,11 +104,18 @@ jobs:
   complete:
     name: CI passed
     if: always()
-    needs: [generator, generated-projects]
+    needs: [plan, generator, generated-projects]
     runs-on: ubuntu-latest
     steps:
       - name: Require every verification job to pass
         env:
           GENERATOR_RESULT: ${{ needs.generator.result }}
           PROJECTS_RESULT: ${{ needs.generated-projects.result }}
-        run: test "$GENERATOR_RESULT" = success && test "$PROJECTS_RESULT" = success
+          PROJECT_COUNT: ${{ needs.plan.outputs.project-count }}
+        run: |
+          test "$GENERATOR_RESULT" = success
+          if test "$PROJECT_COUNT" = 0; then
+            test "$PROJECTS_RESULT" = skipped
+          else
+            test -n "$PROJECT_COUNT" && test "$PROJECTS_RESULT" = success
+          fi
