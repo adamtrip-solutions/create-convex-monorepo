@@ -181,7 +181,7 @@
     "auth": "clerk"
   },
   {
-    "apps": "next,vite,tanstack-start",
+    "apps": "next,vite,tanstack-start,expo",
     "auth": "workos",
     "example": "messages",
     "smoke": true
@@ -344,6 +344,27 @@
     "apps": "next,vite,tanstack-start",
     "auth": "workos",
     "example": "none",
+    "packageManager": "bun"
+  },
+  {
+    "apps": "next,vite,tanstack-start",
+    "auth": "workos",
+    "example": "messages"
+  },
+  {
+    "apps": "tanstack-start,vite,expo",
+    "auth": "workos",
+    "example": "messages"
+  },
+  {
+    "apps": "expo",
+    "auth": "workos",
+    "example": "none"
+  },
+  {
+    "apps": "tanstack-start,vite,expo",
+    "auth": "workos",
+    "example": "messages",
     "packageManager": "bun"
   },
   {

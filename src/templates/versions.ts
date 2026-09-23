@@ -57,6 +57,8 @@ export const versions = {
   expo: '57.0.21',
   expoWebBrowser: '57.0.3',
   expoLinking: '57.0.10',
+  expoAuthSession: '57.0.12',
+  expoCrypto: '57.0.3',
   reactNative: '0.86.3',
   clerkNext: '7.9.1',
   clerkReact: '6.15.1',

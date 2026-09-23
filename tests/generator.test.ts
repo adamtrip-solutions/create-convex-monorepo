@@ -356,6 +356,8 @@ describe('generated project golden matrix', () => {
           'https://api.workos.com/user_management/client_',
         );
         expect(await read('.gitignore')).toContain('!.env.workos.example');
+        expect(readme).toContain('ccm-golden-app-<app name>://callback');
+        expect(readme).toContain('as a redirect URI and as a sign-out URI');
       }
       for (const [name, framework, prefix, sdk] of scenario.expected) {
         const dir = `apps/${name}`;
@@ -585,6 +587,127 @@ describe('generated project golden matrix', () => {
             expect(controls).toContain('type="password"');
             expect(client).not.toContain('expoClient');
           }
+        } else if (scenario.auth === 'workos' && framework === 'expo') {
+          expect(app.dependencies).toMatchObject({
+            'expo-auth-session': versions.expoAuthSession,
+            'expo-crypto': versions.expoCrypto,
+            'expo-secure-store': versions.expoSecureStore,
+            'expo-web-browser': versions.expoWebBrowser,
+          });
+          expect(Object.keys(app.dependencies ?? {})).not.toContainEqual(
+            expect.stringMatching(/^@workos/),
+          );
+          const expoConfig = await json<{ expo: { scheme: string } }>(
+            `${dir}/app.json`,
+          );
+          const env = await read(`${dir}/.env.workos.example`);
+          expect(env).toContain('EXPO_PUBLIC_WORKOS_CLIENT_ID=\n');
+          expect(env).toContain(
+            `EXPO_PUBLIC_WORKOS_REDIRECT_URI=${expoConfig.expo.scheme}://callback\n`,
+          );
+          expect(env).toContain('redirect URI and as a sign-out URI');
+          expect(env).not.toMatch(
+            /WORKOS_API_KEY=|WORKOS_COOKIE_PASSWORD=|WORKOS_COOKIE_NAME=/,
+          );
+          expect(providers).toContain('ConvexProviderWithAuth');
+          expect(providers).toContain('<WorkOSProvider');
+          expect(providers).toContain(
+            'process.env.EXPO_PUBLIC_WORKOS_CLIENT_ID',
+          );
+          expect(providers).toContain(
+            'process.env.EXPO_PUBLIC_WORKOS_REDIRECT_URI',
+          );
+          expect(providers).toContain('forceRefresh: forceRefreshToken');
+          expect(providers).toMatch(
+            /<Unauthenticated>[\s\S]*<AuthControls \/>/,
+          );
+          expect(providers).not.toMatch(/WORKOS_API_KEY|client_secret/);
+          const session = await read(`${dir}/src/workos-auth.tsx`);
+          for (const fragment of [
+            "from 'expo-auth-session'",
+            'usePKCE: true',
+            'CodeChallengeMethod.S256',
+            "provider: 'authkit'",
+            "'https://api.workos.com/user_management/authorize'",
+            "'https://api.workos.com/user_management/authenticate'",
+            "'https://api.workos.com/user_management/sessions/logout'",
+            "grant_type: 'authorization_code'",
+            'code_verifier: request.codeVerifier',
+            "grant_type: 'refresh_token'",
+            'client_id: clientId',
+            'SecureStore.setItemAsync',
+            'SecureStore.deleteItemAsync',
+            "Platform.OS === 'ios' || Platform.OS === 'android'",
+            'const refreshAttempts = 5;',
+            'const refreshBudgetMs = 25_000;',
+            'const requestTimeoutMs = 8_000;',
+            'const refreshCooldownMs = 20_000;',
+            'signal: controller.signal,',
+            'setTimeout(() => controller.abort(), timeoutMs);',
+            'Math.min(requestTimeoutMs, deadline - Date.now())',
+            'refreshBackoffMs * 2 ** (attempt - 1),',
+            'error.retryAfterMs,',
+            'if (attempt < refreshAttempts && Date.now() + delay < deadline) {',
+            "response.headers.get('Retry-After')",
+            'const terminal = error !== null && [400, 401, 403].includes(response.status);',
+            'Date.now() - failed.at < refreshCooldownMs',
+            'lastFailure.current = null;',
+            "AppState.addEventListener('change'",
+            'offline: true',
+            'if (refreshing.current === request) refreshing.current = null;',
+            'return_to: redirectUri',
+            // Offline retries are timed from the failed refresh, not from when the session went offline.
+            'Math.max(0, offlineRetryMs - (Date.now() - failedAt))',
+            'setTimeout(retry, retryDelay(lastFailure.current?.at))',
+            // A token Convex rejects before expiry is retried only after a refresh that could not reach WorkOS.
+            'if (!failed || failed.epoch !== epoch.current) return () => undefined;',
+            'retryDelay(failed.at)',
+          ])
+            expect(session).toContain(fragment);
+          expect(session).toMatch(
+            /if \(lastFailure\.current\?\.epoch === expected\)\s*lastFailure\.current = null;/,
+          );
+          expect(session).not.toContain('setTimeout(retry, offlineRetryMs)');
+          expect(session).not.toMatch(/client_secret|WORKOS_API_KEY/);
+          // A captive portal or proxy page must never be treated as a terminal WorkOS error.
+          expect(session).not.toContain('response.json()');
+          expect(session).not.toMatch(/\[408, 429, 500, 502, 503, 504\]/);
+          // The rotated refresh token is persisted before the access token.
+          expect(session.indexOf('storage.set(refreshTokenKey')).toBeLessThan(
+            session.indexOf('storage.set(accessTokenKey'),
+          );
+          expect(
+            session.indexOf('storage.set(refreshTokenKey'),
+          ).toBeGreaterThan(-1);
+          // Sign-in and sign-out drop a refresh that belongs to the previous session.
+          expect(
+            session.match(
+              /epoch\.current \+= 1;\n\s*refreshing\.current = null;/g,
+            ),
+          ).toHaveLength(2);
+          expect(session).toContain(
+            'if (expected === epoch.current) return token;',
+          );
+          expect(providers).toContain(
+            '[sessionId, getAccessToken, retryCount]',
+          );
+          expect(providers).toMatch(
+            /<ConvexProviderWithAuth[^>]*>\s*<RetryRejectedToken \/>/,
+          );
+          expect(providers).toMatch(
+            /sessionId && !offline && !isLoading && !isAuthenticated\s*\? retryAfterFailure\(\)\s*: undefined/,
+          );
+          expect(providers).toContain('useConvexAuth()');
+          const controls = await read(`${dir}/src/auth-controls.tsx`);
+          expect(controls).toContain("from 'react-native'");
+          expect(controls).toContain('signIn()');
+          expect(controls).toContain('signOut()');
+          expect(controls).toContain('accessibilityRole="alert"');
+          expect(controls).toMatch(
+            /\(offline \?[\s\S]*Could not reach WorkOS[\s\S]*\) : \([\s\S]*Convex could not authenticate/,
+          );
+          expect(controls).not.toContain('window.');
+          expect(controls).not.toContain('alert(');
         } else if (scenario.auth === 'workos') {
           const pin =
             framework === 'next'

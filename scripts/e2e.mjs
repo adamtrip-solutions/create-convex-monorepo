@@ -300,7 +300,12 @@ export type MissingModule = typeof api.notAModule;
       )
         lines.push('CLERK_SECRET_KEY=sk_test_not_a_real_secret');
     }
-    if (auth === 'workos') {
+    if (auth === 'workos' && app.framework === 'expo')
+      lines.push(
+        `${prefix}_WORKOS_CLIENT_ID=client_test_fixture`,
+        `${prefix}_WORKOS_REDIRECT_URI=ccm-fixture-${app.name}://callback`,
+      );
+    else if (auth === 'workos') {
       lines.push(`${prefix}_WORKOS_CLIENT_ID=client_test_fixture`);
       const server = app.framework !== 'vite';
       const redirectVariable =

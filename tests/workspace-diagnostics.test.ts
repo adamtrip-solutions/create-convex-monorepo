@@ -1179,6 +1179,10 @@ it.each([
   ['tanstack-start', '@workos-inc/node'],
   ['vite', '@workos-inc/authkit-react'],
   ['tanstack-start', '@workos/authkit-tanstack-react-start'],
+  ['expo', 'expo-auth-session'],
+  ['expo', 'expo-crypto'],
+  ['expo', 'expo-secure-store'],
+  ['expo', 'expo-web-browser'],
 ])(
   'checks the official WorkOS dependency for %s',
   async (framework, dependency) => {
@@ -1202,6 +1206,30 @@ it.each([
         }),
       ]),
     );
+  },
+);
+
+it.each([
+  ['vite', 'VITE'],
+  ['expo', 'EXPO_PUBLIC'],
+])(
+  'requires only public WorkOS client settings for %s',
+  async (framework, prefix) => {
+    const workspace = await fixture(`web:${framework}`, 'workos');
+    const missing = async () =>
+      (await doctor(workspace)).issues
+        .filter((issue) => issue.code === 'auth-env-missing')
+        .map((issue) => issue.message);
+    expect(await missing()).toEqual([
+      `apps/web is missing ${prefix}_WORKOS_CLIENT_ID.`,
+      `apps/web is missing ${prefix}_WORKOS_REDIRECT_URI.`,
+    ]);
+    await put(
+      workspace.root,
+      'apps/web/.env.local',
+      `${prefix}_CONVEX_URL=https://example.convex.cloud\n${prefix}_WORKOS_CLIENT_ID=client_placeholder\n${prefix}_WORKOS_REDIRECT_URI=ccm-diagnostics-web://callback\n`,
+    );
+    expect(await missing()).toEqual([]);
   },
 );
 

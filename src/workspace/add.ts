@@ -653,7 +653,7 @@ export async function planAddApp(
     );
   if (workspace.config.auth === 'workos')
     plan.notes.push(
-      `Add the WorkOS settings listed in apps/${app.name}/.env.workos.example.`,
+      `Add the WorkOS settings listed in apps/${app.name}/.env.workos.example.${app.framework === 'expo' ? ` Register ccm-${workspace.config.name}-${app.name}://callback in WorkOS as a redirect URI and a sign-out URI.` : ''}`,
     );
   return plan;
 }

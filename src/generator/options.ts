@@ -145,7 +145,7 @@ export function normalizeOptions(raw: RawOptions): ProjectOptions {
     const unsupported = apps.find((app) => !workosBindings[app.framework]);
     if (unsupported)
       throw new Error(
-        `WorkOS AuthKit is not supported by this generator for framework "${unsupported.framework}". Choose ${Object.keys(workosBindings).join(', ')}.${unsupported.framework === 'astro' ? ' The Astro template uses static output, while the official WorkOS Astro SDK requires a server adapter and on-demand rendering.' : unsupported.framework === 'expo' ? ' No official Expo / React Native AuthKit SDK is available.' : ''}`,
+        `WorkOS AuthKit is not supported by this generator for framework "${unsupported.framework}". Choose ${Object.keys(workosBindings).join(', ')}.${unsupported.framework === 'astro' ? ' The Astro template uses static output, while the official WorkOS Astro SDK requires a server adapter and on-demand rendering.' : ''}`,
       );
   }
   return {

@@ -412,6 +412,39 @@
     ]
   },
   {
+    "label": "expo + WorkOS (messages)",
+    "apps": "expo",
+    "auth": "workos",
+    "example": "messages",
+    "expected": [["mobile", "expo", "EXPO_PUBLIC", "expo-auth-session"]]
+  },
+  {
+    "label": "expo + WorkOS (none)",
+    "apps": "expo",
+    "auth": "workos",
+    "example": "none",
+    "expected": [["mobile", "expo", "EXPO_PUBLIC", "expo-auth-session"]]
+  },
+  {
+    "label": "Bun expo + WorkOS (messages)",
+    "apps": "expo",
+    "auth": "workos",
+    "example": "messages",
+    "packageManager": "bun",
+    "expected": [["mobile", "expo", "EXPO_PUBLIC", "expo-auth-session"]]
+  },
+  {
+    "label": "tanstack-start + vite + expo + WorkOS (messages)",
+    "apps": "web:tanstack-start,dashboard:vite,mobile:expo",
+    "auth": "workos",
+    "example": "messages",
+    "expected": [
+      ["web", "tanstack-start", "VITE", "@workos/authkit-tanstack-react-start"],
+      ["dashboard", "vite", "VITE", "@workos-inc/authkit-react"],
+      ["mobile", "expo", "EXPO_PUBLIC", "expo-auth-session"]
+    ]
+  },
+  {
     "label": "Convex Auth OAuth github,google all frameworks messages",
     "apps": "next,vite,tanstack-start,expo",
     "auth": "convex-auth",
