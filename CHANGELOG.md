@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.4.0...v0.5.0) (2026-09-23)
+
+
+### Features
+
+* **auth:** support WorkOS AuthKit in Expo apps ([#22](https://github.com/adamtrip-solutions/create-convex-monorepo/issues/22)) ([d06be67](https://github.com/adamtrip-solutions/create-convex-monorepo/commit/d06be670881c72c135c4b731360c4108a564c4fb))
+
 ## [0.4.0](https://github.com/adamtrip-solutions/create-convex-monorepo/compare/v0.3.1...v0.4.0) (2026-09-19)
 
 
