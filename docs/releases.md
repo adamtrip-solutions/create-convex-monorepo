@@ -61,13 +61,13 @@ The dispatch uses the tag rather than checking out a tag inside a workflow start
 
 ## What CI runs
 
-Building every generated project takes 71 jobs, so each change gets that run once.
+Building every generated project takes 75 jobs, so each change gets that run once.
 
 | Trigger                  | Generator checks  | Generated projects |
 | ------------------------ | ----------------- | ------------------ |
 | Feature PR               | Linux and Windows | 10 smoke entries   |
-| Release PR               | Linux and Windows | All 71             |
-| Manual run of `ci.yml`   | Linux and Windows | All 71             |
+| Release PR               | Linux and Windows | All 75             |
+| Manual run of `ci.yml`   | Linux and Windows | All 75             |
 | Push to `main`           | Linux             | None               |
 | Publish at a release tag | Linux and Windows | None               |
 

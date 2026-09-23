@@ -1,9 +1,11 @@
 import type { AuthAdapter, Framework } from '../../../generator/types.js';
+import { scriptCommand } from '../../../package-manager/index.js';
 import { versions as v } from '../../../templates/versions.js';
 import { port } from '../../../templates/apps/shared.js';
 import { platform } from '../shared.js';
 import { writeWorkosProviders } from './providers.js';
 import { workosControls } from './controls.js';
+import { writeWorkosNativeApp } from './native.js';
 
 export const workosBindings: Partial<
   Record<Framework, { sdk: string; version: string }>
@@ -14,6 +16,8 @@ export const workosBindings: Partial<
     sdk: '@workos/authkit-tanstack-react-start',
     version: v.workosTanstack,
   },
+  // No official AuthKit SDK exists for React Native; Expo uses a PKCE public client.
+  expo: { sdk: 'expo-auth-session', version: v.expoAuthSession },
 };
 
 export const workosAdapter: AuthAdapter = {
@@ -56,7 +60,30 @@ export default { providers: [{ domain, applicationID: clientId }] } satisfies Au
           `WorkOS AuthKit does not support framework "${app.framework}".`,
         );
       const dir = `apps/${app.name}`;
-      const { prefix } = platform(app);
+      const { native, prefix } = platform(app);
+      if (native) {
+        const scheme = `ccm-${ctx.options.name}-${app.name}`;
+        await ctx.mergePackage(`${dir}/package.json`, {
+          dependencies: {
+            [binding.sdk]: binding.version,
+            'expo-crypto': v.expoCrypto,
+            'expo-secure-store': v.expoSecureStore,
+            'expo-web-browser': v.expoWebBrowser,
+          },
+        });
+        await ctx.write(
+          `${dir}/.env.workos.example`,
+          `# Append these values to .env.local alongside the Convex URL.
+# Native sign-in uses PKCE as a public client. Never add WORKOS_API_KEY or WORKOS_COOKIE_PASSWORD to this app.
+${prefix}_WORKOS_CLIENT_ID=
+${prefix}_WORKOS_REDIRECT_URI=${scheme}://callback
+# Register this URI in WorkOS as a redirect URI and as a sign-out URI. It uses the scheme in app.json.
+# Build a development client with ${scriptCommand(ctx.options.packageManager, 'ios')} or ${scriptCommand(ctx.options.packageManager, 'android')} for this scheme.
+`,
+        );
+        await writeWorkosNativeApp(ctx, app);
+        continue;
+      }
       const server = app.framework !== 'vite';
       await ctx.mergePackage(`${dir}/package.json`, {
         dependencies: {

@@ -195,16 +195,17 @@ describe('generation safety', () => {
     },
   );
 
-  it.each(['expo', 'next,expo', 'expo,vite', 'tanstack-start,mobile:expo'])(
-    'rejects unsupported WorkOS apps %s before writing output',
-    async (apps) => {
-      const cwd = await temp();
-      await expect(
-        generateProject({ name: 'unsupported', apps, auth: 'workos' }, { cwd }),
-      ).rejects.toThrow(/expo/i);
-      expect(await readdir(cwd)).toEqual([]);
-    },
-  );
+  it.each([
+    'expo',
+    'next,expo',
+    'expo,vite',
+    'tanstack-start,mobile:expo',
+    'web:tanstack-start,dashboard:vite,mobile:expo',
+  ])('accepts WorkOS with Expo apps %s', (apps) => {
+    const options = normalizeOptions({ name: 'native', apps, auth: 'workos' });
+    expect(options.auth).toBe('workos');
+    expect(options.apps.some((app) => app.framework === 'expo')).toBe(true);
+  });
 
   it('refuses nonempty directories without modifying files', async () => {
     const cwd = await temp();

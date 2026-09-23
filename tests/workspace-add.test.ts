@@ -2244,16 +2244,41 @@ it.each<Auth>(['clerk', 'convex-auth', 'better-auth'])(
   },
 );
 
-it('validates every framework before adding WorkOS', async () => {
-  let workspace = await fixture();
-  await applyPlan(
-    await planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
-  );
-  workspace = await loadWorkspace(workspace.root);
-  const before = await snapshot(workspace.root);
-  await expect(planAddAuth(workspace, 'workos')).rejects.toThrow(/expo/i);
-  expect(await snapshot(workspace.root)).toEqual(before);
-});
+it.each<Example>(['none', 'messages'])(
+  'adds WorkOS to a workspace with an Expo app and %s content',
+  async (example) => {
+    let workspace = await fixture(example);
+    await applyPlan(
+      await planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
+    );
+    workspace = await loadWorkspace(workspace.root);
+    await applyPlan(await planAddAuth(workspace, 'workos'));
+    const after = await snapshot(workspace.root);
+    const manifest = JSON.parse(after['apps/mobile/package.json']!);
+    expect(manifest.dependencies).toMatchObject({
+      'expo-auth-session': versions.expoAuthSession,
+      'expo-crypto': versions.expoCrypto,
+      'expo-secure-store': versions.expoSecureStore,
+      'expo-web-browser': versions.expoWebBrowser,
+    });
+    expect(after['apps/mobile/src/workos-auth.tsx']).toContain(
+      "provider: 'authkit'",
+    );
+    expect(after['apps/mobile/src/providers.tsx']).toContain('<WorkOSProvider');
+    expect(after['apps/mobile/src/auth-controls.tsx']).toContain('useWorkOS');
+    expect(after['apps/mobile/.env.workos.example']).toContain(
+      'EXPO_PUBLIC_WORKOS_REDIRECT_URI=ccm-',
+    );
+    expect(after['apps/mobile/.env.workos.example']).not.toContain(
+      'WORKOS_API_KEY=',
+    );
+    expect(after['WORKOS_SETUP.md']).toContain('expo-auth-session');
+    expect(after['packages/backend/convex/auth.config.ts']).toContain(
+      'applicationID: clientId',
+    );
+    expect((await loadWorkspace(workspace.root)).config.auth).toBe('workos');
+  },
+);
 
 it('preserves customized root settings and per-app ports while adding WorkOS', async () => {
   let workspace = await fixture();
@@ -2352,11 +2377,26 @@ describe.each(['pnpm', 'bun'] as const)(
   },
 );
 
-it('rejects adding Expo to a WorkOS workspace', async () => {
+it('adds Expo to a WorkOS workspace', async () => {
   const workspace = await fixture('messages', 'workos');
-  await expect(
-    planAddApp(workspace, { name: 'mobile', framework: 'expo' }),
-  ).rejects.toThrow(/expo/i);
+  const plan = await planAddApp(workspace, {
+    name: 'mobile',
+    framework: 'expo',
+  });
+  expect(plan.notes.join('\n')).toContain(
+    `Register ccm-${workspace.config.name}-mobile://callback in WorkOS`,
+  );
+  await applyPlan(plan);
+  const after = await snapshot(workspace.root);
+  expect(after['apps/mobile/src/workos-auth.tsx']).toContain(
+    "grant_type: 'refresh_token'",
+  );
+  expect(after['apps/mobile/.env.workos.example']).toContain(
+    `EXPO_PUBLIC_WORKOS_REDIRECT_URI=ccm-${workspace.config.name}-mobile://callback`,
+  );
+  expect(
+    (await loadWorkspace(workspace.root)).config.apps.at(-1)?.framework,
+  ).toBe('expo');
 });
 
 describe.each<Example>(['none', 'messages'])(

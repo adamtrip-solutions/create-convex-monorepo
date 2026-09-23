@@ -71,6 +71,7 @@ const workos: Partial<Record<Framework, string>> = {
   next: '@workos-inc/authkit-nextjs',
   vite: '@workos-inc/authkit-react',
   'tanstack-start': '@workos/authkit-tanstack-react-start',
+  expo: 'expo-auth-session',
 };
 const baselines: Record<string, string> = {
   nuxt: versions.nuxt,
@@ -710,6 +711,9 @@ export async function doctor(
         : []),
       ...(config.auth === 'convex-auth' && app.framework === 'expo'
         ? ['expo-secure-store']
+        : []),
+      ...(config.auth === 'workos' && app.framework === 'expo'
+        ? ['expo-crypto', 'expo-secure-store', 'expo-web-browser']
         : []),
       ...(hasOAuth && app.framework === 'expo'
         ? ['expo-web-browser', 'expo-linking']

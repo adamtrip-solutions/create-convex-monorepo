@@ -251,6 +251,22 @@ export async function runCreate(
   });
   const run = (script: string) => scriptCommand(options.packageManager, script);
   console.log(
-    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : `  ${options.packageManager} install\n`}${options.initConvex ? `  ${run('dev')}` : `  ${run('convex:setup')}\n  ${run('dev')}`}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${options.auth === 'clerk' ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.' : options.auth === 'workos' ? '\nAdd WorkOS settings from .env.workos.example and complete the auth setup in README.md.' : options.auth === 'better-auth' ? '\nSet Better Auth deployment variables and frontend HTTP URLs as described in README.md before signing in.' : options.auth === 'convex-auth' ? '\nSet Convex Auth deployment keys as described in README.md before signing in.' : ''}`,
+    `✓ Created ${options.name}\n\nNext:\n\n  cd ${options.name}\n${options.install ? '' : `  ${options.packageManager} install\n`}${options.initConvex ? `  ${run('dev')}` : `  ${run('convex:setup')}\n  ${run('dev')}`}\n\n${options.initConvex ? 'Frontend Convex URLs are linked.' : 'convex:setup initializes the backend and links its public URL to every frontend.'}${
+      options.auth === 'clerk'
+        ? '\nAdd Clerk keys from .env.clerk.example and complete the auth setup in README.md.'
+        : options.auth === 'workos'
+          ? `\nAdd WorkOS settings from .env.workos.example and complete the auth setup in README.md.${options.apps
+              .filter((app) => app.framework === 'expo')
+              .map(
+                (app) =>
+                  `\nRegister ccm-${options.name}-${app.name}://callback in WorkOS as a redirect URI and a sign-out URI for apps/${app.name}.`,
+              )
+              .join('')}`
+          : options.auth === 'better-auth'
+            ? '\nSet Better Auth deployment variables and frontend HTTP URLs as described in README.md before signing in.'
+            : options.auth === 'convex-auth'
+              ? '\nSet Convex Auth deployment keys as described in README.md before signing in.'
+              : ''
+    }`,
   );
 }
