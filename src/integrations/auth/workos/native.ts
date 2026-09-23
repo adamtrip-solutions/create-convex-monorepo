@@ -103,6 +103,8 @@ function retryAfterMs(header: string | null): number {
   return Number.isFinite(ms) && ms > 0 ? ms : 0;
 }
 
+type AuthenticateBody = { access_token?: unknown; refresh_token?: unknown; error?: unknown; error_description?: unknown };
+
 /** Calls the AuthKit authenticate endpoint as a public client. No client secret leaves the server. */
 async function authenticate(clientId: string, grant: Record<string, string>, timeoutMs = requestTimeoutMs): Promise<Tokens> {
   const controller = new AbortController();
@@ -123,10 +125,10 @@ async function authenticate(clientId: string, grant: Record<string, string>, tim
   } finally {
     clearTimeout(timer);
   }
-  let body: { access_token?: unknown; refresh_token?: unknown; error?: unknown; error_description?: unknown } | null = null;
+  let body: AuthenticateBody | null = null;
   try {
     const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === 'object') body = parsed as typeof body;
+    if (parsed && typeof parsed === 'object') body = parsed as AuthenticateBody;
   } catch {
     // Not JSON, such as a Wi-Fi login page or a proxy error.
   }
